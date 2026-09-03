@@ -59,6 +59,7 @@ export default function RegistroWizard() {
       !!form.apellidos.trim() &&
       !!form.fechaNacimiento &&
       new Date(form.fechaNacimiento) <= new Date() &&
+      !!form.genero &&
       validatePhone(form.telefono) &&
       validateEmail(form.correo) &&
       !dup.telefono &&
@@ -69,7 +70,6 @@ export default function RegistroWizard() {
   );
   const step2Valid = !!form.estaca && ((isBarrioLibre && !!form.barrioLibre.trim()) || (!isBarrioLibre && !!form.barrio));
   const step3Valid =
-    !!form.genero &&
     !!form.disponibilidad &&
     !!form.experienciaPrevia &&
     (form.experienciaPrevia === 'ninguna' || !!form.asignacionAnterior);
@@ -139,6 +139,7 @@ export default function RegistroWizard() {
         <div className="p-6 flex flex-col gap-4">
           {step === 1 && (
             <>
+              <SectionHeader icon="👤" title="Datos personales" />
               <Field label="Nombres" required>
                 <input className="input" value={form.nombres} onChange={(e) => setForm({ ...form, nombres: e.target.value })} />
               </Field>
@@ -152,6 +153,13 @@ export default function RegistroWizard() {
                   max={new Date().toISOString().slice(0, 10)}
                   value={form.fechaNacimiento}
                   onChange={(e) => setForm({ ...form, fechaNacimiento: e.target.value })}
+                />
+              </Field>
+              <Field label="Género" required>
+                <RadioRow
+                  value={form.genero}
+                  onChange={(v) => setForm({ ...form, genero: v as 'H' | 'M' })}
+                  options={[{ value: 'H', label: 'Hombre' }, { value: 'M', label: 'Mujer' }]}
                 />
               </Field>
               <Field label="Teléfono" required>
@@ -179,6 +187,7 @@ export default function RegistroWizard() {
 
           {step === 2 && (
             <>
+              <SectionHeader icon="📍" title="Ubicación" />
               <Field label="Estaca" required>
                 <select
                   className="input"
@@ -212,71 +221,70 @@ export default function RegistroWizard() {
 
           {step === 3 && (
             <>
-              <Field label="¿Has servido antes en FSY (PFJ) o en una Conferencia JAS?" required>
-                <RadioRow
-                  value={form.experienciaPrevia}
-                  onChange={(v) =>
-                    setForm({
-                      ...form,
-                      experienciaPrevia: v as ExperienciaPrevia,
-                      asignacionAnterior: v === 'ninguna' ? '' : form.asignacionAnterior,
-                    })
-                  }
-                  vertical
-                  options={EXPERIENCIA_PREVIA_OPTIONS}
-                />
-              </Field>
-              {form.experienciaPrevia && form.experienciaPrevia !== 'ninguna' && (
-                <Field label="Asignación anterior" required>
-                  <select className="input" value={form.asignacionAnterior} onChange={(e) => setForm({ ...form, asignacionAnterior: e.target.value })}>
-                    <option value="">— Selecciona —</option>
-                    {ASIGNACIONES_PREVIAS.map((a) => (
-                      <option key={a} value={a}>{a}</option>
-                    ))}
-                  </select>
+              <SectionHeader icon="✨" title="Información adicional" />
+              <div className="bg-slate-50 rounded-2xl p-4 flex flex-col gap-3">
+                <Field label="¿Has servido antes en FSY (PFJ) o en una Conferencia JAS?" required>
+                  <RadioRow
+                    value={form.experienciaPrevia}
+                    onChange={(v) =>
+                      setForm({
+                        ...form,
+                        experienciaPrevia: v as ExperienciaPrevia,
+                        asignacionAnterior: v === 'ninguna' ? '' : form.asignacionAnterior,
+                      })
+                    }
+                    vertical
+                    options={EXPERIENCIA_PREVIA_OPTIONS}
+                  />
                 </Field>
-              )}
-              <Field label="Género" required>
-                <RadioRow
-                  value={form.genero}
-                  onChange={(v) => setForm({ ...form, genero: v as 'H' | 'M' })}
-                  options={[{ value: 'H', label: 'Hombre' }, { value: 'M', label: 'Mujer' }]}
-                />
-              </Field>
-              <Field label={`¿Estarás disponible ${EVENTO_FECHAS_LABEL}?`} required>
-                <RadioRow
-                  value={form.disponibilidad}
-                  onChange={(v) => setForm({ ...form, disponibilidad: v as 'si' | 'no_creo' | 'no_se' })}
-                  vertical
-                  options={[
-                    {
-                      value: 'si',
-                      label: (
-                        <span className="flex items-center gap-2">
-                          <IconCheck className="w-[18px] h-[18px] shrink-0" /> Sí, puedo
-                        </span>
-                      ),
-                    },
-                    {
-                      value: 'no_creo',
-                      label: (
-                        <span className="flex items-center gap-2">
-                          <IconMinus className="w-[18px] h-[18px] shrink-0" /> No creo
-                        </span>
-                      ),
-                    },
-                    {
-                      value: 'no_se',
-                      label: (
-                        <span className="flex items-center gap-2">
-                          <IconQuestion className="w-[18px] h-[18px] shrink-0" /> Aún no lo sé
-                        </span>
-                      ),
-                    },
-                  ]}
-                />
-                <Helper>Es la fecha real del evento — ayúdanos a planificar con la respuesta más honesta posible.</Helper>
-              </Field>
+                {form.experienciaPrevia && form.experienciaPrevia !== 'ninguna' && (
+                  <Field label="Asignación anterior" required>
+                    <select className="input" value={form.asignacionAnterior} onChange={(e) => setForm({ ...form, asignacionAnterior: e.target.value })}>
+                      <option value="">— Selecciona —</option>
+                      {ASIGNACIONES_PREVIAS.map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-4">
+                <Field label={`¿Estarás disponible ${EVENTO_FECHAS_LABEL}?`} required>
+                  <RadioRow
+                    value={form.disponibilidad}
+                    onChange={(v) => setForm({ ...form, disponibilidad: v as 'si' | 'no_creo' | 'no_se' })}
+                    vertical
+                    options={[
+                      {
+                        value: 'si',
+                        label: (
+                          <span className="flex items-center gap-2">
+                            <IconCheck className="w-[18px] h-[18px] shrink-0" /> Sí, puedo
+                          </span>
+                        ),
+                      },
+                      {
+                        value: 'no_creo',
+                        label: (
+                          <span className="flex items-center gap-2">
+                            <IconMinus className="w-[18px] h-[18px] shrink-0" /> No creo
+                          </span>
+                        ),
+                      },
+                      {
+                        value: 'no_se',
+                        label: (
+                          <span className="flex items-center gap-2">
+                            <IconQuestion className="w-[18px] h-[18px] shrink-0" /> Aún no lo sé
+                          </span>
+                        ),
+                      },
+                    ]}
+                  />
+                  <Helper>Es la fecha real del evento — ayúdanos a planificar con la respuesta más honesta posible.</Helper>
+                </Field>
+              </div>
             </>
           )}
 
@@ -337,6 +345,15 @@ function StepIndicator({ step }: { step: number }) {
   );
 }
 
+function SectionHeader({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div className="flex items-center gap-2.5 pb-1 -mt-1">
+      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-base shrink-0">{icon}</div>
+      <span className="text-[13px] font-extrabold text-primary tracking-tight">{title}</span>
+    </div>
+  );
+}
+
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -371,7 +388,7 @@ function RadioRow({
           type="button"
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex-1 text-sm font-semibold rounded-xl border-1.5 px-3 py-2.5 transition ${
+          className={`flex-1 text-sm font-semibold rounded-xl border-[1.5px] px-3 py-2.5 transition ${
             value === opt.value ? 'bg-primary/10 border-primary text-primary' : 'border-slate-200 text-slate-600'
           }`}
         >

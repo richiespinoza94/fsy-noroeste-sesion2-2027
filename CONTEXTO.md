@@ -65,19 +65,18 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 5: mejoras al formulario de registro (parche `0002`)
+## 6. Estado actual — Fase 6: rediseño de Paso 3 del registro (parche `0003`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 10/10 pasan)
-- **Fases 1-4**: ver historial de commits / parches anteriores.
-- **Fase 5** (revisión con `ui-ux-pro-max` + `frontend-design` + `ponytail`, a pedido explícito):
-  - **Experiencia previa más específica**: la pregunta binaria "¿Has servido antes...?" se reemplazó por 4 opciones (`ninguna` = "No he participado" / `fsy` / `jas` / `ambos`) — permite filtrar si alguien viene de FSY/PFJ, de Conferencia JAS, de ambos, o de ninguno. Nuevo tipo `ExperienciaPrevia` en `types.ts`.
-  - **Disponibilidad con fechas reales del evento**: la pregunta ahora dice explícitamente "¿Estarás disponible del 25 al 29 de enero de 2027?" en vez de un genérico "¿tienes disponibilidad?". Fechas centralizadas en `src/data/evento.ts` (`EVENTO_FECHAS_LABEL`) — si cambian las fechas del evento, se edita en un solo lugar.
-  - **Fecha de nacimiento**: nuevo campo obligatorio en el Paso 1, `<input type="date">`, validado para que no sea una fecha futura. Se agregó a `Participante` en `types.ts` y se muestra (solo lectura por ahora) en la ficha de Búsqueda.
-  - **Íconos SVG en vez de emoji, solo en Disponibilidad** (a pedido explícito, con la condición de respetar la paleta): 3 íconos minimalistas (check/minus/pregunta) con `stroke="currentColor"` — heredan el navy `#0E2954` cuando la opción está seleccionada y el gris cuando no, sin lógica de color extra. `RadioRow` ahora acepta `label: React.ReactNode` en vez de solo `string` para soportar esto sin romper los demás usos (género, experiencia previa, que siguen siendo texto plano).
-  - Fixes de la revisión anterior (parche `0001`): contraste de texto secundario, tamaño táctil de chips, dedupe de `stripAccents`.
+- **Fases 1-5**: ver historial de commits/parches.
+- **Fase 6** (auditoría con `ui-ux-pro-max` + `frontend-design` + `ponytail`, mobile y web, a pedido explícito — Ricardo sentía el Paso 3 "en el aire"):
+  - **Encabezado de sección por paso restaurado** (`SectionHeader`, ícono + título: "👤 Datos personales", "📍 Ubicación", "✨ Información adicional"). Existía en el `Registro.html` original del GAS y se había quedado fuera al portar a React — era la causa principal de la sensación de "flotar": no había ancla visual cerca del contenido, solo los pills de progreso lejos en el header oscuro.
+  - **Género se movió del Paso 3 al Paso 1** — es un dato de identidad, no de experiencia/disponibilidad; estaba rompiendo el hilo narrativo del Paso 3 al quedar en medio de dos preguntas no relacionadas con género.
+  - **Paso 3 agrupado visualmente**: experiencia previa (+ asignación anterior condicional) y disponibilidad ahora viven en dos tarjetas `bg-slate-50` separadas, en vez de una lista plana de preguntas sin diferenciación.
+  - **Fix de higiene de código**: `border-1.5` (no es una utilidad válida en la escala default de Tailwind) corregido a `border-[1.5px]` en `RadioRow`.
 
-### Hallazgos de la revisión que se dejaron sin cambiar (a propósito)
-`ui-ux-pro-max` y `frontend-design` recomiendan íconos SVG en vez de emoji, y evitar Inter/tipografías genéricas. **No se tocó** — Ricardo pidió explícitamente mantener el mismo diseño y paleta que CONFEJAS y el GAS original, ambos con emoji-como-ícono e Inter en todo el sistema. Cambiarlo rompería la consistencia visual entre las tres apps del ecosistema.
+### Pendiente de decisión (no aplicado — requiere más diseño)
+- **Panel de contexto lateral en desktop**: en pantallas anchas, la tarjeta `max-w-md` centrada puede sentirse como una cajita flotando en mucho espacio en blanco. Un layout de dos columnas (formulario + panel con fecha/lugar del evento) resolvería esto, pero es un cambio de mayor alcance — se conversa aparte si se decide hacerlo.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
