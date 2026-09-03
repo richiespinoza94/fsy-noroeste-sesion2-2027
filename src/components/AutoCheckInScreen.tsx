@@ -5,6 +5,34 @@ import { subscribeParticipantes } from '../services/participantsService';
 import type { Asistencia, Capacitacion, Participante } from '../types';
 import { fuzzyIncludes } from '../utils/search';
 
+// Un check-in por dispositivo, por capacitación — evita que una sola persona
+// marque presente a varios amigos desde su celular. No es a prueba de balas
+// (borrar datos del navegador lo esquiva), pero corta el caso normal de uso
+// indebido con el mismo modelo de "gating a nivel de cliente, no
+// criptográfico" que ya se usa en el resto de esta app.
+function claveDispositivo(capId: string) {
+  return `fsy_checkin_dispositivo_${capId}`;
+}
+interface MarcaDispositivo {
+  participanteId: string;
+  nombre: string;
+}
+function leerMarcaDispositivo(capId: string): MarcaDispositivo | null {
+  try {
+    const raw = localStorage.getItem(claveDispositivo(capId));
+    return raw ? (JSON.parse(raw) as MarcaDispositivo) : null;
+  } catch {
+    return null;
+  }
+}
+function guardarMarcaDispositivo(capId: string, marca: MarcaDispositivo) {
+  try {
+    localStorage.setItem(claveDispositivo(capId), JSON.stringify(marca));
+  } catch {
+    /* si localStorage no está disponible, simplemente no se recuerda — no es crítico */
+  }
+}
+
 export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
@@ -13,14 +41,37 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   const [marcandoId, setMarcandoId] = useState('');
   const [confirmado, setConfirmado] = useState<Participante | null>(null);
 
-  useEffect(() => subscribeParticipantes(setParticipantes), []);
-  useEffect(() => subscribeCapacitaciones(setCapacitaciones), []);
+  // "Cargando" y "vacío" son estados distintos — sin esto, el primer render
+  // (con capacitaciones/participantes todavía en []) se veía igual que "no
+  // hay ninguna capacitación programada" hasta que Firestore respondía,
+  // mostrando por un instante el mensaje equivocado antes de corregirse solo.
+  const [cargandoCaps, setCargandoCaps] = useState(true);
+  const [cargandoParticipantes, setCargandoParticipantes] = useState(true);
+  const cargando = cargandoCaps || cargandoParticipantes;
+
+  useEffect(
+    () =>
+      subscribeParticipantes((items) => {
+        setParticipantes(items);
+        setCargandoParticipantes(false);
+      }),
+    []
+  );
+  useEffect(
+    () =>
+      subscribeCapacitaciones((items) => {
+        setCapacitaciones(items);
+        setCargandoCaps(false);
+      }),
+    []
+  );
 
   const cap = getCapacitacionParaCheckIn(capacitaciones);
   const ventana = estadoVentanaCheckIn(cap);
-  const abierta = ventana === 'abierta';
 
   useEffect(() => (cap ? subscribeAsistencia(cap.id, setAsistencia) : undefined), [cap?.id]);
+
+  const marcaDispositivo = cap ? leerMarcaDispositivo(cap.id) : null;
 
   const results = useMemo(() => {
     if (query.trim().length < 2) return [];
@@ -28,9 +79,10 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   }, [participantes, query]);
 
   async function marcar(p: Participante) {
-    if (!cap || ventana !== 'abierta') return;
+    if (!cap || ventana !== 'abierta' || marcaDispositivo) return;
     setMarcandoId(p.id);
     await marcarAsistencia(cap.id, p.id, 'presente', `autoregistro:${p.nombres} ${p.apellidos}`);
+    guardarMarcaDispositivo(cap.id, { participanteId: p.id, nombre: `${p.nombres} ${p.apellidos}` });
     setMarcandoId('');
     setConfirmado(p);
   }
@@ -44,16 +96,11 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
           <p className="text-sm text-slate-500 leading-relaxed">
             Quedaste registrado en <strong>{cap?.label}</strong>.
           </p>
-          <button
-            onClick={() => {
-              setConfirmado(null);
-              setQuery('');
-            }}
-            className="mt-6 w-full bg-primary text-white font-bold rounded-xl py-3"
-          >
-            Marcar a alguien más
-          </button>
-          <button onClick={onBack} className="mt-2 w-full text-primary font-bold text-sm py-2">
+          <p className="text-xs text-slate-400 mt-3">
+            Por seguridad, cada celular solo puede marcar una asistencia por capacitación. Si necesitas marcar a
+            alguien más, pídele que use su propio celular o pide ayuda a un encargado.
+          </p>
+          <button onClick={onBack} className="mt-6 w-full bg-primary text-white font-bold rounded-xl py-3">
             ‹ Volver al inicio
           </button>
         </div>
@@ -71,9 +118,11 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
               Gestión FSY 2027
             </div>
             <h1 className="text-lg font-extrabold">Marcar mi asistencia</h1>
-            {cap ? (
+            {cargando ? (
+              <p className="text-xs text-white/70 mt-1">Cargando…</p>
+            ) : cap ? (
               <p className="text-xs text-white/70 mt-1">
-                {abierta ? '📍 ' : '📅 '}
+                {ventana === 'abierta' ? '📍 ' : '📅 '}
                 {cap.label} · {cap.fecha} {cap.hora && `· ${cap.hora}`}
               </p>
             ) : (
@@ -83,28 +132,43 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="p-6 flex flex-col gap-3">
-          {ventana === 'sin_fecha' && (
+          {cargando && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <div className="spinner" />
+              <p className="text-sm text-slate-500">Buscando la capacitación vigente…</p>
+            </div>
+          )}
+
+          {!cargando && ventana === 'sin_fecha' && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
               Todavía no hay ninguna capacitación programada. Vuelve a intentarlo más cerca de la fecha, o pídele a un
               encargado que la cree.
             </div>
           )}
 
-          {ventana === 'muy_temprano' && cap && (
+          {!cargando && ventana === 'muy_temprano' && cap && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
               Todavía es muy temprano. <strong>{cap.label}</strong> es el {cap.fecha}
               {cap.hora && ` a las ${cap.hora}`} — puedes marcar tu asistencia desde 1 hora antes.
             </div>
           )}
 
-          {ventana === 'cerrada' && cap && (
+          {!cargando && ventana === 'cerrada' && cap && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
               La ventana para marcar asistencia a <strong>{cap.label}</strong> ya se cerró. Si sí asististe, pide a un
               encargado que lo marque manualmente.
             </div>
           )}
 
-          {ventana === 'abierta' && cap && (
+          {!cargando && ventana === 'abierta' && cap && marcaDispositivo && (
+            <div className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-3">
+              Ya se marcó la asistencia de <strong>{marcaDispositivo.nombre}</strong> desde este celular para{' '}
+              <strong>{cap.label}</strong>. Si necesitas marcar a alguien más, pídele que use su propio celular, o
+              pide ayuda a un encargado.
+            </div>
+          )}
+
+          {!cargando && ventana === 'abierta' && cap && !marcaDispositivo && (
             <>
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Escribe tu apellido</span>
