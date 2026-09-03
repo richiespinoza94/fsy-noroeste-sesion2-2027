@@ -59,7 +59,7 @@ export default function ReportesScreen({
 
       {attByCap.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-3">Tendencia de asistencia</div>
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">Tendencia de asistencia</div>
           <div className="overflow-x-auto">
             <svg width={chartWidth} height={H + 34}>
               {[0, 50, 100].map((v) => {
@@ -89,13 +89,13 @@ export default function ReportesScreen({
         </div>
       )}
 
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-1">Detalle por capacitación</div>
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Detalle por capacitación</div>
       <div className="flex flex-col gap-2">
         {attByCap.map((d) => (
           <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-bold">{d.cap.label}</div>
-              <div className="text-[11px] text-slate-400">{d.cap.fecha} · {d.registros} registros</div>
+              <div className="text-[11px] text-slate-500">{d.cap.fecha} · {d.registros} registros</div>
             </div>
             <div className="flex gap-1.5 text-[11px]">
               <Mark label={`✓ ${d.presentes}`} bg="#E8F5E9" fg="#2E7D32" />
@@ -105,10 +105,10 @@ export default function ReportesScreen({
             </div>
           </div>
         ))}
-        {attByCap.length === 0 && <div className="text-xs text-slate-400 text-center py-4">Sin capacitaciones todavía.</div>}
+        {attByCap.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin capacitaciones todavía.</div>}
       </div>
 
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-1">Por estaca</div>
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Por estaca</div>
       <div className="flex flex-col gap-1.5">
         {byEstaca.map(({ estaca, n }) => {
           const pct = participantes.length ? Math.round((n / participantes.length) * 100) : 0;
@@ -116,7 +116,7 @@ export default function ReportesScreen({
             <div key={estaca} className="bg-white rounded-xl px-3.5 py-2.5 shadow-sm">
               <div className="flex justify-between text-xs mb-1">
                 <span className="font-semibold">{estaca}</span>
-                <span className="text-slate-400">{n} ({pct}%)</span>
+                <span className="text-slate-500">{n} ({pct}%)</span>
               </div>
               <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
@@ -126,12 +126,12 @@ export default function ReportesScreen({
         })}
       </div>
 
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-1">Por rol</div>
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Por rol</div>
       <div className="grid grid-cols-2 gap-2">
         {byRol.map(({ rol, n }) => (
           <div key={rol} className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
             <div className="text-lg font-extrabold text-primary">{n}</div>
-            <div className="text-[11px] text-slate-400 font-semibold">{rol}</div>
+            <div className="text-[11px] text-slate-500 font-semibold">{rol}</div>
           </div>
         ))}
       </div>
@@ -146,7 +146,7 @@ function Metric({ label, value, color, icon }: { label: string; value: number | 
         <span className="text-lg">{icon}</span>
         <div>
           <div className="text-lg font-extrabold" style={{ color }}>{value}</div>
-          <div className="text-[10px] text-slate-400 font-semibold">{label}</div>
+          <div className="text-[10px] text-slate-500 font-semibold">{label}</div>
         </div>
       </div>
     </div>

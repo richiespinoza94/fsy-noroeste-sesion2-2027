@@ -25,7 +25,7 @@ export default function AuditTimeline({ participanteId }: { participanteId: stri
       {open && !loading && (
         <div className="mt-3 flex flex-col gap-2">
           {logs.length === 0 && (
-            <div className="text-xs text-slate-400 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl py-3">
+            <div className="text-xs text-slate-500 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl py-3">
               No hay cambios auditados para este participante todavía.
             </div>
           )}
@@ -33,7 +33,7 @@ export default function AuditTimeline({ participanteId }: { participanteId: stri
             <div key={log.id} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
               <div className="flex justify-between items-start gap-2 mb-1">
                 <strong className="text-[11px] text-primary uppercase tracking-wide">{log.accion}</strong>
-                <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                <span className="text-[10px] text-slate-500 whitespace-nowrap">
                   {log.timestamp ? new Date(log.timestamp).toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                 </span>
               </div>

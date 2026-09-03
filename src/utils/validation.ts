@@ -40,10 +40,11 @@ export function validateEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(v));
 }
 
+export function stripAccents(v: string): string {
+  return (v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 /** Clave canónica para comparar nombres sin tildes/mayúsculas — usado para detectar duplicados. */
 export function nameKey(nombres: string, apellidos: string): string {
-  return normalizeSpaces(`${nombres} ${apellidos}`)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+  return stripAccents(normalizeSpaces(`${nombres} ${apellidos}`));
 }

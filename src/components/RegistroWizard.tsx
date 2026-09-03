@@ -296,7 +296,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 function Helper({ error, children }: { error?: boolean; children: React.ReactNode }) {
-  return <span className={`text-xs ${error ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>{error && '❌ '}{children}</span>;
+  return <span className={`text-xs ${error ? 'text-red-500 font-semibold' : 'text-slate-500'}`}>{error && '❌ '}{children}</span>;
 }
 
 function RadioRow({

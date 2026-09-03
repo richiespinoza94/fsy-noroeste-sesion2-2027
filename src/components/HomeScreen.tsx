@@ -35,7 +35,7 @@ export default function HomeScreen({
         <Metric label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
       </div>
 
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
       <a
         href="/?page=registro"
         target="_blank"
@@ -45,7 +45,7 @@ export default function HomeScreen({
         <span className="text-2xl">📝</span>
         <div className="flex-1">
           <div className="text-sm font-bold">Registrar participante</div>
-          <div className="text-xs text-slate-400">Abre el formulario público</div>
+          <div className="text-xs text-slate-500">Abre el formulario público</div>
         </div>
         <span className="text-slate-300">↗</span>
       </a>
@@ -56,7 +56,7 @@ export default function HomeScreen({
         <span className="text-2xl">🔍</span>
         <div className="flex-1">
           <div className="text-sm font-bold">Buscar participante</div>
-          <div className="text-xs text-slate-400">Consulta y edita datos</div>
+          <div className="text-xs text-slate-500">Consulta y edita datos</div>
         </div>
         <span className="text-slate-300">›</span>
       </button>
@@ -67,7 +67,7 @@ export default function HomeScreen({
         <span className="text-2xl">✅</span>
         <div className="flex-1">
           <div className="text-sm font-bold">Marcar asistencia</div>
-          <div className="text-xs text-slate-400">Registro por capacitación</div>
+          <div className="text-xs text-slate-500">Registro por capacitación</div>
         </div>
         <span className="text-slate-300">›</span>
       </button>
@@ -78,7 +78,7 @@ export default function HomeScreen({
         <span className="text-2xl">⚙️</span>
         <div className="flex-1">
           <div className="text-sm font-bold">Familias, roles y capacitaciones</div>
-          <div className="text-xs text-slate-400">Gestión de la preparación</div>
+          <div className="text-xs text-slate-500">Gestión de la preparación</div>
         </div>
         <span className="text-slate-300">›</span>
       </button>
@@ -90,13 +90,13 @@ export default function HomeScreen({
           <span className="text-2xl">📊</span>
           <div className="flex-1">
             <div className="text-sm font-bold">Reportes</div>
-            <div className="text-xs text-slate-400">Asistencia, estacas y roles</div>
+            <div className="text-xs text-slate-500">Asistencia, estacas y roles</div>
           </div>
           <span className="text-slate-300">›</span>
         </button>
       )}
 
-      <div className="text-xs text-slate-400 text-center mt-2">
+      <div className="text-xs text-slate-500 text-center mt-2">
         Sesión: {user.correo} · {user.rol}
       </div>
     </div>
@@ -108,7 +108,7 @@ function Metric({ label, value, color, icon }: { label: string; value: number; c
     <div className="bg-white rounded-2xl p-4 shadow-sm border-t-[3px]" style={{ borderTopColor: color }}>
       <div className="text-xl mb-1">{icon}</div>
       <div className="text-2xl font-extrabold" style={{ color }}>{value}</div>
-      <div className="text-[11px] text-slate-400 font-semibold mt-0.5">{label}</div>
+      <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{label}</div>
     </div>
   );
 }

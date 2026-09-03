@@ -1,21 +1,16 @@
 import { useMemo, useState } from 'react';
 import { TODAS_LAS_ESTACAS } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
+import { stripAccents } from '../utils/validation';
 import { ASIGNACIONES, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
 // Búsqueda difusa simple: encuentra por substring en cualquier parte del
 // nombre completo, o por inicio de cada palabra — no requiere escribir el
 // nombre completo ni tildes exactas.
-function normalize(s: string): string {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
 function matches(p: Participante, query: string): boolean {
-  const q = normalize(query);
+  const q = stripAccents(query);
   if (!q) return true;
-  const full = normalize(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`);
+  const full = stripAccents(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`);
   return full.includes(q) || full.split(' ').some((w) => w.startsWith(q));
 }
 
@@ -55,7 +50,7 @@ export default function BusquedaScreen({
             setExpandedId(null);
           }}
         />
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           <Chip active={!filterEstaca} onClick={() => setFilterEstaca('')}>
             Todas
           </Chip>
@@ -65,7 +60,7 @@ export default function BusquedaScreen({
             </Chip>
           ))}
         </div>
-        <div className="text-[11px] text-slate-400 mt-1">
+        <div className="text-[11px] text-slate-500 mt-1">
           {results.length} resultado{results.length !== 1 ? 's' : ''}
         </div>
       </div>
@@ -82,7 +77,7 @@ export default function BusquedaScreen({
                 <Avatar nombres={p.nombres} apellidos={p.apellidos} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate">{p.nombres} {p.apellidos}</div>
-                  <div className="text-[11px] text-slate-400 truncate">📱 {p.telefono} · ⛪ {p.estaca}</div>
+                  <div className="text-[11px] text-slate-500 truncate">📱 {p.telefono} · ⛪ {p.estaca}</div>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap">
                     <Badge>{p.estaca}</Badge>
                     {p.asignacion && <Badge accent>{p.asignacion}</Badge>}
@@ -116,7 +111,7 @@ export default function BusquedaScreen({
         {results.length === 0 && (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <div className="text-3xl mb-2">🔍</div>
-            <div className="text-sm text-slate-400">Sin resultados para esta búsqueda.</div>
+            <div className="text-sm text-slate-500">Sin resultados para esta búsqueda.</div>
           </div>
         )}
       </div>
@@ -165,19 +160,19 @@ function EditSheet({
         <div className="flex flex-col gap-3">
           {(['nombres', 'apellidos', 'telefono', 'correo'] as const).map((k) => (
             <div key={k}>
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">{k}</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">{k}</div>
               <input className="input" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
             </div>
           ))}
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Género</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Género</div>
             <select className="input" value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value as Genero })}>
               <option value="H">Hombre</option>
               <option value="M">Mujer</option>
             </select>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Asignación</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Asignación</div>
             <select className="input" value={form.asignacion} onChange={(e) => setForm({ ...form, asignacion: e.target.value as Asignacion })}>
               {ASIGNACIONES.map((a) => (
                 <option key={a} value={a}>{a}</option>
@@ -185,7 +180,7 @@ function EditSheet({
             </select>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Disponibilidad</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Disponibilidad</div>
             <select className="input" value={form.disponibilidad} onChange={(e) => setForm({ ...form, disponibilidad: e.target.value as Disponibilidad })}>
               <option value="si">Sí, disponible</option>
               <option value="no_creo">No cree poder</option>
@@ -227,7 +222,7 @@ function Row({ icon, label, value }: { icon: string; label: string; value: strin
   return (
     <div className="flex gap-2.5 text-sm">
       <span className="w-5 text-center">{icon}</span>
-      <span className="w-24 text-xs text-slate-400 shrink-0 mt-0.5">{label}</span>
+      <span className="w-24 text-xs text-slate-500 shrink-0 mt-0.5">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
   );
@@ -236,7 +231,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 text-xs font-bold rounded-full px-3 py-1.5 whitespace-nowrap ${
+      className={`shrink-0 text-xs font-bold rounded-full px-3.5 py-2.5 whitespace-nowrap ${
         active ? 'bg-primary text-white' : 'bg-white text-slate-500 border border-slate-200'
       }`}
     >

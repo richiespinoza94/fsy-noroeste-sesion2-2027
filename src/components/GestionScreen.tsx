@@ -56,7 +56,7 @@ export default function GestionScreen({
           <button
             key={id}
             onClick={() => setSub(id)}
-            className={`flex-1 py-2.5 text-xs font-bold border-b-2 ${sub === id ? 'border-primary text-primary' : 'border-transparent text-slate-400'}`}
+            className={`flex-1 py-2.5 text-xs font-bold border-b-2 ${sub === id ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
           >
             {label}
           </button>
@@ -178,7 +178,7 @@ function FamiliasTab({
             <div className="w-11 h-11 rounded-xl shrink-0" style={{ background: FAMILY_COLORS.find((c) => c.id === fam.colorId)?.hex || '#E0E0E0' }} />
             <div className="flex-1">
               <div className="font-extrabold">{fam.customName || fam.nombre}</div>
-              {fam.customName && <div className="text-xs text-slate-400">{fam.nombre}</div>}
+              {fam.customName && <div className="text-xs text-slate-500">{fam.nombre}</div>}
             </div>
             {user.canEditAll && (
               <RenameButton
@@ -193,20 +193,20 @@ function FamiliasTab({
           <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
 
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-2">Consejeros ({famMembers.length})</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Consejeros ({famMembers.length})</div>
             {famMembers.map((p) => (
               <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 mb-1.5">
                 <button onClick={() => setDetail(p)} className="flex-1 text-left text-sm font-semibold">{p.nombres} {p.apellidos}</button>
-                <span className="text-[10px] text-slate-400">{p.estaca}</span>
+                <span className="text-[10px] text-slate-500">{p.estaca}</span>
                 <button onClick={() => removeConsejeroFromFamilia(fam, p.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">
                   ✕
                 </button>
               </div>
             ))}
-            {famMembers.length === 0 && <div className="text-xs text-slate-400 text-center py-2">Sin consejeros asignados</div>}
+            {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin consejeros asignados</div>}
 
             <div className="mt-3 pt-3 border-t border-slate-100">
-              <div className="text-[11px] text-slate-400 mb-1.5">Solo participantes con asignación exacta <strong>Consejero</strong> son elegibles.</div>
+              <div className="text-[11px] text-slate-500 mb-1.5">Solo participantes con asignación exacta <strong>Consejero</strong> son elegibles.</div>
               <input className="input" placeholder="Buscar consejero sin familia…" value={search} onChange={(e) => setSearch(e.target.value)} />
               {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
               {results.map((p) => (
@@ -230,7 +230,7 @@ function FamiliasTab({
         <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
           <div className="text-3xl mb-2">👥</div>
           <div className="text-sm font-bold mb-1">No hay familias creadas</div>
-          <div className="text-xs text-slate-400">Crea la primera para organizar consejeros y compañerismos.</div>
+          <div className="text-xs text-slate-500">Crea la primera para organizar consejeros y compañerismos.</div>
         </div>
       )}
 
@@ -238,7 +238,7 @@ function FamiliasTab({
         <div className="fixed inset-0 bg-black/40 flex items-end z-50" onClick={(e) => e.target === e.currentTarget && setDetail(null)}>
           <div className="bg-white rounded-t-3xl w-full max-w-[850px] mx-auto p-5 max-h-[80vh] overflow-y-auto">
             <div className="font-extrabold text-lg mb-0.5">{detail.nombres} {detail.apellidos}</div>
-            <div className="text-xs text-slate-400 mb-4">{detail.asignacion || 'Sin rol'}</div>
+            <div className="text-xs text-slate-500 mb-4">{detail.asignacion || 'Sin rol'}</div>
             {[
               ['📞', 'Teléfono', detail.telefono],
               ['✉️', 'Correo', detail.correo],
@@ -248,7 +248,7 @@ function FamiliasTab({
             ].map(([icon, label, val]) => (
               <div key={label} className="flex gap-2.5 py-1.5 border-b border-slate-100 text-sm">
                 <span className="w-5 text-center">{icon}</span>
-                <span className="w-20 text-slate-400 text-xs shrink-0 mt-0.5">{label}</span>
+                <span className="w-20 text-slate-500 text-xs shrink-0 mt-0.5">{label}</span>
                 <span className="font-medium">{val}</span>
               </div>
             ))}
@@ -287,7 +287,7 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
         <span className="text-xl">🏠</span>
         <div className="flex-1">
           <div className="text-sm font-extrabold">Noches de Hogar</div>
-          <div className="text-[11px] text-slate-400">Planifica y mide asistencia interna de esta familia.</div>
+          <div className="text-[11px] text-slate-500">Planifica y mide asistencia interna de esta familia.</div>
         </div>
         <button onClick={() => setPlanning((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2.5 py-1.5">
           {planning ? 'Cerrar' : 'Planificar'}
@@ -302,13 +302,13 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
         </div>
       )}
 
-      {noches.length === 0 && <div className="text-xs text-slate-400 text-center py-2">Aún no hay Noches de Hogar planificadas.</div>}
+      {noches.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Aún no hay Noches de Hogar planificadas.</div>}
 
       {[...noches].reverse().map((noche) => (
         <div key={noche.id} className="bg-slate-50 rounded-xl p-3 mt-2">
           <div className="flex justify-between text-xs mb-2">
             <strong className="text-primary">{noche.titulo}</strong>
-            <span className="text-slate-400">{noche.fecha}</span>
+            <span className="text-slate-500">{noche.fecha}</span>
           </div>
           <div className="flex flex-col gap-1.5">
             {miembros.map((p) => {
@@ -368,7 +368,7 @@ function CompanerismoCard({
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center mb-2">
-        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide flex-1">Compañerismos — Coord. Auxiliares</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex-1">Compañerismos — Coord. Auxiliares</div>
         <button onClick={() => setAdding((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2 py-1">
           {adding ? 'Cancelar' : '+ Añadir'}
         </button>
@@ -386,7 +386,7 @@ function CompanerismoCard({
           </div>
         );
       })}
-      {cps.length === 0 && !adding && <div className="text-xs text-slate-400 text-center py-1">Sin compañerismos asignados</div>}
+      {cps.length === 0 && !adding && <div className="text-xs text-slate-500 text-center py-1">Sin compañerismos asignados</div>}
 
       {adding && (
         <div className="pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
@@ -394,11 +394,11 @@ function CompanerismoCard({
           {[{ sel: sel1, setSel: setSel1, q: q1, setQ: setQ1, label: 'Coordinador 1' }, { sel: sel2, setSel: setSel2, q: q2, setQ: setQ2, label: 'Coordinador 2' }].map(
             ({ sel, setSel, q, setQ, label }) => (
               <div key={label}>
-                <div className="text-[11px] text-slate-400 font-semibold mb-1">{label} (opcional)</div>
+                <div className="text-[11px] text-slate-500 font-semibold mb-1">{label} (opcional)</div>
                 {sel ? (
                   <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-3 py-2">
                     <span className="flex-1 text-sm font-semibold text-primary">{sel.nombres} {sel.apellidos}</span>
-                    <button onClick={() => setSel(null)} className="text-slate-400">✕</button>
+                    <button onClick={() => setSel(null)} className="text-slate-500">✕</button>
                   </div>
                 ) : (
                   <input className="input" placeholder="Buscar Coord. Auxiliar…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -466,7 +466,7 @@ function RolesTab({ user, participantes }: { user: SessionUser; participantes: P
               <span className="bg-primary/10 text-primary text-xs font-bold rounded-full px-2.5 py-0.5">{members.length}</span>
             </summary>
             <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5">
-              {members.length === 0 && <div className="text-xs text-slate-400 text-center py-1">Sin asignados</div>}
+              {members.length === 0 && <div className="text-xs text-slate-500 text-center py-1">Sin asignados</div>}
               {members.map((p) => (
                 <button
                   key={p.id}
@@ -535,7 +535,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Sesiones programadas</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Sesiones programadas</div>
         {user.canEditAll && (
           <button onClick={() => setAdding(true)} className="bg-primary text-white text-xs font-bold rounded-lg px-3 py-1.5">+ Añadir</button>
         )}
@@ -566,7 +566,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">📅</div>
           <div className="flex-1">
             <div className="text-sm font-bold">{c.label}</div>
-            <div className="text-[11px] text-slate-400">{c.fecha} · {c.hora} · {c.lugar}</div>
+            <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora} · {c.lugar}</div>
           </div>
           {user.canEditAll && (
             <button onClick={() => deleteCapacitacion(c.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1.5">✕</button>

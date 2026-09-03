@@ -95,7 +95,7 @@ export default function AsistenciaScreen({
             >
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold truncate">{p.nombres} {p.apellidos}</div>
-                <div className="text-[11px] text-slate-400 truncate">⛪ {p.estaca}</div>
+                <div className="text-[11px] text-slate-500 truncate">⛪ {p.estaca}</div>
               </div>
               <button
                 disabled={savingId === p.id}
@@ -116,7 +116,7 @@ export default function AsistenciaScreen({
             </div>
           );
         })}
-        {filtered.length === 0 && <div className="text-center text-sm text-slate-400 py-10">Sin resultados.</div>}
+        {filtered.length === 0 && <div className="text-center text-sm text-slate-500 py-10">Sin resultados.</div>}
       </div>
     </div>
   );

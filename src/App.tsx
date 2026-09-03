@@ -96,7 +96,7 @@ function StaffApp() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 ${tab === t.id ? 'text-primary' : 'text-slate-400'}`}
+            className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 ${tab === t.id ? 'text-primary' : 'text-slate-500'}`}
           >
             <span className="text-lg">{t.icon}</span>
             <span className="text-[10px] font-bold">{t.label}</span>
