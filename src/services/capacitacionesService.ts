@@ -45,7 +45,6 @@ export async function deleteCapacitacion(id: string, adminCorreo: string) {
   await logAction(adminCorreo, 'ELIMINAR_CAPACITACION', '', { capacitacionId: id });
 }
 
-/** Elige la capacitación más relevante: la de hoy pendiente, si no la futura más próxima, si no la pasada más reciente. */
 export type VentanaCheckIn = 'sin_fecha' | 'muy_temprano' | 'abierta' | 'cerrada';
 
 const VENTANA_ANTES_MS = 60 * 60 * 1000; // 1 hora antes del inicio
@@ -68,6 +67,35 @@ export function estadoVentanaCheckIn(cap: Capacitacion | null, ahora: Date = new
   return 'abierta';
 }
 
+/**
+ * Elige QUÉ capacitación mostrar en el check-in público — a propósito
+ * DISTINTA de getNextCapacitacion(), que siempre prefiere cualquier futura
+ * sobre una pasada (correcto para el Home/Asistencia de staff, donde "la
+ * próxima" tiene sentido aunque sea dentro de varios días).
+ *
+ * Para el check-in automático eso es un bug real: si la capacitación de HOY
+ * ya pasó su ventana pero la siguiente oficial es la próxima semana,
+ * getNextCapacitacion saltaba a esa lejana y mostraba "muy temprano" sobre
+ * algo a días de distancia — confuso y engañoso. Esta función en cambio:
+ * 1) si alguna capacitación tiene la ventana abierta AHORA, esa gana;
+ * 2) si no, la más cercana en el tiempo (pasada o futura), para que el
+ *    aviso ("muy temprano"/"cerrada") sea sobre la sesión realmente
+ *    relevante en este momento.
+ */
+export function getCapacitacionParaCheckIn(caps: Capacitacion[], ahora: Date = new Date()): Capacitacion | null {
+  if (!caps.length) return null;
+  const parsed = caps
+    .map((c) => ({ c, d: new Date(`${c.fecha}T${c.hora || '00:00'}`) }))
+    .filter((x) => !isNaN(x.d.getTime()));
+  if (!parsed.length) return caps[0];
+
+  const abiertas = parsed.filter((x) => estadoVentanaCheckIn(x.c, ahora) === 'abierta');
+  const candidatas = abiertas.length ? abiertas : parsed;
+  candidatas.sort((a, b) => Math.abs(a.d.getTime() - ahora.getTime()) - Math.abs(b.d.getTime() - ahora.getTime()));
+  return candidatas[0].c;
+}
+
+/** Elige la capacitación más relevante para el Home/Asistencia de staff: la futura más próxima, si no la pasada más reciente. */
 export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
   if (!caps.length) return null;
   const now = new Date();

@@ -65,17 +65,14 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 9: ventana de check-in con hora real + 30 pruebas de QA (parche `0007`)
+## 6. Estado actual — Fase 10: fix real de selección de capacitación en check-in (parche `0008`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 30/30 pasan)
-- **Fases 1-8**: ver historial de commits/parches.
-- **Fase 9** (a pedido explícito — "revisemos con 30 casos antes de seguir agregando"):
-  - **`estadoVentanaCheckIn()`** en `capacitacionesService.ts` — el check-in público (`AutoCheckInScreen`) ya no compara solo la fecha (día completo abierto), compara **datetime real**: la ventana abre 1 hora antes de la hora programada y cierra 3 horas después de que empieza. Devuelve `'sin_fecha' | 'muy_temprano' | 'abierta' | 'cerrada'`, cada uno con su propio mensaje en la UI.
-  - **El caso que motivó esto** (alguien llega a las 4:30pm a una capacitación de las 6pm): con esta ventana, queda como "muy temprano" — no se le permite marcar hasta las 5pm. Está la prueba #22 con ese caso exacto, con esos números.
-  - **Fix de fondo**: la comparación usa `Date` completo (fecha+hora), no solo el string de fecha — así una capacitación que empieza a las 23:30 y se extiende pasada la medianoche se evalúa bien sin depender de en qué día calendario cae "ahora" (prueba #30).
-  - **`ESTACAS_PRINCIPALES`/`ESTACAS_SECUNDARIAS`** se movieron de `RegistroWizard.tsx` a `data/estacas.ts` para poder probarlas por separado (antes vivían como constantes locales del componente, no importables desde los tests).
-  - **30 pruebas de QA** (antes 11) cubriendo: validación/normalización de datos, búsqueda difusa, partición de estacas, `getNextCapacitacion` con fecha inválida, y los 11 bordes de la ventana de check-in (justo antes/en/justo después de cada límite, sin capacitación, sin fecha, sin hora, cruce de medianoche).
-  - **Confirmación de diseño (sin cambio de código)**: el registro (`RegistroWizard`) nunca estuvo condicionado a que sea día de capacitación — siempre estuvo abierto, como debía ser. La ventana de tiempo solo aplica al check-in automático.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
+- **Fases 1-9**: ver historial de commits/parches.
+- **Fase 10** — bug real reportado por Ricardo probando en producción: creó una capacitación "Prueba" para HOY, pero el check-in público seguía mostrando el aviso de "muy temprano" sobre una capacitación distinta programada 3 días después.
+  - **Causa**: `AutoCheckInScreen` reutilizaba `getNextCapacitacion()`, que siempre prefiere cualquier capacitación futura sobre una pasada — correcto para el Home/Asistencia de staff ("cuál es la próxima"), pero equivocado para el check-in: si la de HOY ya cerró su ventana pero la próxima oficial es la semana siguiente, saltaba a esa lejana en vez de mostrar la de hoy.
+  - **Fix**: `getCapacitacionParaCheckIn()` (nueva función en `capacitacionesService.ts`) — 1) si alguna capacitación tiene la ventana abierta ahora mismo, esa gana; 2) si no, la más cercana en el tiempo (pasada o futura), nunca una lejana. `getNextCapacitacion()` no se tocó — sigue igual para Home/Asistencia de staff, son casos de uso distintos a propósito.
+  - 4 pruebas nuevas (30 → 34), incluida la #32 que reproduce el caso exacto que reportó Ricardo con los mismos datos (capacitación "Prueba" y "Charla Informativa Puente Piedra").
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).

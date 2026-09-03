@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
-import { estadoVentanaCheckIn, getNextCapacitacion, subscribeCapacitaciones } from '../services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
 import { subscribeParticipantes } from '../services/participantsService';
 import type { Asistencia, Capacitacion, Participante } from '../types';
 import { fuzzyIncludes } from '../utils/search';
@@ -16,7 +16,7 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => subscribeParticipantes(setParticipantes), []);
   useEffect(() => subscribeCapacitaciones(setCapacitaciones), []);
 
-  const cap = getNextCapacitacion(capacitaciones);
+  const cap = getCapacitacionParaCheckIn(capacitaciones);
   const ventana = estadoVentanaCheckIn(cap);
   const abierta = ventana === 'abierta';
 

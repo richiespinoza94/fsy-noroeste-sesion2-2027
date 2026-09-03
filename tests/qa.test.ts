@@ -8,7 +8,7 @@ import {
   validateEmail,
   validatePhone,
 } from '../src/utils/validation';
-import { estadoVentanaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, TODAS_LAS_ESTACAS } from '../src/data/estacas';
 import type { Capacitacion } from '../src/types';
@@ -195,6 +195,45 @@ test('30. estadoVentanaCheckIn — capacitación que empieza a las 23:30 sigue a
   const capNocturna: Capacitacion = { ...CAP_REF, hora: '23:30' };
   const ahora = new Date('2027-01-26T01:00:00'); // 1.5h después de que empezó
   assert.strictEqual(estadoVentanaCheckIn(capNocturna, ahora), 'abierta');
+});
+
+// ── getCapacitacionParaCheckIn — cuál se muestra en el check-in público ─────
+// (distinta de getNextCapacitacion: no debe saltar a una futura lejana si
+// hoy hay/hubo una relevante — ver bug real reportado por Ricardo)
+
+test('31. getCapacitacionParaCheckIn — con una abierta y otra futura lejana, elige la abierta', () => {
+  const caps: Capacitacion[] = [
+    { id: 'hoy', label: 'Hoy', fecha: '2027-01-25', hora: '18:00', lugar: 'X', oficial: true },
+    { id: 'lejana', label: 'Lejana', fecha: '2027-02-10', hora: '18:00', lugar: 'X', oficial: true },
+  ];
+  const ahora = new Date('2027-01-25T18:30:00'); // dentro de la ventana de "Hoy"
+  assert.strictEqual(getCapacitacionParaCheckIn(caps, ahora)?.id, 'hoy');
+});
+
+test('32. getCapacitacionParaCheckIn — caso real de Ricardo: "Prueba" de hoy ya cerrada vs. "Charla" en 3 días, elige "Prueba" (la cercana), no salta a la lejana', () => {
+  const caps: Capacitacion[] = [
+    { id: 'prueba', label: 'Prueba', fecha: '2026-09-03', hora: '11:00', lugar: 'mi casa', oficial: true },
+    { id: 'charla', label: 'Charla Informativa Puente Piedra', fecha: '2026-09-06', hora: '17:00', lugar: 'Barrio Puente Piedra', oficial: true },
+  ];
+  const ahora = new Date('2026-09-03T20:00:00'); // "Prueba" ya cerró su ventana (11:00 + 3h = 14:00)
+  const elegida = getCapacitacionParaCheckIn(caps, ahora);
+  assert.strictEqual(elegida?.id, 'prueba');
+  assert.strictEqual(estadoVentanaCheckIn(elegida, ahora), 'cerrada');
+  // Antes del fix, esto elegía "charla" (getNextCapacitacion prefiere cualquier
+  // futura) y mostraba "muy temprano" sobre algo a 3 días de distancia.
+});
+
+test('33. getCapacitacionParaCheckIn — con lista vacía devuelve null', () => {
+  assert.strictEqual(getCapacitacionParaCheckIn([]), null);
+});
+
+test('34. getCapacitacionParaCheckIn — con dos abiertas a la vez, elige la más cercana a "ahora"', () => {
+  const caps: Capacitacion[] = [
+    { id: 'a', label: 'A', fecha: '2027-01-25', hora: '17:30', lugar: 'X', oficial: true },
+    { id: 'b', label: 'B', fecha: '2027-01-25', hora: '18:30', lugar: 'X', oficial: true },
+  ];
+  const ahora = new Date('2027-01-25T18:15:00'); // ambas en ventana; B está más cerca (15 min vs 45 min)
+  assert.strictEqual(getCapacitacionParaCheckIn(caps, ahora)?.id, 'b');
 });
 
 console.log(`\n${passed} pruebas pasaron.`);
