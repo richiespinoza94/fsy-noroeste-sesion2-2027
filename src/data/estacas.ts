@@ -18,3 +18,8 @@ export const ESTACAS_DATA: Record<string, string[] | null> = {
 };
 
 export const TODAS_LAS_ESTACAS = Object.keys(ESTACAS_DATA).sort();
+
+// Esta sesión FSY es específicamente para 3 estacas — se muestran primero en
+// el selector del registro, el resto queda detrás de "Otra estaca…".
+export const ESTACAS_PRINCIPALES = ['Ventanilla', 'Puente Piedra', 'Pro Lima'];
+export const ESTACAS_SECUNDARIAS = TODAS_LAS_ESTACAS.filter((e) => !ESTACAS_PRINCIPALES.includes(e));

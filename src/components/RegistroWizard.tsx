@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ESTACAS_DATA, TODAS_LAS_ESTACAS } from '../data/estacas';
+import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS } from '../data/estacas';
 import { EVENTO_FECHAS_LABEL } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
 import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, type ExperienciaPrevia } from '../types';
@@ -14,8 +14,6 @@ const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] 
 
 // Esta sesión FSY es específicamente para 3 estacas — se muestran primero,
 // el resto queda detrás de "Otra estaca…" para no saturar el selector.
-const ESTACAS_PRINCIPALES = ['Ventanilla', 'Puente Piedra', 'Pro Lima'];
-const ESTACAS_SECUNDARIAS = TODAS_LAS_ESTACAS.filter((e) => !ESTACAS_PRINCIPALES.includes(e));
 const OTRA_ESTACA = '__otra_estaca__';
 const ESTACA_LIBRE = '__estaca_libre__';
 

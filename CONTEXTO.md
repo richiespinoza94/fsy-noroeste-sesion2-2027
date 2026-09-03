@@ -65,15 +65,17 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 8: check-in público sin login (parche `0006`)
+## 6. Estado actual — Fase 9: ventana de check-in con hora real + 30 pruebas de QA (parche `0007`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 11/11 pasan)
-- **Fases 1-7**: ver historial de commits/parches.
-- **Fase 8** (revisión con `ponytail` + `ui-ux-pro-max` + `frontend-design`, a pedido explícito):
-  - **`src/components/PublicEntry.tsx`** — nueva puerta de entrada en `?page=registro`: pregunta "¿Es tu primera vez?" con dos caminos. "Sí" → el wizard de registro de siempre. "No, ya me registré" → check-in rápido. Esto resuelve de raíz el pedido de "detectar antes si ya está registrado": la mayoría de quienes repiten nunca llega a las preguntas de duplicado del Paso 1 porque se auto-seleccionan hacia el otro camino.
-  - **`src/components/AutoCheckInScreen.tsx`** — pantalla pública (sin login de staff) para marcar la propia asistencia: busca por apellido con la misma búsqueda difusa que ya existía en Búsqueda (sin tildes, sin mayúsculas), muestra hasta 8 resultados como filas grandes tocables, marca `presente` en la capacitación vigente al tocar el nombre. Auditoría: se registra como `autoregistro:{nombre completo}` en vez de un correo de staff, para distinguir en el log quién marcó qué.
-  - **Guardrail de UX (no pedido explícitamente, agregado por diseño)**: si la próxima capacitación no es *hoy*, no se permite auto-marcar — se muestra la fecha real en vez de dejar que alguien se marque presente a algo que todavía no ocurrió.
-  - **Dedupe**: la búsqueda difusa se extrajo a `src/utils/search.ts` (`fuzzyIncludes`) — antes vivía duplicada dentro de `BusquedaScreen.tsx`; ahora la usan tanto Búsqueda (staff) como el check-in público. Nueva prueba de QA para esta función.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 30/30 pasan)
+- **Fases 1-8**: ver historial de commits/parches.
+- **Fase 9** (a pedido explícito — "revisemos con 30 casos antes de seguir agregando"):
+  - **`estadoVentanaCheckIn()`** en `capacitacionesService.ts` — el check-in público (`AutoCheckInScreen`) ya no compara solo la fecha (día completo abierto), compara **datetime real**: la ventana abre 1 hora antes de la hora programada y cierra 3 horas después de que empieza. Devuelve `'sin_fecha' | 'muy_temprano' | 'abierta' | 'cerrada'`, cada uno con su propio mensaje en la UI.
+  - **El caso que motivó esto** (alguien llega a las 4:30pm a una capacitación de las 6pm): con esta ventana, queda como "muy temprano" — no se le permite marcar hasta las 5pm. Está la prueba #22 con ese caso exacto, con esos números.
+  - **Fix de fondo**: la comparación usa `Date` completo (fecha+hora), no solo el string de fecha — así una capacitación que empieza a las 23:30 y se extiende pasada la medianoche se evalúa bien sin depender de en qué día calendario cae "ahora" (prueba #30).
+  - **`ESTACAS_PRINCIPALES`/`ESTACAS_SECUNDARIAS`** se movieron de `RegistroWizard.tsx` a `data/estacas.ts` para poder probarlas por separado (antes vivían como constantes locales del componente, no importables desde los tests).
+  - **30 pruebas de QA** (antes 11) cubriendo: validación/normalización de datos, búsqueda difusa, partición de estacas, `getNextCapacitacion` con fecha inválida, y los 11 bordes de la ventana de check-in (justo antes/en/justo después de cada límite, sin capacitación, sin fecha, sin hora, cruce de medianoche).
+  - **Confirmación de diseño (sin cambio de código)**: el registro (`RegistroWizard`) nunca estuvo condicionado a que sea día de capacitación — siempre estuvo abierto, como debía ser. La ventana de tiempo solo aplica al check-in automático.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).

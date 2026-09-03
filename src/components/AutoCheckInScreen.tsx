@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
-import { getNextCapacitacion, subscribeCapacitaciones } from '../services/capacitacionesService';
+import { estadoVentanaCheckIn, getNextCapacitacion, subscribeCapacitaciones } from '../services/capacitacionesService';
 import { subscribeParticipantes } from '../services/participantsService';
 import type { Asistencia, Capacitacion, Participante } from '../types';
 import { fuzzyIncludes } from '../utils/search';
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   const [participantes, setParticipantes] = useState<Participante[]>([]);
@@ -21,7 +17,8 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => subscribeCapacitaciones(setCapacitaciones), []);
 
   const cap = getNextCapacitacion(capacitaciones);
-  const esHoy = !!cap && cap.fecha === todayISO();
+  const ventana = estadoVentanaCheckIn(cap);
+  const abierta = ventana === 'abierta';
 
   useEffect(() => (cap ? subscribeAsistencia(cap.id, setAsistencia) : undefined), [cap?.id]);
 
@@ -31,7 +28,7 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
   }, [participantes, query]);
 
   async function marcar(p: Participante) {
-    if (!cap) return;
+    if (!cap || ventana !== 'abierta') return;
     setMarcandoId(p.id);
     await marcarAsistencia(cap.id, p.id, 'presente', `autoregistro:${p.nombres} ${p.apellidos}`);
     setMarcandoId('');
@@ -76,7 +73,7 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
             <h1 className="text-lg font-extrabold">Marcar mi asistencia</h1>
             {cap ? (
               <p className="text-xs text-white/70 mt-1">
-                {esHoy ? '📍 ' : '📅 '}
+                {abierta ? '📍 ' : '📅 '}
                 {cap.label} · {cap.fecha} {cap.hora && `· ${cap.hora}`}
               </p>
             ) : (
@@ -86,21 +83,28 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="p-6 flex flex-col gap-3">
-          {!cap && (
+          {ventana === 'sin_fecha' && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
               Todavía no hay ninguna capacitación programada. Vuelve a intentarlo más cerca de la fecha, o pídele a un
               encargado que la cree.
             </div>
           )}
 
-          {cap && !esHoy && (
+          {ventana === 'muy_temprano' && cap && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
-              La próxima capacitación es <strong>{cap.label}</strong> el {cap.fecha}
-              {cap.hora && ` a las ${cap.hora}`}. Vuelve a marcar tu asistencia ese día.
+              Todavía es muy temprano. <strong>{cap.label}</strong> es el {cap.fecha}
+              {cap.hora && ` a las ${cap.hora}`} — puedes marcar tu asistencia desde 1 hora antes.
             </div>
           )}
 
-          {cap && esHoy && (
+          {ventana === 'cerrada' && cap && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
+              La ventana para marcar asistencia a <strong>{cap.label}</strong> ya se cerró. Si sí asististe, pide a un
+              encargado que lo marque manualmente.
+            </div>
+          )}
+
+          {ventana === 'abierta' && cap && (
             <>
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Escribe tu apellido</span>

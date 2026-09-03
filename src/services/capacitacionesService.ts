@@ -46,6 +46,28 @@ export async function deleteCapacitacion(id: string, adminCorreo: string) {
 }
 
 /** Elige la capacitación más relevante: la de hoy pendiente, si no la futura más próxima, si no la pasada más reciente. */
+export type VentanaCheckIn = 'sin_fecha' | 'muy_temprano' | 'abierta' | 'cerrada';
+
+const VENTANA_ANTES_MS = 60 * 60 * 1000; // 1 hora antes del inicio
+const VENTANA_DESPUES_MS = 3 * 60 * 60 * 1000; // 3 horas después del inicio
+
+/**
+ * Ventana de check-in automático (público, sin login) para una capacitación:
+ * abre 1h antes de la hora programada, cierra 3h después de que empieza.
+ * Usa datetime completo (fecha+hora), no solo comparar el string de fecha —
+ * así una capacitación que arranca a las 23:30 y se extiende pasada la
+ * medianoche se evalúa bien, sin depender de en qué día calendario cae "ahora".
+ */
+export function estadoVentanaCheckIn(cap: Capacitacion | null, ahora: Date = new Date()): VentanaCheckIn {
+  if (!cap || !cap.fecha) return 'sin_fecha';
+  const inicio = new Date(`${cap.fecha}T${cap.hora || '00:00'}`);
+  if (isNaN(inicio.getTime())) return 'sin_fecha';
+  const nowMs = ahora.getTime();
+  if (nowMs < inicio.getTime() - VENTANA_ANTES_MS) return 'muy_temprano';
+  if (nowMs > inicio.getTime() + VENTANA_DESPUES_MS) return 'cerrada';
+  return 'abierta';
+}
+
 export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
   if (!caps.length) return null;
   const now = new Date();
