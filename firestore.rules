@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// IMPORTANTE: estas reglas son SOLO para la base de datos con nombre
+// "fsy-2027", dentro del mismo proyecto Firebase que usa CONFEJAS 2026
+// (confejas-2026). Antes de pegar esto en Firebase Console, verifica que
+// el selector de base de datos (arriba, junto a "Firestore Database")
+// diga "fsy-2027" y NO "(default)" — la base "(default)" es la que usa
+// CONFEJAS en producción.
+//
+// MODELO DE AMENAZA (idéntico al de CONFEJAS 2026, ver CONTEXTO.md):
+// No hay Firebase Authentication — el control de acceso real ocurre a nivel
+// de aplicación (login por correo+contraseña, permisos por rol). Alguien
+// técnico con el link podría escribir directo contra la API de Firestore
+// saltándose el login de la app. Riesgo aceptado explícitamente para este
+// tipo de evento y equipo, no un descuido.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /participantes/{id} { allow read, write: if true; }
+    match /usuarios/{id}      { allow read, write: if true; }
+    match /capacitaciones/{id}{ allow read, write: if true; }
+    match /asistencia/{id}    { allow read, write: if true; }
+    match /familias/{id}      { allow read, write: if true; }
+    match /companerismo/{id}  { allow read, write: if true; }
+    match /nochesHogar/{id}   { allow read, write: if true; }
+    match /auditoria/{id}     { allow create, read: if true; allow update: if false; }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}
