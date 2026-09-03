@@ -65,13 +65,15 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 13: aviso de campos faltantes en el registro (parche `0011`)
+## 6. Estado actual — Fase 14: auditoría del Home de staff (parche `0012`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-12**: ver historial de commits/parches.
-- **Fase 13** — auditoría a pedido explícito: antes, cuando faltaba completar algo, el botón "Siguiente"/"Enviar registro" simplemente quedaba gris (deshabilitado) sin decir por qué — anti-patrón de `ui-ux-pro-max` (Forms & Feedback: "error cerca del campo" es obligatorio, no opcional).
-  - `camposFaltantes` (nuevo, en `RegistroWizard.tsx`) calcula en vivo, por paso, una lista legible de qué falta (ej. "Fecha de nacimiento", "Género") y se muestra como texto ámbar justo debajo del botón — el botón se queda gris igual que antes (decisión explícita de Ricardo: no cambiar el patrón de habilitar/deshabilitar, solo agregar la explicación).
-  - No incluye los 3 casos de duplicado (teléfono/correo/nombre ya registrado) — esos ya tienen su propio mensaje pegado al campo desde antes, no hacía falta repetirlo en la lista.
+- **Fases 1-13**: ver historial de commits/parches.
+- **Fase 14** (auditoría con `ponytail` + `ui-ux-pro-max` + `frontend-design` + `vercel-react-best-practices`, a pedido explícito):
+  - **Mismo parpadeo que ya se había arreglado en `AutoCheckInScreen`, pero no aquí**: el Home mostraba "0 registrados"/"Sin capacitaciones" por un instante antes de que llegaran los datos reales de Firestore. `StaffApp` (en `App.tsx`) ahora trackea `participantesLoaded`/`capacitacionesLoaded` y pasa `cargando` a `HomeScreen`, que muestra "Cargando…"/"—" en vez de ceros engañosos. Este tracking vive en `App.tsx`, no en `HomeScreen`, para que cualquier otra pantalla lo pueda reutilizar después si hace falta.
+  - **`getNextCapacitacion()` y el filtro de confirmados ahora usan `useMemo`** — mismo tipo de bug que CONFEJAS ya documentó como real a los 500 participantes (`CONTEXTO.md` de CONFEJAS, sección 7 punto 9); se aplicó la lección preventivamente acá en vez de esperar a que vuelva a pasar.
+  - **Copy**: "Confirmados" → "Confirmados para el evento" (más claro desde que la pregunta de disponibilidad ahora tiene fechas específicas).
+  - **Decisión consciente, sin cambio**: "Registrar participante" se queda abriendo en pestaña nueva — a propósito, para no perder la sesión de staff mientras alguien se registra en la puerta.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
@@ -79,6 +81,7 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
 - Compresión de bundle (`React.lazy()` por pestaña).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
+- El mismo patrón de "cargando explícito" de esta fase no se aplicó todavía a Búsqueda/Gestión/Reportes — solo a Home y al check-in público. Si se nota el mismo parpadeo en otra pestaña, es candidato para el mismo fix.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

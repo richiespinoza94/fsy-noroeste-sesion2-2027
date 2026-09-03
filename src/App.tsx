@@ -30,11 +30,26 @@ function StaffApp() {
   const [tab, setTab] = useState<Tab>('home');
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
+  // "Cargando" y "vacío" son estados distintos — mismo patrón que ya se usa
+  // en AutoCheckInScreen: sin esto, el Home muestra "0 registrados" y "sin
+  // capacitaciones" por un instante justo después de entrar, antes de que
+  // Firestore entregue los datos reales.
+  const [participantesLoaded, setParticipantesLoaded] = useState(false);
+  const [capacitacionesLoaded, setCapacitacionesLoaded] = useState(false);
+  const cargandoDatos = !participantesLoaded || !capacitacionesLoaded;
 
   useEffect(() => {
     if (!user) return;
-    const unsub1 = subscribeParticipantes(setParticipantes);
-    const unsub2 = subscribeCapacitaciones(setCapacitaciones);
+    setParticipantesLoaded(false);
+    setCapacitacionesLoaded(false);
+    const unsub1 = subscribeParticipantes((items) => {
+      setParticipantes(items);
+      setParticipantesLoaded(true);
+    });
+    const unsub2 = subscribeCapacitaciones((items) => {
+      setCapacitaciones(items);
+      setCapacitacionesLoaded(true);
+    });
     return () => {
       unsub1();
       unsub2();
@@ -69,7 +84,7 @@ function StaffApp() {
 
       <main className="flex-1 overflow-y-auto">
         {tab === 'home' && (
-          <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} onNavigate={setTab} />
+          <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} cargando={cargandoDatos} onNavigate={setTab} />
         )}
         {tab === 'asistencia' && (
           <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />

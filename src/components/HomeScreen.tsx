@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Capacitacion, Participante, SessionUser } from '../types';
 import { getNextCapacitacion } from '../services/capacitacionesService';
 
@@ -5,34 +6,46 @@ export default function HomeScreen({
   user,
   participantes,
   capacitaciones,
+  cargando,
   onNavigate,
 }: {
   user: SessionUser;
   participantes: Participante[];
   capacitaciones: Capacitacion[];
+  cargando: boolean;
   onNavigate: (tab: 'asistencia' | 'busqueda' | 'gestion' | 'reportes') => void;
 }) {
-  const next = getNextCapacitacion(capacitaciones);
-  const confirmados = participantes.filter((p) => p.disponibilidad === 'si').length;
+  // Derivados memoizados — misma lección que ya está documentada en
+  // CONFEJAS (CONTEXTO.md, "cálculos sin memoizar" sobre 500 personas):
+  // mejor aplicarla desde ahora que es gratis, que esperar a redescubrirla
+  // cuando el roster crezca.
+  const next = useMemo(() => getNextCapacitacion(capacitaciones), [capacitaciones]);
+  const confirmados = useMemo(() => participantes.filter((p) => p.disponibilidad === 'si').length, [participantes]);
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20">
+      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20 min-h-[92px]">
         <div className="absolute -top-8 -right-10 w-36 h-36 rounded-full bg-accent/10" />
         <div className="relative">
           <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">📅 Próxima capacitación</div>
-          <div className="text-lg font-extrabold">{next?.label || 'Sin capacitaciones programadas'}</div>
-          {next && (
-            <div className="text-sm opacity-80 mt-1">
-              {next.fecha} {next.hora && `· ${next.hora}`} · {next.lugar}
-            </div>
+          {cargando ? (
+            <div className="text-sm opacity-70 mt-1">Cargando…</div>
+          ) : (
+            <>
+              <div className="text-lg font-extrabold">{next?.label || 'Sin capacitaciones programadas'}</div>
+              {next && (
+                <div className="text-sm opacity-80 mt-1">
+                  {next.fecha} {next.hora && `· ${next.hora}`} · {next.lugar}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Metric label="Consejeros registrados" value={participantes.length} color="#0E2954" icon="👥" />
-        <Metric label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
+        <Metric label="Consejeros registrados" value={participantes.length} color="#0E2954" icon="👥" cargando={cargando} />
+        <Metric label="Confirmados para el evento" value={confirmados} color="#4CAF50" icon="✅" cargando={cargando} />
       </div>
 
       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
@@ -103,11 +116,23 @@ export default function HomeScreen({
   );
 }
 
-function Metric({ label, value, color, icon }: { label: string; value: number; color: string; icon: string }) {
+function Metric({
+  label,
+  value,
+  color,
+  icon,
+  cargando,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  icon: string;
+  cargando: boolean;
+}) {
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm border-t-[3px]" style={{ borderTopColor: color }}>
       <div className="text-xl mb-1">{icon}</div>
-      <div className="text-2xl font-extrabold" style={{ color }}>{value}</div>
+      <div className="text-2xl font-extrabold" style={{ color }}>{cargando ? '—' : value}</div>
       <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{label}</div>
     </div>
   );
