@@ -65,21 +65,16 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 6: rediseño de Paso 3 del registro (parche `0003`)
+## 6. Estado actual — Fase 7: selector de estaca en 3 niveles (parche `0005`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 10/10 pasan)
-- **Fases 1-5**: ver historial de commits/parches.
-- **Fase 6** (auditoría con `ui-ux-pro-max` + `frontend-design` + `ponytail`, mobile y web, a pedido explícito — Ricardo sentía el Paso 3 "en el aire"):
-  - **Encabezado de sección por paso restaurado** (`SectionHeader`, ícono + título: "👤 Datos personales", "📍 Ubicación", "✨ Información adicional"). Existía en el `Registro.html` original del GAS y se había quedado fuera al portar a React — era la causa principal de la sensación de "flotar": no había ancla visual cerca del contenido, solo los pills de progreso lejos en el header oscuro.
-  - **Género se movió del Paso 3 al Paso 1** — es un dato de identidad, no de experiencia/disponibilidad; estaba rompiendo el hilo narrativo del Paso 3 al quedar en medio de dos preguntas no relacionadas con género.
-  - **Paso 3 agrupado visualmente**: experiencia previa (+ asignación anterior condicional) y disponibilidad ahora viven en dos tarjetas `bg-slate-50` separadas, en vez de una lista plana de preguntas sin diferenciación.
-  - **Fix de higiene de código**: `border-1.5` (no es una utilidad válida en la escala default de Tailwind) corregido a `border-[1.5px]` en `RadioRow`.
-
-### Pendiente de decisión (no aplicado — requiere más diseño)
-- **Panel de contexto lateral en desktop**: en pantallas anchas, la tarjeta `max-w-md` centrada puede sentirse como una cajita flotando en mucho espacio en blanco. Un layout de dos columnas (formulario + panel con fecha/lugar del evento) resolvería esto, pero es un cambio de mayor alcance — se conversa aparte si se decide hacerlo.
+- **Fases 1-6**: ver historial de commits/parches.
+- **Fase 7**: esta sesión FSY es específicamente para 3 estacas (Ventanilla, Puente Piedra, Pro Lima). El selector de estaca del Paso 2 ya no muestra las 11 de una — muestra las 3 principales + "Otra estaca…"; al elegir esa opción aparece un segundo selector con las 8 restantes + "Mi estaca no está en la lista"; al elegir esa, un campo de texto libre. Cada nivel tiene botón "‹ Volver" (escape route, `ui-ux-pro-max`). `ESTACAS_DATA` ahora incluye los 7 barrios de Pro Lima (parche `0004`), completando las 3 estacas foco con selector de barrio precargado.
+  - **Fix de bug real encontrado en el camino**: `isBarrioLibre` comparaba `barrios === null`, pero una estaca escrita a mano (modo libre) que no existe en `ESTACAS_DATA` devuelve `undefined`, no `null` — antes de este fix, eso renderizaba un `<select>` de barrio vacío en vez de caer al input de texto libre. Se cambió a `!barrios` para cubrir ambos casos.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
+- Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
 - Compresión de bundle (`React.lazy()` por pestaña).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.

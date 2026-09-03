@@ -12,6 +12,13 @@ const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] 
   { value: 'ambos', label: EXPERIENCIA_PREVIA_LABEL.ambos },
 ];
 
+// Esta sesión FSY es específicamente para 3 estacas — se muestran primero,
+// el resto queda detrás de "Otra estaca…" para no saturar el selector.
+const ESTACAS_PRINCIPALES = ['Ventanilla', 'Puente Piedra', 'Pro Lima'];
+const ESTACAS_SECUNDARIAS = TODAS_LAS_ESTACAS.filter((e) => !ESTACAS_PRINCIPALES.includes(e));
+const OTRA_ESTACA = '__otra_estaca__';
+const ESTACA_LIBRE = '__estaca_libre__';
+
 const EMPTY = {
   nombres: '',
   apellidos: '',
@@ -30,6 +37,7 @@ const EMPTY = {
 export default function RegistroWizard() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(EMPTY);
+  const [ubicacionModo, setUbicacionModo] = useState<'principal' | 'otras' | 'libre'>('principal');
   const [dup, setDup] = useState<DuplicateCheck>({ telefono: false, correo: false, nombre: false });
   const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +45,12 @@ export default function RegistroWizard() {
   const [error, setError] = useState('');
 
   const barrios = form.estaca ? ESTACAS_DATA[form.estaca] : null;
-  const isBarrioLibre = !!form.estaca && barrios === null;
+  // `!barrios` (no `=== null`) a propósito: cubre tanto las estacas sin
+  // barrios precargados como una estaca escrita a mano que no existe en
+  // ESTACAS_DATA — en ambos casos ESTACAS_DATA[form.estaca] da `undefined`,
+  // no `null`, y antes de este fix eso rendía un <select> vacío en vez de
+  // caer al input de texto libre.
+  const isBarrioLibre = !!form.estaca && !barrios;
 
   // Verificación de duplicados con debounce, igual que en el GAS original.
   useEffect(() => {
@@ -109,6 +122,7 @@ export default function RegistroWizard() {
           <button
             onClick={() => {
               setForm(EMPTY);
+              setUbicacionModo('principal');
               setSubmitted(false);
               setStep(1);
             }}
@@ -189,16 +203,82 @@ export default function RegistroWizard() {
             <>
               <SectionHeader icon="📍" title="Ubicación" />
               <Field label="Estaca" required>
-                <select
-                  className="input"
-                  value={form.estaca}
-                  onChange={(e) => setForm({ ...form, estaca: e.target.value, barrio: '', barrioLibre: '' })}
-                >
-                  <option value="">— Selecciona tu estaca —</option>
-                  {TODAS_LAS_ESTACAS.map((e) => (
-                    <option key={e} value={e}>{e}</option>
-                  ))}
-                </select>
+                {ubicacionModo === 'principal' && (
+                  <select
+                    className="input"
+                    value={form.estaca}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === OTRA_ESTACA) {
+                        setUbicacionModo('otras');
+                        setForm({ ...form, estaca: '', barrio: '', barrioLibre: '' });
+                      } else {
+                        setForm({ ...form, estaca: v, barrio: '', barrioLibre: '' });
+                      }
+                    }}
+                  >
+                    <option value="">— Selecciona tu estaca —</option>
+                    {ESTACAS_PRINCIPALES.map((e) => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                    <option value={OTRA_ESTACA}>Otra estaca…</option>
+                  </select>
+                )}
+
+                {ubicacionModo === 'otras' && (
+                  <>
+                    <select
+                      className="input"
+                      value={ESTACAS_SECUNDARIAS.includes(form.estaca) ? form.estaca : ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === ESTACA_LIBRE) {
+                          setUbicacionModo('libre');
+                          setForm({ ...form, estaca: '', barrio: '', barrioLibre: '' });
+                        } else {
+                          setForm({ ...form, estaca: v, barrio: '', barrioLibre: '' });
+                        }
+                      }}
+                    >
+                      <option value="">— Selecciona tu estaca —</option>
+                      {ESTACAS_SECUNDARIAS.map((e) => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                      <option value={ESTACA_LIBRE}>Mi estaca no está en la lista</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUbicacionModo('principal');
+                        setForm({ ...form, estaca: '', barrio: '', barrioLibre: '' });
+                      }}
+                      className="text-xs font-bold text-primary mt-1.5"
+                    >
+                      ‹ Volver
+                    </button>
+                  </>
+                )}
+
+                {ubicacionModo === 'libre' && (
+                  <>
+                    <input
+                      className="input"
+                      placeholder="Escribe el nombre de tu estaca"
+                      value={form.estaca}
+                      onChange={(e) => setForm({ ...form, estaca: e.target.value, barrio: '', barrioLibre: '' })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUbicacionModo('otras');
+                        setForm({ ...form, estaca: '', barrio: '', barrioLibre: '' });
+                      }}
+                      className="text-xs font-bold text-primary mt-1.5"
+                    >
+                      ‹ Volver
+                    </button>
+                  </>
+                )}
               </Field>
               {form.estaca && !isBarrioLibre && (
                 <Field label="Barrio" required>
