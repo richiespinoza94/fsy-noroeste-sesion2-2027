@@ -71,7 +71,14 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => (cap ? subscribeAsistencia(cap.id, setAsistencia) : undefined), [cap?.id]);
 
-  const marcaDispositivo = cap ? leerMarcaDispositivo(cap.id) : null;
+  const marcaGuardada = cap ? leerMarcaDispositivo(cap.id) : null;
+  // El bloqueo de "un check-in por dispositivo" solo cuenta mientras la
+  // asistencia siga vigente en Firestore. Si un admin la quita o la cambia
+  // desde Gestión, `asistencia` (suscripción en tiempo real) deja de decir
+  // "presente" para esa persona, y el bloqueo se cae solo — sin recargar
+  // nada ni depender de que alguien borre datos del navegador.
+  const marcaDispositivo =
+    marcaGuardada && asistencia[marcaGuardada.participanteId]?.estado === 'presente' ? marcaGuardada : null;
 
   const results = useMemo(() => {
     if (query.trim().length < 2) return [];

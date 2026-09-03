@@ -65,14 +65,13 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 11: estado de carga explícito + un check-in por dispositivo (parche `0009`)
+## 6. Estado actual — Fase 12: el bloqueo de dispositivo se libera si un admin corrige la asistencia (parche `0010`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-10**: ver historial de commits/parches.
-- **Fase 11** (dos hallazgos reales reportados por Ricardo probando en producción):
-  - **Parpadeo del mensaje "no hay capacitación"**: `AutoCheckInScreen` calculaba el mensaje antes de que llegaran los datos de Firestore (primer render con `capacitaciones=[]`), mostrando por una fracción de segundo el estado equivocado hasta que la suscripción entregaba los datos reales. Se agregaron `cargandoCaps`/`cargandoParticipantes` — mientras cualquiera de las dos siga cargando, se muestra un spinner explícito en vez de un mensaje calculado sobre datos vacíos (`ui-ux-pro-max` → progressive loading, no dejar ver un estado "vacío" falso).
-  - **Un check-in por dispositivo, por capacitación**: antes cualquiera podía buscar y marcar a varias personas seguidas desde el mismo celular (ej. alguien marcando a sus amigos). Ahora, al marcar una asistencia exitosamente, se guarda una marca en `localStorage` (`fsy_checkin_dispositivo_{capacitacionId}`) — un segundo intento desde el mismo navegador para la misma capacitación muestra quién ya se marcó y bloquea la búsqueda, en vez de dejar seguir marcando gente. Se quitó el botón "Marcar a alguien más" de la pantalla de confirmación (existía antes y era exactamente el hueco que permitía el abuso).
-  - **Límite conocido y aceptado**: es gating a nivel de cliente (`localStorage`), no algo criptográficamente a prueba de balas — borrar datos del navegador lo esquiva. Mismo modelo de riesgo aceptado que el resto de esta app (reglas de Firestore abiertas + control a nivel de aplicación). Si esto se vuelve un problema real, el siguiente nivel sería requerir el número de teléfono de la persona como confirmación antes de marcar, no solo tocar su nombre en una lista.
+- **Fases 1-11**: ver historial de commits/parches.
+- **Fase 12** — pregunta real de Ricardo: "si un admin quita la asistencia de tal persona desde Gestión, ¿debería poder volver a marcarla ese celular?" Respuesta: sí, y ahora pasa automático.
+  - El bloqueo de "un check-in por dispositivo" (Fase 11) ya no confía ciegamente en `localStorage` — se cruza con el estado real de `asistencia` en Firestore (que `AutoCheckInScreen` ya escucha en tiempo real). Si el admin quita/cambia la asistencia desde Gestión, `asistencia[participanteId]?.estado` deja de ser `'presente'`, y el bloqueo se cae solo — sin recargar la página ni que nadie tenga que borrar datos del navegador.
+  - `localStorage` sigue guardando "quién se marcó desde este celular" (para mostrar el nombre en el aviso), pero ya no es la única fuente de verdad de si el bloqueo sigue vigente.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
