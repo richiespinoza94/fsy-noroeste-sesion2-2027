@@ -4,7 +4,7 @@ import BusquedaScreen from './components/BusquedaScreen';
 import GestionScreen from './components/GestionScreen';
 import HomeScreen from './components/HomeScreen';
 import LoginScreen from './components/LoginScreen';
-import RegistroWizard from './components/RegistroWizard';
+import PublicEntry from './components/PublicEntry';
 import ReportesScreen from './components/ReportesScreen';
 import { isFirebaseConfigured } from './firebase';
 import { getStoredSession, logout } from './services/authService';
@@ -21,7 +21,7 @@ function isRegistroPage(): boolean {
 }
 
 export default function App() {
-  if (isRegistroPage()) return <RegistroWizard />;
+  if (isRegistroPage()) return <PublicEntry />;
   return <StaffApp />;
 }
 

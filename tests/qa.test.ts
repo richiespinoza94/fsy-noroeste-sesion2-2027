@@ -9,6 +9,7 @@ import {
   validatePhone,
 } from '../src/utils/validation';
 import { getNextCapacitacion } from '../src/services/capacitacionesService';
+import { fuzzyIncludes } from '../src/utils/search';
 import { ESTACAS_DATA, TODAS_LAS_ESTACAS } from '../src/data/estacas';
 import type { Capacitacion } from '../src/types';
 
@@ -51,6 +52,12 @@ test('normalizeName capitaliza cada palabra sin tocar tildes ni guiones', () => 
 
 test('nameKey compara nombres sin tildes ni mayúsculas (detección de duplicados)', () => {
   assert.strictEqual(nameKey('Saúl', 'García'), nameKey('saul', 'GARCIA'));
+});
+
+test('fuzzyIncludes encuentra por substring o inicio de palabra, sin tildes ni mayúsculas', () => {
+  assert.strictEqual(fuzzyIncludes('María José Pérez López', 'perez'), true);
+  assert.strictEqual(fuzzyIncludes('María José Pérez López', 'JOSE'), true);
+  assert.strictEqual(fuzzyIncludes('María José Pérez López', 'garcia'), false);
 });
 
 test('ESTACAS_DATA — estacas con barrios confirmados vs. input libre', () => {

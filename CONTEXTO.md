@@ -65,12 +65,15 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 7: selector de estaca en 3 niveles (parche `0005`)
+## 6. Estado actual — Fase 8: check-in público sin login (parche `0006`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 10/10 pasan)
-- **Fases 1-6**: ver historial de commits/parches.
-- **Fase 7**: esta sesión FSY es específicamente para 3 estacas (Ventanilla, Puente Piedra, Pro Lima). El selector de estaca del Paso 2 ya no muestra las 11 de una — muestra las 3 principales + "Otra estaca…"; al elegir esa opción aparece un segundo selector con las 8 restantes + "Mi estaca no está en la lista"; al elegir esa, un campo de texto libre. Cada nivel tiene botón "‹ Volver" (escape route, `ui-ux-pro-max`). `ESTACAS_DATA` ahora incluye los 7 barrios de Pro Lima (parche `0004`), completando las 3 estacas foco con selector de barrio precargado.
-  - **Fix de bug real encontrado en el camino**: `isBarrioLibre` comparaba `barrios === null`, pero una estaca escrita a mano (modo libre) que no existe en `ESTACAS_DATA` devuelve `undefined`, no `null` — antes de este fix, eso renderizaba un `<select>` de barrio vacío en vez de caer al input de texto libre. Se cambió a `!barrios` para cubrir ambos casos.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 11/11 pasan)
+- **Fases 1-7**: ver historial de commits/parches.
+- **Fase 8** (revisión con `ponytail` + `ui-ux-pro-max` + `frontend-design`, a pedido explícito):
+  - **`src/components/PublicEntry.tsx`** — nueva puerta de entrada en `?page=registro`: pregunta "¿Es tu primera vez?" con dos caminos. "Sí" → el wizard de registro de siempre. "No, ya me registré" → check-in rápido. Esto resuelve de raíz el pedido de "detectar antes si ya está registrado": la mayoría de quienes repiten nunca llega a las preguntas de duplicado del Paso 1 porque se auto-seleccionan hacia el otro camino.
+  - **`src/components/AutoCheckInScreen.tsx`** — pantalla pública (sin login de staff) para marcar la propia asistencia: busca por apellido con la misma búsqueda difusa que ya existía en Búsqueda (sin tildes, sin mayúsculas), muestra hasta 8 resultados como filas grandes tocables, marca `presente` en la capacitación vigente al tocar el nombre. Auditoría: se registra como `autoregistro:{nombre completo}` en vez de un correo de staff, para distinguir en el log quién marcó qué.
+  - **Guardrail de UX (no pedido explícitamente, agregado por diseño)**: si la próxima capacitación no es *hoy*, no se permite auto-marcar — se muestra la fecha real en vez de dejar que alguien se marque presente a algo que todavía no ocurrió.
+  - **Dedupe**: la búsqueda difusa se extrajo a `src/utils/search.ts` (`fuzzyIncludes`) — antes vivía duplicada dentro de `BusquedaScreen.tsx`; ahora la usan tanto Búsqueda (staff) como el check-in público. Nueva prueba de QA para esta función.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).

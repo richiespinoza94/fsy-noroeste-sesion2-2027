@@ -1,17 +1,11 @@
 import { useMemo, useState } from 'react';
 import { TODAS_LAS_ESTACAS } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
-import { stripAccents } from '../utils/validation';
+import { fuzzyIncludes } from '../utils/search';
 import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
-// Búsqueda difusa simple: encuentra por substring en cualquier parte del
-// nombre completo, o por inicio de cada palabra — no requiere escribir el
-// nombre completo ni tildes exactas.
 function matches(p: Participante, query: string): boolean {
-  const q = stripAccents(query);
-  if (!q) return true;
-  const full = stripAccents(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`);
-  return full.includes(q) || full.split(' ').some((w) => w.startsWith(q));
+  return fuzzyIncludes(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`, query);
 }
 
 const DISPONIBILIDAD_LABEL: Record<Disponibilidad, string> = {
