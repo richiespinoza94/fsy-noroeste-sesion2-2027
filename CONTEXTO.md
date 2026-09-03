@@ -65,13 +65,13 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 12: el bloqueo de dispositivo se libera si un admin corrige la asistencia (parche `0010`)
+## 6. Estado actual — Fase 13: aviso de campos faltantes en el registro (parche `0011`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-11**: ver historial de commits/parches.
-- **Fase 12** — pregunta real de Ricardo: "si un admin quita la asistencia de tal persona desde Gestión, ¿debería poder volver a marcarla ese celular?" Respuesta: sí, y ahora pasa automático.
-  - El bloqueo de "un check-in por dispositivo" (Fase 11) ya no confía ciegamente en `localStorage` — se cruza con el estado real de `asistencia` en Firestore (que `AutoCheckInScreen` ya escucha en tiempo real). Si el admin quita/cambia la asistencia desde Gestión, `asistencia[participanteId]?.estado` deja de ser `'presente'`, y el bloqueo se cae solo — sin recargar la página ni que nadie tenga que borrar datos del navegador.
-  - `localStorage` sigue guardando "quién se marcó desde este celular" (para mostrar el nombre en el aviso), pero ya no es la única fuente de verdad de si el bloqueo sigue vigente.
+- **Fases 1-12**: ver historial de commits/parches.
+- **Fase 13** — auditoría a pedido explícito: antes, cuando faltaba completar algo, el botón "Siguiente"/"Enviar registro" simplemente quedaba gris (deshabilitado) sin decir por qué — anti-patrón de `ui-ux-pro-max` (Forms & Feedback: "error cerca del campo" es obligatorio, no opcional).
+  - `camposFaltantes` (nuevo, en `RegistroWizard.tsx`) calcula en vivo, por paso, una lista legible de qué falta (ej. "Fecha de nacimiento", "Género") y se muestra como texto ámbar justo debajo del botón — el botón se queda gris igual que antes (decisión explícita de Ricardo: no cambiar el patrón de habilitar/deshabilitar, solo agregar la explicación).
+  - No incluye los 3 casos de duplicado (teléfono/correo/nombre ya registrado) — esos ya tienen su propio mensaje pegado al campo desde antes, no hacía falta repetirlo en la lista.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).

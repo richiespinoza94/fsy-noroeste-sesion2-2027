@@ -85,6 +85,31 @@ export default function RegistroWizard() {
     !!form.experienciaPrevia &&
     (form.experienciaPrevia === 'ninguna' || !!form.asignacionAnterior);
 
+  // Lista legible de qué falta completar en el paso actual — el botón se
+  // queda gris igual que antes, pero ahora explica por qué en vez de dejar
+  // que la persona adivine campo por campo. No incluye los duplicados
+  // (teléfono/correo/nombre ya registrado): esos ya tienen su propio
+  // mensaje pegado al campo.
+  const camposFaltantes = useMemo(() => {
+    const faltan: string[] = [];
+    if (step === 1) {
+      if (!form.nombres.trim()) faltan.push('Nombres');
+      if (!form.apellidos.trim()) faltan.push('Apellidos');
+      if (!form.fechaNacimiento || new Date(form.fechaNacimiento) > new Date()) faltan.push('Fecha de nacimiento');
+      if (!form.genero) faltan.push('Género');
+      if (!validatePhone(form.telefono)) faltan.push('Teléfono');
+      if (!validateEmail(form.correo)) faltan.push('Correo');
+    } else if (step === 2) {
+      if (!form.estaca) faltan.push('Estaca');
+      else if (isBarrioLibre ? !form.barrioLibre.trim() : !form.barrio) faltan.push('Barrio');
+    } else if (step === 3) {
+      if (!form.experienciaPrevia) faltan.push('Experiencia previa');
+      if (form.experienciaPrevia && form.experienciaPrevia !== 'ninguna' && !form.asignacionAnterior) faltan.push('Asignación anterior');
+      if (!form.disponibilidad) faltan.push('Disponibilidad');
+    }
+    return faltan;
+  }, [step, form, isBarrioLibre]);
+
   async function submit() {
     if (!step1Valid || !step2Valid || !step3Valid) return;
     setSubmitting(true);
@@ -392,6 +417,12 @@ export default function RegistroWizard() {
               </button>
             )}
           </div>
+
+          {camposFaltantes.length > 0 && (
+            <p className="text-xs text-amber-700 text-center -mt-1.5">
+              Faltan: {camposFaltantes.join(', ')}
+            </p>
+          )}
         </div>
       </div>
     </div>
