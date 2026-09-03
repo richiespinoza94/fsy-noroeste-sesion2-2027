@@ -67,12 +67,13 @@ async function fetchAllParticipantes(): Promise<Participante[]> {
 export interface RegistroInput {
   nombres: string;
   apellidos: string;
+  fechaNacimiento: string;
   telefono: string;
   correo: string;
   estaca: string;
   barrio: string;
   genero: 'H' | 'M';
-  staffAnterior: 'si' | 'no';
+  experienciaPrevia: 'ninguna' | 'fsy' | 'jas' | 'ambos';
   asignacionAnterior: string;
   disponibilidad: 'si' | 'no_creo' | 'no_se';
 }
@@ -94,13 +95,14 @@ export async function registrarParticipante(input: RegistroInput): Promise<Regis
     timestamp: new Date().toISOString(),
     nombres: input.nombres,
     apellidos: input.apellidos,
+    fechaNacimiento: input.fechaNacimiento,
     telefono: normalizePhone(input.telefono),
     correo: normalizeEmail(input.correo),
     estaca: input.estaca,
     barrio: input.barrio,
     genero: input.genero,
-    staffAnterior: input.staffAnterior,
-    asignacionAnterior: input.staffAnterior === 'si' ? input.asignacionAnterior : '',
+    experienciaPrevia: input.experienciaPrevia,
+    asignacionAnterior: input.experienciaPrevia === 'ninguna' ? '' : input.asignacionAnterior,
     disponibilidad: input.disponibilidad,
     asignacion: 'Consejero', // asignación inicial por defecto, igual que en el GAS
     familiaId: '',

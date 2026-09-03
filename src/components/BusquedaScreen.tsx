@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { TODAS_LAS_ESTACAS } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
 import { stripAccents } from '../utils/validation';
-import { ASIGNACIONES, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
+import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
 // Búsqueda difusa simple: encuentra por substring en cualquier parte del
 // nombre completo, o por inicio de cada palabra — no requiere escribir el
@@ -88,11 +88,13 @@ export default function BusquedaScreen({
 
               {open && (
                 <div className="px-3.5 pb-3.5 pt-1 border-t border-slate-100 flex flex-col gap-2">
+                  <Row icon="🎂" label="Nacimiento" value={p.fechaNacimiento} />
                   <Row icon="📞" label="Teléfono" value={p.telefono} />
                   <Row icon="✉️" label="Correo" value={p.correo} />
                   <Row icon="⛪" label="Estaca" value={p.estaca} />
                   <Row icon="📍" label="Barrio" value={p.barrio} />
                   <Row icon="👤" label="Género" value={p.genero === 'H' ? 'Hombre' : 'Mujer'} />
+                  <Row icon="🎖️" label="Experiencia" value={EXPERIENCIA_PREVIA_LABEL[p.experienciaPrevia]} />
                   <Row icon="📋" label="Asignación" value={p.asignacion || 'Sin asignar'} />
                   <Row icon="✅" label="Disponibilidad" value={DISPONIBILIDAD_LABEL[p.disponibilidad]} />
                   {user.canEditAll && (

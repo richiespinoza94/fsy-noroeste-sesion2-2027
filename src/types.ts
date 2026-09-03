@@ -6,6 +6,14 @@
 
 export type Genero = 'H' | 'M';
 export type Disponibilidad = 'si' | 'no_creo' | 'no_se';
+export type ExperienciaPrevia = 'ninguna' | 'fsy' | 'jas' | 'ambos';
+
+export const EXPERIENCIA_PREVIA_LABEL: Record<ExperienciaPrevia, string> = {
+  ninguna: 'No he participado',
+  fsy: 'Sí, en FSY / PFJ',
+  jas: 'Sí, en Conferencia JAS',
+  ambos: 'Sí, en ambos',
+};
 
 export const ASIGNACIONES = [
   'Coordinador General',
@@ -33,14 +41,15 @@ export interface Participante {
   timestamp: string; // ISO
   nombres: string;
   apellidos: string;
+  fechaNacimiento: string; // yyyy-MM-dd
   telefono: string;
   correo: string;
   estaca: string;
   barrio: string;
   genero: Genero;
-  staffAnterior: 'si' | 'no';
-  asignacionAnterior: string;
-  disponibilidad: Disponibilidad;
+  experienciaPrevia: ExperienciaPrevia;
+  asignacionAnterior: string; // solo relevante si experienciaPrevia !== 'ninguna'
+  disponibilidad: Disponibilidad; // disponibilidad para las fechas específicas del evento
   asignacion: Asignacion | '';
   familiaId: string;
 }

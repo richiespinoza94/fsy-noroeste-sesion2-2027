@@ -1,18 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_DATA, TODAS_LAS_ESTACAS } from '../data/estacas';
+import { EVENTO_FECHAS_LABEL } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
-import { ASIGNACIONES_PREVIAS } from '../types';
+import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, type ExperienciaPrevia } from '../types';
 import { normalizeEmail, normalizeName, normalizePhone, validateEmail, validatePhone } from '../utils/validation';
+
+const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] = [
+  { value: 'ninguna', label: EXPERIENCIA_PREVIA_LABEL.ninguna },
+  { value: 'fsy', label: EXPERIENCIA_PREVIA_LABEL.fsy },
+  { value: 'jas', label: EXPERIENCIA_PREVIA_LABEL.jas },
+  { value: 'ambos', label: EXPERIENCIA_PREVIA_LABEL.ambos },
+];
 
 const EMPTY = {
   nombres: '',
   apellidos: '',
+  fechaNacimiento: '',
   telefono: '',
   correo: '',
   estaca: '',
   barrio: '',
   barrioLibre: '',
-  staffAnterior: 'no' as 'si' | 'no',
+  experienciaPrevia: '' as ExperienciaPrevia | '',
   asignacionAnterior: '',
   genero: '' as 'H' | 'M' | '',
   disponibilidad: '' as 'si' | 'no_creo' | 'no_se' | '',
@@ -48,6 +57,8 @@ export default function RegistroWizard() {
     () =>
       !!form.nombres.trim() &&
       !!form.apellidos.trim() &&
+      !!form.fechaNacimiento &&
+      new Date(form.fechaNacimiento) <= new Date() &&
       validatePhone(form.telefono) &&
       validateEmail(form.correo) &&
       !dup.telefono &&
@@ -57,7 +68,11 @@ export default function RegistroWizard() {
     [form, dup, checking]
   );
   const step2Valid = !!form.estaca && ((isBarrioLibre && !!form.barrioLibre.trim()) || (!isBarrioLibre && !!form.barrio));
-  const step3Valid = !!form.genero && !!form.disponibilidad && (form.staffAnterior !== 'si' || !!form.asignacionAnterior);
+  const step3Valid =
+    !!form.genero &&
+    !!form.disponibilidad &&
+    !!form.experienciaPrevia &&
+    (form.experienciaPrevia === 'ninguna' || !!form.asignacionAnterior);
 
   async function submit() {
     if (!step1Valid || !step2Valid || !step3Valid) return;
@@ -66,12 +81,13 @@ export default function RegistroWizard() {
     const res = await registrarParticipante({
       nombres: normalizeName(form.nombres),
       apellidos: normalizeName(form.apellidos),
+      fechaNacimiento: form.fechaNacimiento,
       telefono: normalizePhone(form.telefono),
       correo: normalizeEmail(form.correo),
       estaca: form.estaca,
       barrio: isBarrioLibre ? form.barrioLibre.trim() : form.barrio,
       genero: form.genero as 'H' | 'M',
-      staffAnterior: form.staffAnterior,
+      experienciaPrevia: form.experienciaPrevia as ExperienciaPrevia,
       asignacionAnterior: form.asignacionAnterior,
       disponibilidad: form.disponibilidad as 'si' | 'no_creo' | 'no_se',
     });
@@ -128,6 +144,15 @@ export default function RegistroWizard() {
               </Field>
               <Field label="Apellidos" required>
                 <input className="input" value={form.apellidos} onChange={(e) => setForm({ ...form, apellidos: e.target.value })} />
+              </Field>
+              <Field label="Fecha de nacimiento" required>
+                <input
+                  className="input"
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={form.fechaNacimiento}
+                  onChange={(e) => setForm({ ...form, fechaNacimiento: e.target.value })}
+                />
               </Field>
               <Field label="Teléfono" required>
                 <input
@@ -187,14 +212,21 @@ export default function RegistroWizard() {
 
           {step === 3 && (
             <>
-              <Field label="¿Has servido antes en una conferencia de jóvenes?">
+              <Field label="¿Has servido antes en FSY (PFJ) o en una Conferencia JAS?" required>
                 <RadioRow
-                  value={form.staffAnterior}
-                  onChange={(v) => setForm({ ...form, staffAnterior: v as 'si' | 'no', asignacionAnterior: v === 'si' ? form.asignacionAnterior : '' })}
-                  options={[{ value: 'no', label: 'No' }, { value: 'si', label: 'Sí' }]}
+                  value={form.experienciaPrevia}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      experienciaPrevia: v as ExperienciaPrevia,
+                      asignacionAnterior: v === 'ninguna' ? '' : form.asignacionAnterior,
+                    })
+                  }
+                  vertical
+                  options={EXPERIENCIA_PREVIA_OPTIONS}
                 />
               </Field>
-              {form.staffAnterior === 'si' && (
+              {form.experienciaPrevia && form.experienciaPrevia !== 'ninguna' && (
                 <Field label="Asignación anterior" required>
                   <select className="input" value={form.asignacionAnterior} onChange={(e) => setForm({ ...form, asignacionAnterior: e.target.value })}>
                     <option value="">— Selecciona —</option>
@@ -211,17 +243,39 @@ export default function RegistroWizard() {
                   options={[{ value: 'H', label: 'Hombre' }, { value: 'M', label: 'Mujer' }]}
                 />
               </Field>
-              <Field label="Disponibilidad para servir" required>
+              <Field label={`¿Estarás disponible ${EVENTO_FECHAS_LABEL}?`} required>
                 <RadioRow
                   value={form.disponibilidad}
                   onChange={(v) => setForm({ ...form, disponibilidad: v as 'si' | 'no_creo' | 'no_se' })}
                   vertical
                   options={[
-                    { value: 'si', label: '✅ Sí, puedo' },
-                    { value: 'no_creo', label: '🤔 No creo' },
-                    { value: 'no_se', label: '❓ Aún no lo sé' },
+                    {
+                      value: 'si',
+                      label: (
+                        <span className="flex items-center gap-2">
+                          <IconCheck className="w-[18px] h-[18px] shrink-0" /> Sí, puedo
+                        </span>
+                      ),
+                    },
+                    {
+                      value: 'no_creo',
+                      label: (
+                        <span className="flex items-center gap-2">
+                          <IconMinus className="w-[18px] h-[18px] shrink-0" /> No creo
+                        </span>
+                      ),
+                    },
+                    {
+                      value: 'no_se',
+                      label: (
+                        <span className="flex items-center gap-2">
+                          <IconQuestion className="w-[18px] h-[18px] shrink-0" /> Aún no lo sé
+                        </span>
+                      ),
+                    },
                   ]}
                 />
+                <Helper>Es la fecha real del evento — ayúdanos a planificar con la respuesta más honesta posible.</Helper>
               </Field>
             </>
           )}
@@ -307,7 +361,7 @@ function RadioRow({
 }: {
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: React.ReactNode }[];
   vertical?: boolean;
 }) {
   return (
@@ -325,5 +379,35 @@ function RadioRow({
         </button>
       ))}
     </div>
+  );
+}
+
+// Íconos SVG minimalistas para las opciones de disponibilidad — reemplazan
+// los emoji (✅🤔❓) según la revisión de ui-ux-pro-max/frontend-design.
+// Usan currentColor a propósito: heredan automáticamente el navy (#0E2954)
+// cuando la opción está seleccionada y el gris cuando no, sin lógica extra.
+function IconCheck({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+      <circle cx={10} cy={10} r={8} />
+      <path d="M6.5 10.3l2.2 2.2 4.8-4.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconMinus({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+      <circle cx={10} cy={10} r={8} />
+      <path d="M6.5 10h7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconQuestion({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+      <circle cx={10} cy={10} r={8} />
+      <path d="M7.6 7.8a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 .7-1 1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={10} cy={14} r={0.9} fill="currentColor" stroke="none" />
+    </svg>
   );
 }

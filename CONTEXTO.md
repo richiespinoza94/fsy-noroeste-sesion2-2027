@@ -65,25 +65,29 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 4: Búsqueda (`gestion-fsy-2027-v8.zip`)
+## 6. Estado actual — Fase 5: mejoras al formulario de registro (parche `0002`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 10/10 pasan)
-- **Fase 1**: Registro público, login correo+contraseña con primer acceso, Asistencia en tiempo real, Home.
-- **Fase 2**: Familias, Compañerismo, Roles, administración de Capacitaciones, Reportes.
-- **Fase 3**:
-  - **Noches de Hogar** (`src/services/nochesHogarService.ts`) — planificar sesiones por familia y marcar asistencia interna de sus consejeros. Visible dentro de la pestaña Familias, debajo de Compañerismo.
-  - **Auditoría con timeline visual** (`src/components/AuditTimeline.tsx`) — se carga bajo demanda (no en cada render) al abrir el detalle de un consejero desde la pestaña Familias. Lee de la colección `auditoria` que ya se venía escribiendo desde la Fase 1.
-  - `firestore.rules` actualizado con la colección `nochesHogar` (checklist de la sección 7 aplicado).
-- **Fase 4**: `src/components/BusquedaScreen.tsx` — búsqueda difusa de participantes (por nombre, estaca o barrio, sin necesitar tildes exactas), ficha expandible, edición completa (`canEditAll`). El Home ahora tiene las **5 acciones rápidas** del GAS original: Registrar (enlace externo a `?page=registro`), Buscar, Marcar asistencia, Gestión, Reportes — se me había quedado fuera Búsqueda en las fases anteriores.
+- **Fases 1-4**: ver historial de commits / parches anteriores.
+- **Fase 5** (revisión con `ui-ux-pro-max` + `frontend-design` + `ponytail`, a pedido explícito):
+  - **Experiencia previa más específica**: la pregunta binaria "¿Has servido antes...?" se reemplazó por 4 opciones (`ninguna` = "No he participado" / `fsy` / `jas` / `ambos`) — permite filtrar si alguien viene de FSY/PFJ, de Conferencia JAS, de ambos, o de ninguno. Nuevo tipo `ExperienciaPrevia` en `types.ts`.
+  - **Disponibilidad con fechas reales del evento**: la pregunta ahora dice explícitamente "¿Estarás disponible del 25 al 29 de enero de 2027?" en vez de un genérico "¿tienes disponibilidad?". Fechas centralizadas en `src/data/evento.ts` (`EVENTO_FECHAS_LABEL`) — si cambian las fechas del evento, se edita en un solo lugar.
+  - **Fecha de nacimiento**: nuevo campo obligatorio en el Paso 1, `<input type="date">`, validado para que no sea una fecha futura. Se agregó a `Participante` en `types.ts` y se muestra (solo lectura por ahora) en la ficha de Búsqueda.
+  - **Íconos SVG en vez de emoji, solo en Disponibilidad** (a pedido explícito, con la condición de respetar la paleta): 3 íconos minimalistas (check/minus/pregunta) con `stroke="currentColor"` — heredan el navy `#0E2954` cuando la opción está seleccionada y el gris cuando no, sin lógica de color extra. `RadioRow` ahora acepta `label: React.ReactNode` en vez de solo `string` para soportar esto sin romper los demás usos (género, experiencia previa, que siguen siendo texto plano).
+  - Fixes de la revisión anterior (parche `0001`): contraste de texto secundario, tamaño táctil de chips, dedupe de `stripAccents`.
 
-### Explícitamente NO construido todavía (pendiente, no pedido en esta entrega)
-- Permisos graduales más finos — hoy solo hay `canEditAll` vs. `isAuxiliar`; el filtrado de datos "solo mi familia" para Coordinador Auxiliar tiene el campo `familiaId` en la sesión pero el frontend aún no restringe lo que ve un auxiliar.
-- Compresión de bundle (Firebase SDK pesa ~800KB sin comprimir; si se vuelve un problema real, se resuelve con `React.lazy()` en `GestionScreen`/`ReportesScreen`, mismo patrón que ya usaron en CONFEJAS desde su v29).
-- El app del evento en sí (equivalente FSY 2027 de `confejas-2026`) — proyecto nuevo y separado, no iniciado.
+### Hallazgos de la revisión que se dejaron sin cambiar (a propósito)
+`ui-ux-pro-max` y `frontend-design` recomiendan íconos SVG en vez de emoji, y evitar Inter/tipografías genéricas. **No se tocó** — Ricardo pidió explícitamente mantener el mismo diseño y paleta que CONFEJAS y el GAS original, ambos con emoji-como-ícono e Inter en todo el sistema. Cambiarlo rompería la consistencia visual entre las tres apps del ecosistema.
+
+### Explícitamente NO construido todavía
+- Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
+- Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
+- Compresión de bundle (`React.lazy()` por pestaña).
+- El app del evento en sí — proyecto nuevo y separado, no iniciado.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
-En el primer despliegue real, crear el usuario a mano en Firebase Console dejó el campo `correo` con un espacio de más en el nombre del campo (`"correo "` en vez de `"correo"`), lo que rompió el guardado de la contraseña de primer acceso. `authService.ts` ya no depende de ese campo para nada crítico — usa el correo con el que la persona ya inició sesión (que coincide con el ID del documento, la única fuente de verdad real). Si se vuelve a crear un usuario a mano, no pasa nada si el campo `correo` queda mal escrito — pero igual conviene revisarlo por prolijidad.
+En el primer despliegue real, crear el usuario a mano en Firebase Console dejó el campo `correo` con un espacio de más en el nombre del campo, lo que rompió el guardado de la contraseña de primer acceso. `authService.ts` ya no depende de ese campo para nada crítico — usa el correo con el que la persona ya inició sesión (que coincide con el ID del documento, la única fuente de verdad real).
 
 ## 7. Cómo verificar cualquier cambio nuevo
 
