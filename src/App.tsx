@@ -1,16 +1,31 @@
-import { useEffect, useState } from 'react';
-import AsistenciaScreen from './components/AsistenciaScreen';
-import BusquedaScreen from './components/BusquedaScreen';
-import GestionScreen from './components/GestionScreen';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import HomeScreen from './components/HomeScreen';
 import LoginScreen from './components/LoginScreen';
-import PublicEntry from './components/PublicEntry';
-import ReportesScreen from './components/ReportesScreen';
 import { isFirebaseConfigured } from './firebase';
 import { getStoredSession, logout } from './services/authService';
 import { subscribeCapacitaciones } from './services/capacitacionesService';
 import { subscribeParticipantes } from './services/participantsService';
 import type { Capacitacion, Participante, SessionUser } from './types';
+
+// Code-splitting: Login y Home se cargan de entrada (son lo primero que ve
+// cualquiera), todo lo demás se descarga bajo demanda — mismo patrón que ya
+// usa CONFEJAS 2026 (ver su CONTEXTO.md, sección 2). Antes de este cambio,
+// una sola persona entrando a hacer login descargaba TODO: las 4 pestañas de
+// staff, el wizard de registro público y el check-in rápido, aunque nunca
+// fuera a usar la mayoría en esa visita — 832KB de un tirón.
+const PublicEntry = lazy(() => import('./components/PublicEntry'));
+const AsistenciaScreen = lazy(() => import('./components/AsistenciaScreen'));
+const BusquedaScreen = lazy(() => import('./components/BusquedaScreen'));
+const GestionScreen = lazy(() => import('./components/GestionScreen'));
+const ReportesScreen = lazy(() => import('./components/ReportesScreen'));
+
+function PantallaCargando() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="spinner" />
+    </div>
+  );
+}
 
 type Tab = 'home' | 'asistencia' | 'busqueda' | 'gestion' | 'reportes';
 
@@ -21,7 +36,13 @@ function isRegistroPage(): boolean {
 }
 
 export default function App() {
-  if (isRegistroPage()) return <PublicEntry />;
+  if (isRegistroPage()) {
+    return (
+      <Suspense fallback={<PantallaCargando />}>
+        <PublicEntry />
+      </Suspense>
+    );
+  }
   return <StaffApp />;
 }
 
@@ -86,15 +107,19 @@ function StaffApp() {
         {tab === 'home' && (
           <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} cargando={cargandoDatos} onNavigate={setTab} />
         )}
-        {tab === 'asistencia' && (
-          <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
-        )}
-        {tab === 'busqueda' && <BusquedaScreen user={user} participantes={participantes} />}
-        {tab === 'gestion' && (
-          <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
-        )}
-        {tab === 'reportes' && user.canViewReports && (
-          <ReportesScreen participantes={participantes} capacitaciones={capacitaciones} />
+        {tab !== 'home' && (
+          <Suspense fallback={<PantallaCargando />}>
+            {tab === 'asistencia' && (
+              <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
+            )}
+            {tab === 'busqueda' && <BusquedaScreen user={user} participantes={participantes} />}
+            {tab === 'gestion' && (
+              <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
+            )}
+            {tab === 'reportes' && user.canViewReports && (
+              <ReportesScreen participantes={participantes} capacitaciones={capacitaciones} />
+            )}
+          </Suspense>
         )}
       </main>
 

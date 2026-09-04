@@ -65,23 +65,21 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 14: auditoría del Home de staff (parche `0012`)
+## 6. Estado actual — Fase 15: code-splitting (parche `0013`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-13**: ver historial de commits/parches.
-- **Fase 14** (auditoría con `ponytail` + `ui-ux-pro-max` + `frontend-design` + `vercel-react-best-practices`, a pedido explícito):
-  - **Mismo parpadeo que ya se había arreglado en `AutoCheckInScreen`, pero no aquí**: el Home mostraba "0 registrados"/"Sin capacitaciones" por un instante antes de que llegaran los datos reales de Firestore. `StaffApp` (en `App.tsx`) ahora trackea `participantesLoaded`/`capacitacionesLoaded` y pasa `cargando` a `HomeScreen`, que muestra "Cargando…"/"—" en vez de ceros engañosos. Este tracking vive en `App.tsx`, no en `HomeScreen`, para que cualquier otra pantalla lo pueda reutilizar después si hace falta.
-  - **`getNextCapacitacion()` y el filtro de confirmados ahora usan `useMemo`** — mismo tipo de bug que CONFEJAS ya documentó como real a los 500 participantes (`CONTEXTO.md` de CONFEJAS, sección 7 punto 9); se aplicó la lección preventivamente acá en vez de esperar a que vuelva a pasar.
-  - **Copy**: "Confirmados" → "Confirmados para el evento" (más claro desde que la pregunta de disponibilidad ahora tiene fechas específicas).
-  - **Decisión consciente, sin cambio**: "Registrar participante" se queda abriendo en pestaña nueva — a propósito, para no perder la sesión de staff mientras alguien se registra en la puerta.
+- **Fases 1-14**: ver historial de commits/parches.
+- **Fase 15** — Ricardo reportó lentitud real al entrar a la app en producción (Vercel). Diagnóstico: nunca se había hecho code-splitting, todo el bundle (832KB) se descargaba de un tirón antes de mostrar el login.
+  - `App.tsx` ahora usa `React.lazy()` — mismo patrón ya validado en CONFEJAS 2026 (ver su CONTEXTO.md, sección 2): Login y Home se cargan de entrada, `PublicEntry` (y con él `RegistroWizard`/`AutoCheckInScreen`), `AsistenciaScreen`, `BusquedaScreen`, `GestionScreen` y `ReportesScreen` se descargan bajo demanda.
+  - **Resultado real**: bundle principal bajó de 832KB → 774KB (gzip 226KB → 213KB) + varios chunks chicos (2-22KB) por pestaña. La ganancia grande no está en ese número — está en que quien entra a `?page=registro` ya no descarga nada del código exclusivo de staff (probablemente el tráfico más alto de la app).
+  - **Por qué no bajó más**: el Login necesita el SDK de Firestore con soporte de tiempo real (~500-600KB) para poder autenticar — es lo que permite que la app se actualice sola sin polling (a diferencia del GAS original, que refrescaba cada 45-60s). No se puede separar del camino crítico del Login sin un refactor mayor (retrasar la conexión a Firebase hasta que la persona empiece a escribir su contraseña) — evaluado como pendiente, no aplicado todavía, a la espera de confirmar con Ricardo si el delay reportado es realmente descarga de JS o latencia de red hacia Firestore (diagnóstico con DevTools → Network pedido, resultado pendiente).
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
-- Compresión de bundle (`React.lazy()` por pestaña).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- El mismo patrón de "cargando explícito" de esta fase no se aplicó todavía a Búsqueda/Gestión/Reportes — solo a Home y al check-in público. Si se nota el mismo parpadeo en otra pestaña, es candidato para el mismo fix.
+- Diferir la conexión a Firebase hasta después del primer render del Login (reduciría el bundle crítico ~500KB más, pero es un refactor que toca los 7 archivos de `services/`) — pendiente de decidir si vale la pena según el diagnóstico de Network.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
