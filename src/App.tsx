@@ -124,7 +124,12 @@ function StaffApp() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto">
+      {/* `min-h-0` es obligatorio: un hijo de flex tiene `min-height: auto`
+          por defecto y no puede encogerse por debajo de su contenido. Sin
+          esto, las pantallas hijas que usan `h-full` con su propio scroll
+          interno (Búsqueda, Asistencia, Gestión) se aplastaban y las filas
+          se encimaban en escritorio. */}
+      <main className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'home' && (
           <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} cargando={cargandoDatos} onNavigate={setTab} />
         )}

@@ -65,7 +65,7 @@ export default function GestionScreen({
           </button>
         ))}
       </div>
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24">
         {sub === 'familias' && (
           <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} />
         )}

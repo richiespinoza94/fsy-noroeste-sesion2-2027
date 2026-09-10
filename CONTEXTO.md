@@ -78,6 +78,8 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 
 El contenedor principal del Staff App tenía `min-h-screen` y `sm:h-[calc(100vh-48px)]` a la vez. En CSS, `min-height` le gana a `height`: en escritorio (donde sí aplican las clases `sm:`) el contenedor terminaba midiendo 100vh en vez del calc pedido — más alto que su espacio real y, combinado con `sm:overflow-hidden`, recortaba las últimas filas de cualquier lista por la mitad (se veía sobre todo en Búsqueda: filas cortadas, avatares mochados). En móvil nunca se manifestó porque las clases `sm:` no aplican ahí, y en producción tampoco se notaba en celular — por eso al principio pareció un problema de caché de Vite, que no lo era. Arreglado agregando `sm:min-h-0`. Si se vuelve a tocar ese contenedor, no reintroducir `min-h-screen` sin su `sm:min-h-0`.
 
+**Segunda causa, la principal (mismo parche):** faltaba `min-h-0` en `<main>` de `App.tsx` y en las listas internas de Búsqueda, Asistencia y Gestión. Un hijo de flex tiene `min-height: auto` por defecto y NO puede encogerse por debajo de su contenido — sin `min-h-0`, las pantallas hijas que usan `flex flex-col h-full` con scroll propio se aplastaban y las filas se encimaban unas sobre otras en escritorio. **Regla para este proyecto: cualquier contenedor `flex-1` que tenga `overflow-y-auto` necesita también `min-h-0`.** En móvil nunca se manifestó porque ahí el contenedor externo crece libre (`min-h-screen` sin altura fija), así que el bug solo existía en la vista web.
+
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
