@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
 import { getNextCapacitacion } from '../services/capacitacionesService';
 import type { Asistencia, Capacitacion, Participante, SessionUser } from '../types';
+import QrAsistenciaModal from './QrAsistenciaModal';
 
 export default function AsistenciaScreen({
   user,
@@ -16,6 +17,7 @@ export default function AsistenciaScreen({
   const [asistencia, setAsistencia] = useState<Record<string, Asistencia>>({});
   const [query, setQuery] = useState('');
   const [savingId, setSavingId] = useState('');
+  const [qrOpen, setQrOpen] = useState(false);
 
   useEffect(() => {
     if (!capId && capacitaciones.length) {
@@ -55,12 +57,22 @@ export default function AsistenciaScreen({
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 bg-[#F4F6FA]/95 backdrop-blur px-4 pt-3 pb-3 border-b border-slate-200 z-10">
-        <select className="input mb-2" value={capId} onChange={(e) => setCapId(e.target.value)}>
-          {capacitaciones.length === 0 && <option value="">Sin capacitaciones creadas</option>}
-          {capacitaciones.map((c) => (
-            <option key={c.id} value={c.id}>{c.label}</option>
-          ))}
-        </select>
+        <div className="flex gap-2 mb-2">
+          <select className="input flex-1" value={capId} onChange={(e) => setCapId(e.target.value)}>
+            {capacitaciones.length === 0 && <option value="">Sin capacitaciones creadas</option>}
+            {capacitaciones.map((c) => (
+              <option key={c.id} value={c.id}>{c.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setQrOpen(true)}
+            disabled={!capId}
+            className="shrink-0 bg-accent text-primary font-extrabold text-sm rounded-xl px-4 disabled:opacity-40"
+            title="Compartir QR para que la gente marque su propia asistencia"
+          >
+            QR
+          </button>
+        </div>
         {cap && (
           <div className="text-xs text-slate-500 mb-2">
             📅 {cap.fecha} {cap.hora && `· ${cap.hora}`} · 📍 {cap.lugar}
@@ -118,6 +130,8 @@ export default function AsistenciaScreen({
         })}
         {filtered.length === 0 && <div className="text-center text-sm text-slate-500 py-10">Sin resultados.</div>}
       </div>
+
+      {qrOpen && <QrAsistenciaModal onClose={() => setQrOpen(false)} />}
     </div>
   );
 }

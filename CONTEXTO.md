@@ -65,21 +65,19 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 15: code-splitting (parche `0013`)
+## 6. Estado actual — Fase 18: "primera vez" visible desde el inicio, no detrás de un fracaso (parche `0016`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-14**: ver historial de commits/parches.
-- **Fase 15** — Ricardo reportó lentitud real al entrar a la app en producción (Vercel). Diagnóstico: nunca se había hecho code-splitting, todo el bundle (832KB) se descargaba de un tirón antes de mostrar el login.
-  - `App.tsx` ahora usa `React.lazy()` — mismo patrón ya validado en CONFEJAS 2026 (ver su CONTEXTO.md, sección 2): Login y Home se cargan de entrada, `PublicEntry` (y con él `RegistroWizard`/`AutoCheckInScreen`), `AsistenciaScreen`, `BusquedaScreen`, `GestionScreen` y `ReportesScreen` se descargan bajo demanda.
-  - **Resultado real**: bundle principal bajó de 832KB → 774KB (gzip 226KB → 213KB) + varios chunks chicos (2-22KB) por pestaña. La ganancia grande no está en ese número — está en que quien entra a `?page=registro` ya no descarga nada del código exclusivo de staff (probablemente el tráfico más alto de la app).
-  - **Por qué no bajó más**: el Login necesita el SDK de Firestore con soporte de tiempo real (~500-600KB) para poder autenticar — es lo que permite que la app se actualice sola sin polling (a diferencia del GAS original, que refrescaba cada 45-60s). No se puede separar del camino crítico del Login sin un refactor mayor (retrasar la conexión a Firebase hasta que la persona empiece a escribir su contraseña) — evaluado como pendiente, no aplicado todavía, a la espera de confirmar con Ricardo si el delay reportado es realmente descarga de JS o latencia de red hacia Firestore (diagnóstico con DevTools → Network pedido, resultado pendiente).
+- **Fases 1-17**: ver historial de commits/parches.
+- **Fase 18** — corrección de UX a la Fase 17, señalada por Ricardo: el botón para registrarse solo aparecía DESPUÉS de que alguien buscara y no se encontrara — obligaba a fracasar una búsqueda para enterarse de que había otro camino. Anti-patrón real de `ui-ux-pro-max`: la opción debe ofrecerse desde el principio, no esconderse detrás de un error.
+  - `AutoCheckInScreen` ahora muestra el botón **"🆕 ¿Es tu primera vez aquí? — Regístrate primero"** justo debajo del buscador, siempre visible, con el mismo peso visual que las demás acciones (no un texto chiquito) — sin esperar a que la búsqueda falle.
+  - Se quitó el enlace chiquito redundante que había quedado al final del bloque "escribe 2 letras" — ya no hacía falta, la opción está arriba desde el principio.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Diferir la conexión a Firebase hasta después del primer render del Login (reduciría el bundle crítico ~500KB más, pero es un refactor que toca los 7 archivos de `services/`) — pendiente de decidir si vale la pena según el diagnóstico de Network.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

@@ -188,6 +188,22 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
                 />
               </label>
 
+              {/* Visible desde el primer segundo, no solo cuando falla una
+                  búsqueda — no todos los que escanean este QR ya se
+                  registraron antes, y no deberían tener que fracasar una
+                  búsqueda para enterarse de que hay otro camino. */}
+              <a
+                href="/?page=registro"
+                className="flex items-center gap-3 bg-white border-[1.5px] border-primary/20 rounded-2xl px-4 py-3 text-left"
+              >
+                <span className="text-xl">🆕</span>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-primary">¿Es tu primera vez aquí?</div>
+                  <div className="text-xs text-slate-500">Regístrate primero (3 pasos rápidos)</div>
+                </div>
+                <span className="text-primary">›</span>
+              </a>
+
               <div className="flex flex-col gap-2">
                 {results.map((p) => {
                   const yaMarcado = asistencia[p.id]?.estado === 'presente';
@@ -215,7 +231,8 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
                 })}
                 {query.trim().length >= 2 && results.length === 0 && (
                   <div className="text-sm text-slate-500 text-center py-3">
-                    No encontramos a nadie con ese apellido. Revisa que esté bien escrito, o pide ayuda a un encargado.
+                    No encontramos a nadie con ese apellido. Revisa que esté bien escrito, o usa el botón de arriba si
+                    es tu primera vez.
                   </div>
                 )}
                 {query.trim().length < 2 && (

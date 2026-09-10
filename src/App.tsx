@@ -14,6 +14,7 @@ import type { Capacitacion, Participante, SessionUser } from './types';
 // staff, el wizard de registro público y el check-in rápido, aunque nunca
 // fuera a usar la mayoría en esa visita — 832KB de un tirón.
 const PublicEntry = lazy(() => import('./components/PublicEntry'));
+const AutoCheckInScreen = lazy(() => import('./components/AutoCheckInScreen'));
 const AsistenciaScreen = lazy(() => import('./components/AsistenciaScreen'));
 const BusquedaScreen = lazy(() => import('./components/BusquedaScreen'));
 const GestionScreen = lazy(() => import('./components/GestionScreen'));
@@ -35,11 +36,25 @@ function isRegistroPage(): boolean {
   return new URLSearchParams(window.location.search).get('page') === 'registro';
 }
 
+// ?page=asistencia va directo al check-in rápido, sin pasar por la pregunta
+// "¿es tu primera vez?" — es el destino del QR que recepción comparte: ya
+// se sabe que quien lo escanea necesita marcar asistencia, no elegir.
+function isAsistenciaPage(): boolean {
+  return new URLSearchParams(window.location.search).get('page') === 'asistencia';
+}
+
 export default function App() {
   if (isRegistroPage()) {
     return (
       <Suspense fallback={<PantallaCargando />}>
         <PublicEntry />
+      </Suspense>
+    );
+  }
+  if (isAsistenciaPage()) {
+    return (
+      <Suspense fallback={<PantallaCargando />}>
+        <AutoCheckInScreen onBack={() => { window.location.href = '/?page=registro'; }} />
       </Suspense>
     );
   }
