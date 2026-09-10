@@ -17,9 +17,11 @@ import {
 import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion } from '../services/capacitacionesService';
-import { ASIGNACIONES, type Asignacion, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type SessionUser } from '../types';
+import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
+import { ASIGNACIONES, type Asignacion, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type SessionUser, type Usuario } from '../types';
+import { validateEmail } from '../utils/validation';
 
-type SubTab = 'familias' | 'roles' | 'capacitaciones';
+type SubTab = 'familias' | 'roles' | 'capacitaciones' | 'usuarios';
 
 export default function GestionScreen({
   user,
@@ -51,6 +53,7 @@ export default function GestionScreen({
             ['familias', '👥 Familias'],
             ['roles', '🎭 Roles'],
             ['capacitaciones', '📅 Capacitaciones'],
+            ...(user.canEditAll ? [['usuarios', '🔑 Usuarios'] as const] : []),
           ] as const
         ).map(([id, label]) => (
           <button
@@ -68,6 +71,7 @@ export default function GestionScreen({
         )}
         {sub === 'roles' && <RolesTab user={user} participantes={participantes} />}
         {sub === 'capacitaciones' && <CapacitacionesTab user={user} capacitaciones={capacitaciones} />}
+        {sub === 'usuarios' && user.canEditAll && <UsuariosTab user={user} />}
       </div>
     </div>
   );
@@ -570,6 +574,122 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
           </div>
           {user.canEditAll && (
             <button onClick={() => deleteCapacitacion(c.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1.5">✕</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Usuarios (staff) ─────────────────────────────────────────────────────────
+const ROLES_STAFF = ['Coordinador General', 'Logística', 'Coordinador Auxiliar'] as const;
+
+function UsuariosTab({ user }: { user: SessionUser }) {
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [creando, setCreando] = useState(false);
+  const [correo, setCorreo] = useState('');
+  const [rol, setRol] = useState<(typeof ROLES_STAFF)[number]>('Coordinador Auxiliar');
+  const [estaca, setEstaca] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => subscribeUsuarios(setUsuarios), []);
+
+  const yaExiste = usuarios.some((u) => u.correo.toLowerCase().trim() === correo.toLowerCase().trim());
+
+  async function crear() {
+    setError('');
+    if (!validateEmail(correo)) return setError('Ingresa un correo válido.');
+    if (yaExiste) return setError('Ya existe una cuenta con ese correo.');
+    setSaving(true);
+    try {
+      await createStaffAccount(correo, rol, rol === 'Coordinador Auxiliar' ? estaca : '', user.correo);
+      setCreando(false);
+      setCorreo('');
+      setEstaca('');
+      setRol('Coordinador Auxiliar');
+    } catch {
+      setError('No se pudo crear la cuenta. Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cuentas de staff</div>
+        <button onClick={() => setCreando(true)} className="bg-primary text-white text-xs font-bold rounded-lg px-3 py-1.5">
+          + Añadir
+        </button>
+      </div>
+
+      {creando && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+          <div className="text-sm font-bold">Nueva cuenta de staff</div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Correo</div>
+            <input className="input" type="email" placeholder="correo@ejemplo.com" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Rol</div>
+            <select className="input" value={rol} onChange={(e) => setRol(e.target.value as (typeof ROLES_STAFF)[number])}>
+              {ROLES_STAFF.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          {rol === 'Coordinador Auxiliar' && (
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Estaca</div>
+              <input className="input" placeholder="Ej: Ventanilla" value={estaca} onChange={(e) => setEstaca(e.target.value)} />
+            </div>
+          )}
+          {error && <div className="text-xs text-red-500 font-semibold">❌ {error}</div>}
+          <div className="text-[11px] text-slate-500">
+            La persona entra con este correo y cualquier contraseña — la app le va a pedir crear la suya en el primer acceso.
+          </div>
+          <div className="flex gap-2">
+            <button onClick={crear} disabled={saving} className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+              {saving ? 'Creando…' : 'Crear cuenta'}
+            </button>
+            <button onClick={() => { setCreando(false); setError(''); }} className="flex-1 bg-slate-100 text-slate-600 font-bold rounded-xl py-2.5 text-sm">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {usuarios.length === 0 && !creando && (
+        <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
+          <div className="text-3xl mb-2">🔑</div>
+          <div className="text-sm font-bold mb-1">Sin cuentas de staff todavía</div>
+          <div className="text-xs text-slate-500">Crea la primera con el botón de arriba.</div>
+        </div>
+      )}
+
+      {usuarios.map((u) => (
+        <div key={u.correo} className="bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">
+            {u.correo[0]?.toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold truncate">{u.correo}</div>
+            <div className="text-[11px] text-slate-500">
+              {u.rol}
+              {u.estaca && ` · ${u.estaca}`}
+              {!u.passwordHash && ' · aún no entró'}
+            </div>
+          </div>
+          {u.correo !== user.correo && (
+            <button
+              onClick={() => setUsuarioActivo(u.correo, !u.activo, user.correo)}
+              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 shrink-0 ${
+                u.activo ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              {u.activo ? 'Desactivar' : 'Activar'}
+            </button>
           )}
         </div>
       ))}

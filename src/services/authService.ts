@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { SessionUser, Usuario } from '../types';
 import { hashPassword } from '../utils/password';
@@ -149,4 +149,22 @@ export async function seedDevUser() {
     activo: true,
     fechaCreacion: new Date().toISOString(),
   });
+}
+
+/** Lista en tiempo real de cuentas de staff — para la pestaña Usuarios en Gestión. */
+export function subscribeUsuarios(cb: (items: Usuario[]) => void): () => void {
+  if (!db) {
+    cb([...localUsers]);
+    return () => {};
+  }
+  return onSnapshot(collection(db, COL), (snap) => cb(snap.docs.map((d) => d.data() as Usuario)));
+}
+
+/** Activa o desactiva el acceso de una cuenta — no borra el usuario, solo le corta el paso al login. */
+export async function setUsuarioActivo(correo: string, activo: boolean, adminCorreo: string) {
+  const email = normalizeEmail(correo);
+  const usuario = await getUsuario(email);
+  if (!usuario) return;
+  await saveUsuario(email, { ...usuario, activo });
+  await logAction(adminCorreo, activo ? 'ACTIVAR_USUARIO' : 'DESACTIVAR_USUARIO', '', { correo: email });
 }

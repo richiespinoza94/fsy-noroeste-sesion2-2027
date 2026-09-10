@@ -65,19 +65,23 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 18: "primera vez" visible desde el inicio, no detrás de un fracaso (parche `0016`)
+## 6. Estado actual — Fase 19: pestaña Usuarios en Gestión (parche `0017`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-17**: ver historial de commits/parches.
-- **Fase 18** — corrección de UX a la Fase 17, señalada por Ricardo: el botón para registrarse solo aparecía DESPUÉS de que alguien buscara y no se encontrara — obligaba a fracasar una búsqueda para enterarse de que había otro camino. Anti-patrón real de `ui-ux-pro-max`: la opción debe ofrecerse desde el principio, no esconderse detrás de un error.
-  - `AutoCheckInScreen` ahora muestra el botón **"🆕 ¿Es tu primera vez aquí? — Regístrate primero"** justo debajo del buscador, siempre visible, con el mismo peso visual que las demás acciones (no un texto chiquito) — sin esperar a que la búsqueda falle.
-  - Se quitó el enlace chiquito redundante que había quedado al final del bloque "escribe 2 letras" — ya no hacía falta, la opción está arriba desde el principio.
+- **Fases 1-18**: ver historial de commits/parches.
+- **Fase 19** — hasta ahora, crear una cuenta de staff nueva era 100% manual en Firebase Console (paso 6 de `DESPLIEGUE_VERCEL.md`) — lento y fue la causa del bug real del campo `correo` con espacio de más (Fase 12/parche `0010`). `createStaffAccount()` ya existía en `authService.ts` desde la Fase 1 pero nunca se había conectado a ninguna pantalla.
+  - Nueva pestaña **🔑 Usuarios** dentro de Gestión, visible solo para `canEditAll` (Coordinador General/Logística) — no para Coordinador Auxiliar.
+  - Crear cuenta: correo + rol (`Coordinador General` / `Logística` / `Coordinador Auxiliar`) + estaca (solo si es auxiliar). La persona entra con ese correo y cualquier contraseña — la app detecta que falta `passwordHash` y le pide crear la suya en el primer acceso, mismo flujo de siempre.
+  - Lista en tiempo real de cuentas existentes, con indicador "aún no entró" si todavía no tienen contraseña, y botón Activar/Desactivar por cuenta (no se puede desactivar la propia cuenta — el botón se oculta para `u.correo === user.correo`).
+  - Nuevas funciones en `authService.ts`: `subscribeUsuarios()` y `setUsuarioActivo()`. `firestore.rules` no cambió — la colección `usuarios` ya estaba cubierta desde la Fase 1.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
+- Editar el rol/estaca de una cuenta de staff ya creada (hoy la pestaña Usuarios solo crea y activa/desactiva, no edita).
+- Eliminar una cuenta de staff (por ahora solo se desactiva, nunca se borra — conserva el historial de auditoría asociado a ese correo).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
