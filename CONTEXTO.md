@@ -74,6 +74,10 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
   - **Coordinador Auxiliar ahora está confinado a su propia familia en Gestión → Familias** — antes veía y podía tocar todas las familias del evento. `FamiliasTab` fuerza `selId` a `user.familiaId` (resuelto en el login vía `findParticipanteByCorreo`) y oculta el selector/botón de crear; si el auxiliar todavía no está asignado a ninguna familia, ve un aviso en vez de la lista completa.
   - **Alcance de este cambio, a propósito**: solo afecta la pestaña Familias. Asistencia y Búsqueda siguen sin restringir por familia (un auxiliar puede seguir marcando asistencia o buscando a cualquier participante) — es una decisión consciente, no un descuido: restringir el check-in en la puerta a "solo mi familia" rompería el flujo real de recepción. Si se quiere extender la restricción a Asistencia/Búsqueda también, es una decisión aparte, no incluida aquí.
 
+### Bug de layout en escritorio (parche `0019`) — leer antes de tocar el contenedor de `App.tsx`
+
+El contenedor principal del Staff App tenía `min-h-screen` y `sm:h-[calc(100vh-48px)]` a la vez. En CSS, `min-height` le gana a `height`: en escritorio (donde sí aplican las clases `sm:`) el contenedor terminaba midiendo 100vh en vez del calc pedido — más alto que su espacio real y, combinado con `sm:overflow-hidden`, recortaba las últimas filas de cualquier lista por la mitad (se veía sobre todo en Búsqueda: filas cortadas, avatares mochados). En móvil nunca se manifestó porque las clases `sm:` no aplican ahí, y en producción tampoco se notaba en celular — por eso al principio pareció un problema de caché de Vite, que no lo era. Arreglado agregando `sm:min-h-0`. Si se vuelve a tocar ese contenedor, no reintroducir `min-h-screen` sin su `sm:min-h-0`.
+
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
