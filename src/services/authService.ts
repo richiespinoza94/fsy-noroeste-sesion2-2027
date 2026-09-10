@@ -90,6 +90,11 @@ export async function setupPasswordFirstTime(correoRaw: string, password: string
 async function buildSession(email: string, usuario: Usuario): Promise<SessionUser> {
   const isFull = isFullAccessRole(usuario.rol);
   const isAux = isAuxRole(usuario.rol);
+  // Más restrictivo que canEditAll a propósito: Logística tiene acceso
+  // total a familias/capacitaciones/usuarios, pero cambiar el rol de un
+  // participante (ej. volverlo Coordinador General) queda reservado
+  // exclusivamente a quien tiene ese rol exacto — decisión explícita.
+  const canChangeRoles = (usuario.rol || '').toLowerCase().trim() === 'coordinador general';
   let participantId: string | undefined;
   let familiaId: string | undefined;
   if (isAux) {
@@ -105,6 +110,7 @@ async function buildSession(email: string, usuario: Usuario): Promise<SessionUse
     familiaId,
     canEditAll: isFull,
     canViewReports: isFull,
+    canChangeRoles,
     isAuxiliar: isAux,
   };
 }

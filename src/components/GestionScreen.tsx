@@ -109,6 +109,14 @@ function FamiliasTab({
   const coordAux = participantes.filter(isCoordAux);
   const [detail, setDetail] = useState<Participante | null>(null);
 
+  // Un Coordinador Auxiliar solo administra SU propia familia — nunca ve el
+  // selector ni puede navegar a otras. Se fuerza apenas se conoce su
+  // familiaId (viene de la sesión, resuelto en el login).
+  const forcedFamilyId = user.isAuxiliar ? user.familiaId || '' : '';
+  useEffect(() => {
+    if (forcedFamilyId) setSelId(forcedFamilyId);
+  }, [forcedFamilyId]);
+
   async function handleCreate() {
     const f = await addFamilia(newName.trim(), newColor, familias, user.correo);
     setSelId(f.id);
@@ -137,19 +145,32 @@ function FamiliasTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <select className="input flex-1" value={selId} onChange={(e) => setSelId(e.target.value)}>
-          <option value="">— Elige una familia —</option>
-          {familias.map((f) => (
-            <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
-          ))}
-        </select>
-        {user.canEditAll && (
-          <button onClick={() => setCreating(true)} className="bg-primary text-white text-sm font-bold rounded-xl px-4">
-            + Nueva
-          </button>
-        )}
-      </div>
+      {user.isAuxiliar ? (
+        forcedFamilyId ? (
+          <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3 text-sm font-bold text-primary">
+            🔒 Administrando: {fam?.customName || fam?.nombre || 'tu familia'}
+          </div>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 text-sm text-amber-800">
+            Todavía no estás asignado a ninguna familia. Pide a un Coordinador General que te añada como consejero de
+            la familia que vas a apoyar.
+          </div>
+        )
+      ) : (
+        <div className="flex gap-2">
+          <select className="input flex-1" value={selId} onChange={(e) => setSelId(e.target.value)}>
+            <option value="">— Elige una familia —</option>
+            {familias.map((f) => (
+              <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
+            ))}
+          </select>
+          {user.canEditAll && (
+            <button onClick={() => setCreating(true)} className="bg-primary text-white text-sm font-bold rounded-xl px-4">
+              + Nueva
+            </button>
+          )}
+        </div>
+      )}
 
       {creating && (
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
@@ -471,16 +492,22 @@ function RolesTab({ user, participantes }: { user: SessionUser; participantes: P
             </summary>
             <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5">
               {members.length === 0 && <div className="text-xs text-slate-500 text-center py-1">Sin asignados</div>}
-              {members.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setEditing(p)}
-                  className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 text-left"
-                >
-                  <span className="flex-1 text-sm font-semibold">{p.nombres} {p.apellidos}</span>
-                  <span className="text-xs text-primary font-bold">Cambiar ›</span>
-                </button>
-              ))}
+              {members.map((p) =>
+                user.canChangeRoles ? (
+                  <button
+                    key={p.id}
+                    onClick={() => setEditing(p)}
+                    className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 text-left"
+                  >
+                    <span className="flex-1 text-sm font-semibold">{p.nombres} {p.apellidos}</span>
+                    <span className="text-xs text-primary font-bold">Cambiar ›</span>
+                  </button>
+                ) : (
+                  <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                    <span className="flex-1 text-sm font-semibold">{p.nombres} {p.apellidos}</span>
+                  </div>
+                )
+              )}
             </div>
           </details>
         );

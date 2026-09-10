@@ -65,23 +65,21 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 19: pestaña Usuarios en Gestión (parche `0017`)
+## 6. Estado actual — Fase 20: permisos más finos (parche `0018`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-18**: ver historial de commits/parches.
-- **Fase 19** — hasta ahora, crear una cuenta de staff nueva era 100% manual en Firebase Console (paso 6 de `DESPLIEGUE_VERCEL.md`) — lento y fue la causa del bug real del campo `correo` con espacio de más (Fase 12/parche `0010`). `createStaffAccount()` ya existía en `authService.ts` desde la Fase 1 pero nunca se había conectado a ninguna pantalla.
-  - Nueva pestaña **🔑 Usuarios** dentro de Gestión, visible solo para `canEditAll` (Coordinador General/Logística) — no para Coordinador Auxiliar.
-  - Crear cuenta: correo + rol (`Coordinador General` / `Logística` / `Coordinador Auxiliar`) + estaca (solo si es auxiliar). La persona entra con ese correo y cualquier contraseña — la app detecta que falta `passwordHash` y le pide crear la suya en el primer acceso, mismo flujo de siempre.
-  - Lista en tiempo real de cuentas existentes, con indicador "aún no entró" si todavía no tienen contraseña, y botón Activar/Desactivar por cuenta (no se puede desactivar la propia cuenta — el botón se oculta para `u.correo === user.correo`).
-  - Nuevas funciones en `authService.ts`: `subscribeUsuarios()` y `setUsuarioActivo()`. `firestore.rules` no cambió — la colección `usuarios` ya estaba cubierta desde la Fase 1.
+- **Fases 1-19**: ver historial de commits/parches.
+- **Fase 20** — dos huecos de permisos reales, encontrados al auditar "qué hace cada rol" a pedido de Ricardo:
+  - **Cambiar rol ahora es exclusivo de Coordinador General** (no de Logística, aunque ambos tienen `canEditAll`). Nuevo campo `canChangeRoles` en `SessionUser`, calculado en `authService.ts` comparando el rol EXACTO (no el nivel de acceso general). `RolesTab` ya no deja tocar "Cambiar rol" a nadie más — antes cualquier Coordinador Auxiliar podía reasignar el rol de cualquier participante, incluso volverlo Coordinador General, sin ningún candado.
+  - **Coordinador Auxiliar ahora está confinado a su propia familia en Gestión → Familias** — antes veía y podía tocar todas las familias del evento. `FamiliasTab` fuerza `selId` a `user.familiaId` (resuelto en el login vía `findParticipanteByCorreo`) y oculta el selector/botón de crear; si el auxiliar todavía no está asignado a ninguna familia, ve un aviso en vez de la lista completa.
+  - **Alcance de este cambio, a propósito**: solo afecta la pestaña Familias. Asistencia y Búsqueda siguen sin restringir por familia (un auxiliar puede seguir marcando asistencia o buscando a cualquier participante) — es una decisión consciente, no un descuido: restringir el check-in en la puerta a "solo mi familia" rompería el flujo real de recepción. Si se quiere extender la restricción a Asistencia/Búsqueda también, es una decisión aparte, no incluida aquí.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
-- Permisos graduales más finos para Coordinador Auxiliar (filtrado "solo mi familia").
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Editar el rol/estaca de una cuenta de staff ya creada (hoy la pestaña Usuarios solo crea y activa/desactiva, no edita).
-- Eliminar una cuenta de staff (por ahora solo se desactiva, nunca se borra — conserva el historial de auditoría asociado a ese correo).
+- Editar el rol/estaca de una cuenta de staff ya creada, o eliminarla (Usuarios solo crea y activa/desactiva).
+- Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera de esta fase, ver arriba).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

@@ -115,6 +115,7 @@ export interface SessionUser {
   familiaId?: string;
   canEditAll: boolean;
   canViewReports: boolean;
+  canChangeRoles: boolean;
   isAuxiliar: boolean;
 }
 
