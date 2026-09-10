@@ -23,7 +23,7 @@ export default function HomeScreen({
   const confirmados = useMemo(() => participantes.filter((p) => p.disponibilidad === 'si').length, [participantes]);
 
   return (
-    <div className="p-4 flex flex-col gap-4">
+    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4">
       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20 min-h-[92px]">
         <div className="absolute -top-8 -right-10 w-36 h-36 rounded-full bg-accent/10" />
         <div className="relative">

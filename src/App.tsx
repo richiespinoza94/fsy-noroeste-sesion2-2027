@@ -22,7 +22,10 @@ const ReportesScreen = lazy(() => import('./components/ReportesScreen'));
 
 function PantallaCargando() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    // `h-full`, no `min-h-screen`: este fallback se renderiza dentro de
+    // <main>, que ya tiene su altura acotada — forzar 100vh acá desbordaba
+    // el contenedor.
+    <div className="h-full min-h-[50vh] flex items-center justify-center">
       <div className="spinner" />
     </div>
   );
@@ -124,12 +127,14 @@ function StaffApp() {
         </button>
       </header>
 
-      {/* `min-h-0` es obligatorio: un hijo de flex tiene `min-height: auto`
-          por defecto y no puede encogerse por debajo de su contenido. Sin
-          esto, las pantallas hijas que usan `h-full` con su propio scroll
-          interno (Búsqueda, Asistencia, Gestión) se aplastaban y las filas
-          se encimaban en escritorio. */}
-      <main className="flex-1 min-h-0 overflow-y-auto">
+      {/* `overflow-hidden`, NO `overflow-y-auto`: cada pantalla hija maneja
+          su propio scroll interno (para dejar su encabezado fijo). Si
+          <main> también scrollea, quedan dos scrolls anidados peleándose —
+          el hijo con `h-full` mide contra un padre que a su vez crece, y el
+          contenido termina recortado en escritorio apenas la lista pasa del
+          alto de la pantalla. `min-h-0` sigue siendo necesario para que
+          <main> pueda encogerse dentro del flex padre. */}
+      <main className="flex-1 min-h-0 overflow-hidden">
         {tab === 'home' && (
           <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} cargando={cargandoDatos} onNavigate={setTab} />
         )}

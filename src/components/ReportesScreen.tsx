@@ -42,7 +42,7 @@ export default function ReportesScreen({
   const chartWidth = Math.max(attByCap.length * (BAR_W + GAP) + GAP, 280);
 
   return (
-    <div className="p-4 flex flex-col gap-4 pb-24">
+    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4">
       <select className="input" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
         <option value="">Todas las estacas</option>
         {TODAS_LAS_ESTACAS.map((e) => (
