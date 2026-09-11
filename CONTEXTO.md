@@ -65,29 +65,27 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 20: permisos más finos (parche `0018`)
+## 6. Estado actual — Fase 21: auditoría QA de Búsqueda + fix real de scroll anidado (parches `0019`-`0022`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-19**: ver historial de commits/parches.
-- **Fase 20** — dos huecos de permisos reales, encontrados al auditar "qué hace cada rol" a pedido de Ricardo:
-  - **Cambiar rol ahora es exclusivo de Coordinador General** (no de Logística, aunque ambos tienen `canEditAll`). Nuevo campo `canChangeRoles` en `SessionUser`, calculado en `authService.ts` comparando el rol EXACTO (no el nivel de acceso general). `RolesTab` ya no deja tocar "Cambiar rol" a nadie más — antes cualquier Coordinador Auxiliar podía reasignar el rol de cualquier participante, incluso volverlo Coordinador General, sin ningún candado.
-  - **Coordinador Auxiliar ahora está confinado a su propia familia en Gestión → Familias** — antes veía y podía tocar todas las familias del evento. `FamiliasTab` fuerza `selId` a `user.familiaId` (resuelto en el login vía `findParticipanteByCorreo`) y oculta el selector/botón de crear; si el auxiliar todavía no está asignado a ninguna familia, ve un aviso en vez de la lista completa.
-  - **Alcance de este cambio, a propósito**: solo afecta la pestaña Familias. Asistencia y Búsqueda siguen sin restringir por familia (un auxiliar puede seguir marcando asistencia o buscando a cualquier participante) — es una decisión consciente, no un descuido: restringir el check-in en la puerta a "solo mi familia" rompería el flujo real de recepción. Si se quiere extender la restricción a Asistencia/Búsqueda también, es una decisión aparte, no incluida aquí.
-
-### Bug de layout en escritorio (parche `0019`) — leer antes de tocar el contenedor de `App.tsx`
-
-El contenedor principal del Staff App tenía `min-h-screen` y `sm:h-[calc(100vh-48px)]` a la vez. En CSS, `min-height` le gana a `height`: en escritorio (donde sí aplican las clases `sm:`) el contenedor terminaba midiendo 100vh en vez del calc pedido — más alto que su espacio real y, combinado con `sm:overflow-hidden`, recortaba las últimas filas de cualquier lista por la mitad (se veía sobre todo en Búsqueda: filas cortadas, avatares mochados). En móvil nunca se manifestó porque las clases `sm:` no aplican ahí, y en producción tampoco se notaba en celular — por eso al principio pareció un problema de caché de Vite, que no lo era. Arreglado agregando `sm:min-h-0`. Si se vuelve a tocar ese contenedor, no reintroducir `min-h-screen` sin su `sm:min-h-0`.
-
-**Segunda causa, la principal (mismo parche):** faltaba `min-h-0` en `<main>` de `App.tsx` y en las listas internas de Búsqueda, Asistencia y Gestión. Un hijo de flex tiene `min-height: auto` por defecto y NO puede encogerse por debajo de su contenido — sin `min-h-0`, las pantallas hijas que usan `flex flex-col h-full` con scroll propio se aplastaban y las filas se encimaban unas sobre otras en escritorio. **Regla para este proyecto: cualquier contenedor `flex-1` que tenga `overflow-y-auto` necesita también `min-h-0`.**
-
-**Tercera causa, la definitiva (parche `0021`) — DOS SCROLLS ANIDADOS.** Pista que lo destrabó: Ricardo notó que al bajar el zoom al 30% se veía bien, y al 100% se cortaba — señal de que el contenido no cabía y se recortaba en vez de scrollear. `<main>` tenía `overflow-y-auto` Y las pantallas hijas (Búsqueda/Asistencia/Gestión) tienen su propio `overflow-y-auto` con `h-full` (necesario para dejar su encabezado fijo). Dos scrolls anidados se peleaban: el hijo con `h-full` medía contra un padre que a su vez crecía por su propio scroll. **Regla definitiva: `<main>` usa `overflow-hidden` y CADA pantalla hija maneja su propio scroll.** Como Home y Reportes no tenían scroll propio (solo fluían), se les agregó `h-full overflow-y-auto`. `PantallaCargando` pasó de `min-h-screen` a `h-full` por el mismo motivo. En móvil nunca se manifestó porque ahí el contenedor externo crece libre (`min-h-screen` sin altura fija), así que el bug solo existía en la vista web.
+- **Fases 1-20**: ver historial de commits/parches.
+- **Fase 21** — bug real de layout en escritorio reportado por Ricardo con capturas: filas de Búsqueda cortadas/encimadas, avatar mochado, sin teléfono/estaca/badges visibles, SOLO en `npm run dev` local en navegador de escritorio (funcionaba bien en móvil, funcionaba bien en el sitio desplegado en Vercel en móvil — eso descartó código y caché como culpables al principio). El diagnóstico pasó por 3 intentos:
+  1. Sospecha de caché de Vite (parche descartado, no era eso — persistía tras reinicio completo).
+  2. `min-h-screen` vs `sm:h-[calc(100vh-48px)]` compitiendo en el contenedor raíz de `App.tsx` (parche `0019`) — arreglo parcial, insuficiente.
+  3. **Causa real (parche `0021`), encontrada gracias a que Ricardo notó que bajando el zoom al 30% se veía bien**: DOS SCROLLS ANIDADOS — `<main>` tenía `overflow-y-auto` Y las pantallas hijas (Búsqueda/Asistencia/Gestión) también, con `h-full` — el hijo medía contra un padre que a su vez crecía por su propio scroll. Fix definitivo: `<main>` pasa a `overflow-hidden` (ya no scrollea), cada pantalla maneja su propio scroll; Home y Reportes (que no tenían scroll propio) recibieron `h-full overflow-y-auto`.
+  - **Regla documentada para este proyecto**: cualquier contenedor `flex-1` con `overflow-y-auto` necesita también `min-h-0`. Y: `<main>` no debe scrollear, cada pantalla hija maneja el suyo.
+  - **Auditoría de Búsqueda (parche `0022`)**, a pedido explícito tras el fix del scroll:
+    - **Paginación en tandas de 20** ("Cargar 20 más (N restantes)") — mismo problema real que ya documentó CONFEJAS a los 500 participantes (montar cientos de filas de una vez). Se reinicia a 20 automáticamente al cambiar la búsqueda o el chip de estaca.
+    - El contador de resultados ahora muestra el total real de coincidencias, no solo las 20 (o 30, antes) que se alcanzan a renderizar.
+    - Fallback `'No registrado'` para `fechaNacimiento`/`experienciaPrevia`/`disponibilidad` — participantes creados antes de que esos campos existieran (Fases 5/9) mostraban la fila en blanco en vez de un aviso claro.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Editar el rol/estaca de una cuenta de staff ya creada, o eliminarla (Usuarios solo crea y activa/desactiva).
-- Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera de esta fase, ver arriba).
+- Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
+- El mismo patrón de paginación de esta fase no se aplicó todavía a Asistencia/Reportes — solo a Búsqueda. Candidato si el mismo síntoma aparece ahí.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

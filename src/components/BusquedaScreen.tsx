@@ -25,12 +25,19 @@ export default function BusquedaScreen({
   const [filterEstaca, setFilterEstaca] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Participante | null>(null);
+  const PAGE_SIZE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const results = useMemo(() => {
+  const allResults = useMemo(() => {
     let list = participantes.filter((p) => matches(p, query));
     if (filterEstaca) list = list.filter((p) => p.estaca === filterEstaca);
-    return list.slice(0, 30);
+    return list;
   }, [participantes, query, filterEstaca]);
+  // Montar cientos de filas de una sola vez (cada una con su propio botón
+  // expandible) es el mismo problema real que ya documentó CONFEJAS 2026 a
+  // los 500 participantes — se pagina en tandas desde el principio en vez
+  // de esperar a redescubrirlo cuando crezca el roster.
+  const results = allResults.slice(0, visibleCount);
 
   return (
     <div className="flex flex-col h-full">
@@ -42,20 +49,21 @@ export default function BusquedaScreen({
           onChange={(e) => {
             setQuery(e.target.value);
             setExpandedId(null);
+            setVisibleCount(PAGE_SIZE);
           }}
         />
         <div className="flex gap-2 overflow-x-auto pb-1">
-          <Chip active={!filterEstaca} onClick={() => setFilterEstaca('')}>
+          <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
             Todas
           </Chip>
           {TODAS_LAS_ESTACAS.map((e) => (
-            <Chip key={e} active={filterEstaca === e} onClick={() => setFilterEstaca(filterEstaca === e ? '' : e)}>
+            <Chip key={e} active={filterEstaca === e} onClick={() => { setFilterEstaca(filterEstaca === e ? '' : e); setVisibleCount(PAGE_SIZE); }}>
               {e}
             </Chip>
           ))}
         </div>
         <div className="text-[11px] text-slate-500 mt-1">
-          {results.length} resultado{results.length !== 1 ? 's' : ''}
+          {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}
         </div>
       </div>
 
@@ -82,15 +90,15 @@ export default function BusquedaScreen({
 
               {open && (
                 <div className="px-3.5 pb-3.5 pt-1 border-t border-slate-100 flex flex-col gap-2">
-                  <Row icon="🎂" label="Nacimiento" value={p.fechaNacimiento} />
+                  <Row icon="🎂" label="Nacimiento" value={p.fechaNacimiento || 'No registrado'} />
                   <Row icon="📞" label="Teléfono" value={p.telefono} />
                   <Row icon="✉️" label="Correo" value={p.correo} />
                   <Row icon="⛪" label="Estaca" value={p.estaca} />
                   <Row icon="📍" label="Barrio" value={p.barrio} />
                   <Row icon="👤" label="Género" value={p.genero === 'H' ? 'Hombre' : 'Mujer'} />
-                  <Row icon="🎖️" label="Experiencia" value={EXPERIENCIA_PREVIA_LABEL[p.experienciaPrevia]} />
+                  <Row icon="🎖️" label="Experiencia" value={EXPERIENCIA_PREVIA_LABEL[p.experienciaPrevia] || 'No registrado'} />
                   <Row icon="📋" label="Asignación" value={p.asignacion || 'Sin asignar'} />
-                  <Row icon="✅" label="Disponibilidad" value={DISPONIBILIDAD_LABEL[p.disponibilidad]} />
+                  <Row icon="✅" label="Disponibilidad" value={DISPONIBILIDAD_LABEL[p.disponibilidad] || 'No registrado'} />
                   {user.canEditAll && (
                     <button
                       onClick={() => setEditing(p)}
@@ -109,6 +117,14 @@ export default function BusquedaScreen({
             <div className="text-3xl mb-2">🔍</div>
             <div className="text-sm text-slate-500">Sin resultados para esta búsqueda.</div>
           </div>
+        )}
+        {allResults.length > visibleCount && (
+          <button
+            onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+            className="bg-white border-[1.5px] border-primary/20 text-primary font-bold rounded-2xl py-3 text-sm shadow-sm"
+          >
+            Cargar {Math.min(PAGE_SIZE, allResults.length - visibleCount)} más ({allResults.length - visibleCount} restantes)
+          </button>
         )}
       </div>
 
