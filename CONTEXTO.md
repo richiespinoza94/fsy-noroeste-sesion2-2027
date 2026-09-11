@@ -87,6 +87,14 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
 - El mismo patrón de paginación de esta fase no se aplicó todavía a Asistencia/Reportes — solo a Búsqueda. Candidato si el mismo síntoma aparece ahí.
 
+### CAUSA REAL del bug de filas aplastadas en Búsqueda (parche `0023`) — los 3 parches anteriores (`0019`-`0021`) NO la arreglaron del todo
+
+Después de 3 intentos sobre el contenedor externo (`App.tsx`), el bug seguía. La causa real estaba en la fila misma, en `BusquedaScreen.tsx`: cada fila de resultado tiene `overflow-hidden` (para que las esquinas redondeadas recorten bien el header + detalle expandible). Por especificación de CSS, un ítem flex con cualquier `overflow` que no sea `visible` pierde su mínimo de tamaño basado en contenido y pasa a tener mínimo `0` — así que cuando el contenedor (`flex flex-col`, con scroll) no tenía espacio de sobra, en vez de activar el scroll, el navegador **aplastaba cada fila** para que cupieran todas. Con más personas, más aplastamiento — coincide exactamente con lo reportado ("si aparecen muchos se apilan").
+
+**Fix real:** agregar `shrink-0` a cada fila (`BusquedaScreen.tsx`, el `<div key={p.id}>` de la lista de resultados). Verificado con una réplica exacta del CSS compilado real, renderizada con Playwright headless en el sandbox (antes/después, mismos datos) — reprodujo el bug pixel por pixel y confirmó el fix visualmente antes de entregarlo, no solo por teoría.
+
+**Regla para este proyecto, agregada a las anteriores:** cualquier ítem hijo de un `flex flex-col` con scroll (osea, cualquier fila de una lista) que tenga su propio `overflow-hidden` (para recortar esquinas redondeadas u otro contenido) DEBE llevar también `shrink-0` — si no, es candidato a este mismo bug apenas la lista no quepa entera en la pantalla.
+
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
 En el primer despliegue real, crear el usuario a mano en Firebase Console dejó el campo `correo` con un espacio de más en el nombre del campo, lo que rompió el guardado de la contraseña de primer acceso. `authService.ts` ya no depende de ese campo para nada crítico — usa el correo con el que la persona ya inició sesión (que coincide con el ID del documento, la única fuente de verdad real).

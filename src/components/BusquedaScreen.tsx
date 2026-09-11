@@ -71,7 +71,7 @@ export default function BusquedaScreen({
         {results.map((p) => {
           const open = expandedId === p.id;
           return (
-            <div key={p.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div key={p.id} className="bg-white rounded-2xl shadow-sm overflow-hidden shrink-0">
               <button
                 onClick={() => setExpandedId(open ? null : p.id)}
                 className="w-full flex items-center gap-3 px-3.5 py-3 text-left"
