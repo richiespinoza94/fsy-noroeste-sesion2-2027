@@ -10,7 +10,7 @@ import {
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
-import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, TODAS_LAS_ESTACAS } from '../src/data/estacas';
+import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 import type { Capacitacion } from '../src/types';
 
 let passed = 0;
@@ -234,6 +234,25 @@ test('34. getCapacitacionParaCheckIn — con dos abiertas a la vez, elige la má
   ];
   const ahora = new Date('2027-01-25T18:15:00'); // ambas en ventana; B está más cerca (15 min vs 45 min)
   assert.strictEqual(getCapacitacionParaCheckIn(caps, ahora)?.id, 'b');
+});
+
+// ── Filtro de estaca en Búsqueda/Reportes (Ventanilla/Puente Piedra/Pro Lima/Otras) ─
+
+test('35. estacaEnFiltro — filtro vacío ("Todas") acepta cualquier estaca', () => {
+  assert.strictEqual(estacaEnFiltro('Ventanilla', ''), true);
+  assert.strictEqual(estacaEnFiltro('Huacho', ''), true);
+});
+
+test('36. estacaEnFiltro — filtro de una estaca principal solo acepta esa exacta', () => {
+  assert.strictEqual(estacaEnFiltro('Ventanilla', 'Ventanilla'), true);
+  assert.strictEqual(estacaEnFiltro('Puente Piedra', 'Ventanilla'), false);
+});
+
+test('37. estacaEnFiltro — FILTRO_OTRAS acepta cualquier estaca fuera de las 3 principales', () => {
+  assert.strictEqual(estacaEnFiltro('Huacho', FILTRO_OTRAS), true);
+  assert.strictEqual(estacaEnFiltro('Miramar', FILTRO_OTRAS), true);
+  assert.strictEqual(estacaEnFiltro('Ventanilla', FILTRO_OTRAS), false);
+  assert.strictEqual(estacaEnFiltro('Pro Lima', FILTRO_OTRAS), false);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

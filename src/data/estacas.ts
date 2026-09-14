@@ -23,3 +23,15 @@ export const TODAS_LAS_ESTACAS = Object.keys(ESTACAS_DATA).sort();
 // el selector del registro, el resto queda detrás de "Otra estaca…".
 export const ESTACAS_PRINCIPALES = ['Ventanilla', 'Puente Piedra', 'Pro Lima'];
 export const ESTACAS_SECUNDARIAS = TODAS_LAS_ESTACAS.filter((e) => !ESTACAS_PRINCIPALES.includes(e));
+
+// Filtro de estaca reutilizado en Búsqueda y Reportes: como esta sesión FSY
+// es específicamente para Ventanilla/Puente Piedra/Pro Lima, en vez de listar
+// las 11 estacas una por una se agrupan las otras 8 bajo "Otras" — un solo
+// chip/opción que representa a cualquiera de ellas.
+export const FILTRO_OTRAS = '__otras__';
+
+export function estacaEnFiltro(estacaParticipante: string, filtro: string): boolean {
+  if (!filtro) return true; // "Todas"
+  if (filtro === FILTRO_OTRAS) return !ESTACAS_PRINCIPALES.includes(estacaParticipante);
+  return estacaParticipante === filtro;
+}

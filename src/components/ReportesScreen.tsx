@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TODAS_LAS_ESTACAS } from '../data/estacas';
+import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
 
@@ -15,7 +15,7 @@ export default function ReportesScreen({
 
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
 
-  const segmento = filterEstaca ? participantes.filter((p) => p.estaca === filterEstaca) : participantes;
+  const segmento = filterEstaca ? participantes.filter((p) => estacaEnFiltro(p.estaca, filterEstaca)) : participantes;
   const confirmados = segmento.filter((p) => p.disponibilidad === 'si').length;
 
   const capsOrdenadas = useMemo(
@@ -35,7 +35,10 @@ export default function ReportesScreen({
   const conRegistros = attByCap.filter((c) => c.registros > 0);
   const avgAtt = conRegistros.length ? Math.round(conRegistros.reduce((s, c) => s + c.pct, 0) / conRegistros.length) : 0;
 
-  const byEstaca = TODAS_LAS_ESTACAS.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })).filter((x) => x.n > 0);
+  const byEstaca = [
+    ...ESTACAS_PRINCIPALES.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })),
+    { estaca: 'Otras estacas', n: participantes.filter((p) => !ESTACAS_PRINCIPALES.includes(p.estaca)).length },
+  ].filter((x) => x.n > 0);
   const byRol = ASIGNACIONES.map((r) => ({ rol: r, n: segmento.filter((p) => p.asignacion === r).length })).filter((x) => x.n > 0);
 
   const BAR_W = 44, GAP = 16, H = 100;
@@ -45,9 +48,10 @@ export default function ReportesScreen({
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4">
       <select className="input" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
         <option value="">Todas las estacas</option>
-        {TODAS_LAS_ESTACAS.map((e) => (
+        {ESTACAS_PRINCIPALES.map((e) => (
           <option key={e} value={e}>{e}</option>
         ))}
+        <option value={FILTRO_OTRAS}>Otras</option>
       </select>
 
       <div className="grid grid-cols-2 gap-3">

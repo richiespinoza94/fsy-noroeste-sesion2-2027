@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TODAS_LAS_ESTACAS } from '../data/estacas';
+import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
 import { fuzzyIncludes } from '../utils/search';
 import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
@@ -30,7 +30,7 @@ export default function BusquedaScreen({
 
   const allResults = useMemo(() => {
     let list = participantes.filter((p) => matches(p, query));
-    if (filterEstaca) list = list.filter((p) => p.estaca === filterEstaca);
+    if (filterEstaca) list = list.filter((p) => estacaEnFiltro(p.estaca, filterEstaca));
     return list;
   }, [participantes, query, filterEstaca]);
   // Montar cientos de filas de una sola vez (cada una con su propio botón
@@ -56,11 +56,14 @@ export default function BusquedaScreen({
           <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
             Todas
           </Chip>
-          {TODAS_LAS_ESTACAS.map((e) => (
+          {ESTACAS_PRINCIPALES.map((e) => (
             <Chip key={e} active={filterEstaca === e} onClick={() => { setFilterEstaca(filterEstaca === e ? '' : e); setVisibleCount(PAGE_SIZE); }}>
               {e}
             </Chip>
           ))}
+          <Chip active={filterEstaca === FILTRO_OTRAS} onClick={() => { setFilterEstaca(filterEstaca === FILTRO_OTRAS ? '' : FILTRO_OTRAS); setVisibleCount(PAGE_SIZE); }}>
+            Otras
+          </Chip>
         </div>
         <div className="text-[11px] text-slate-500 mt-1">
           {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}

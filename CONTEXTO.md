@@ -65,22 +65,20 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 22: altura acotada en móvil + asistencia automática al registrarse (parche `0025`)
+## 6. Estado actual — Fase 23: filtro Ventanilla/Puente Piedra/Pro Lima/Otras (parche `0026`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-21**: ver historial de commits/parches.
-- **Fase 22** (3 pedidos de Ricardo, revisados con `ui-ux-pro-max` y `ponytail`):
-  1. **Menú inferior inalcanzable en móvil sin scroll larguísimo** — el shell (`App.tsx`) solo tenía altura ACOTADA para escritorio (`sm:h-[calc(100vh-48px)]`); en móvil solo había `min-h-screen` (un mínimo, no un techo), así que la página entera crecía con el contenido de cada pestaña en vez de que solo la lista del medio hiciera scroll — el menú inferior quedaba al final de una página larguísima. Fix: `h-dvh sm:h-[calc(100dvh-48px)]` en TODOS los tamaños de pantalla, no solo desktop. Se usa `dvh` (dynamic viewport height) en vez de `vh` a propósito — es la unidad pensada para el problema real de la barra de direcciones de Safari/Chrome móvil que aparece y desaparece cambiando el alto disponible; `vh` se calcula mal en ese caso. Verificado visualmente con Playwright headless a tamaño de iPhone (390×844) con 24 personas de prueba: el menú quedó fijo abajo, la lista scrollea sola adentro.
-  2. **"No puedo crear usuarios" en Gestión** — no era un bug aparte: `GestionScreen` depende de la misma cadena `h-full` dentro de `<main>` que Busqueda/Asistencia, así que sufría el mismo problema de altura no acotada en móvil (punto 1). Se resolvió con el mismo fix — no se encontró ningún bug funcional aparte en `createStaffAccount`/`UsuariosTab`.
-  3. **Asistencia automática al registrarse por primera vez, si hay una capacitación en curso** — `RegistroWizard` ahora se suscribe a `capacitaciones` y, justo después de un registro exitoso, reutiliza `getCapacitacionParaCheckIn()` + `estadoVentanaCheckIn()` (ya existían, construidas para el check-in público) para ver si hay una capacitación con la ventana abierta AHORA MISMO. Si la hay, llama a `marcarAsistencia()` automáticamente (auditado como `autoregistro-nuevo:{nombre}`) y la pantalla de éxito lo dice explícitamente ("tu asistencia ya quedó marcada"). Si no hay ninguna en ventana, el mensaje de éxito se queda igual que antes. No se construyó nada nuevo — solo se conectaron piezas que ya existían (`ponytail`).
-  - **Hueco menor, conocido, no cerrado**: el auto-marcado de esta fase no escribe la marca de "un check-in por dispositivo" que usa `AutoCheckInScreen` (esa función vive local/no exportada ahí) — si la misma persona después abre el check-in público y se busca a sí misma, lo vería como "disponible" en vez de "ya marcado" (tocar de nuevo no hace daño, `marcarAsistencia` es idempotente, pero la UI no lo refleja). No bloquea nada, queda anotado por si se decide cerrar después.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 37/37 pasan)
+- **Fases 1-22**: ver historial de commits/parches.
+- **Fase 23** — Búsqueda y Reportes listaban las 11 estacas una por una en su filtro; como esta sesión FSY es específicamente para Ventanilla/Puente Piedra/Pro Lima, se consolidó a 4 opciones: esas 3 + "Otras" (agrupa las 8 restantes).
+  - Nuevo helper compartido `estacaEnFiltro()` en `data/estacas.ts` (junto con `FILTRO_OTRAS`) — usado tanto en `BusquedaScreen` (chips) como en `ReportesScreen` (`<select>` y el desglose "Por estaca", que también se consolidó a 4 filas en vez de hasta 11).
+  - 3 pruebas de QA nuevas para el helper (34 → 37).
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
-- Que el auto-registro con asistencia marcada también escriba la marca de "un check-in por dispositivo" (ver hueco menor arriba).
+- Que el auto-registro con asistencia marcada también escriba la marca de "un check-in por dispositivo" (ver Fase 22).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
