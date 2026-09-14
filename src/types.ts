@@ -36,6 +36,9 @@ export const ASIGNACIONES_PREVIAS = [
   'Audiovisuales',
 ] as const;
 
+export type EquipoAudiovisual = 'si' | 'no' | 'algo' | '';
+export const HABILIDADES_AUDIOVISUAL = ['Edición de video', 'Fotografía', 'Diseño gráfico'] as const;
+
 export interface Participante {
   id: string;
   timestamp: string; // ISO
@@ -52,6 +55,12 @@ export interface Participante {
   disponibilidad: Disponibilidad; // disponibilidad para las fechas específicas del evento
   asignacion: Asignacion | '';
   familiaId: string;
+  // Para identificar candidatos al equipo audiovisual — los dos opcionales,
+  // a propósito. `audiovisualEquipo === ''` (string vacío) es la señal de
+  // "todavía no se le preguntó" — distinto de "no tiene equipo" ('no') —
+  // es lo que permite ofrecer la pregunta la próxima vez que haga check-in.
+  audiovisualHabilidades: string[]; // de HABILIDADES_AUDIOVISUAL, + texto libre si "Otra"
+  audiovisualEquipo: EquipoAudiovisual;
 }
 
 export interface Familia {

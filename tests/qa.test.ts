@@ -8,7 +8,7 @@ import {
   validateEmail,
   validatePhone,
 } from '../src/utils/validation';
-import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
@@ -323,6 +323,45 @@ test('42. calcularCompromiso — asistencia marcada en una capacitación fuera d
   const asistencia: Asistencia[] = [{ capacitacionId: '5', participanteId: 'p1', estado: 'presente', timestamp: '' }];
   const c = calcularCompromiso(p, CAPS_18, asistencia);
   assert.strictEqual(c.asistencias, 0);
+});
+
+// ── getCapacitacionParaAutoMarcar — ¿debe marcar asistencia automática al
+// registrarse por primera vez? Separado de estadoVentanaCheckIn/
+// getCapacitacionParaCheckIn a propósito: aunque por dentro reusa esas dos,
+// es la decisión específica que toma RegistroWizard al enviar el
+// formulario, y merece sus propios casos — no alcanza con que las piezas
+// de abajo ya estén probadas por separado.
+
+test('43. getCapacitacionParaAutoMarcar — llena el formulario SIN ninguna ventana de capacitación activa → no marca (null)', () => {
+  // La capacitación de referencia es a las 18:00 (ventana 17:00–21:00);
+  // a las 15:00 todavía no abre.
+  const ahora = new Date('2027-01-25T15:00:00');
+  assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], ahora), null);
+});
+
+test('44. getCapacitacionParaAutoMarcar — llena el formulario CON la ventana de capacitación activa → marca esa capacitación', () => {
+  const ahora = new Date('2027-01-25T18:30:00'); // dentro de la ventana
+  const cap = getCapacitacionParaAutoMarcar([CAP_REF], ahora);
+  assert.strictEqual(cap?.id, 'ref');
+});
+
+test('45. getCapacitacionParaAutoMarcar — la ventana ya cerró cuando llena el formulario → no marca (null)', () => {
+  const ahora = new Date('2027-01-25T22:00:00'); // 1h después del cierre (21:00)
+  assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], ahora), null);
+});
+
+test('46. getCapacitacionParaAutoMarcar — sin ninguna capacitación creada todavía → no marca (null)', () => {
+  assert.strictEqual(getCapacitacionParaAutoMarcar([], new Date('2027-01-25T18:30:00')), null);
+});
+
+test('47. getCapacitacionParaAutoMarcar — justo en el borde de apertura (1h antes exacto) SÍ marca', () => {
+  const ahora = new Date('2027-01-25T17:00:00'); // exactamente cuando abre
+  assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], ahora)?.id, 'ref');
+});
+
+test('48. getCapacitacionParaAutoMarcar — justo en el borde de cierre (3h después exacto) SÍ marca, 1 segundo más tarde no', () => {
+  assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], new Date('2027-01-25T21:00:00'))?.id, 'ref');
+  assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], new Date('2027-01-25T21:00:01')), null);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

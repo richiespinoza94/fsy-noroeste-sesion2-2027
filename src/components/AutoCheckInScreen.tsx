@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
 import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
-import { subscribeParticipantes } from '../services/participantsService';
+import { subscribeParticipantes, updateParticipante } from '../services/participantsService';
 import type { Asistencia, Capacitacion, Participante } from '../types';
+import { HABILIDADES_AUDIOVISUAL } from '../types';
 import { fuzzyIncludes } from '../utils/search';
 
 // Un check-in por dispositivo, por capacitación — evita que una sola persona
@@ -92,6 +93,53 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
     guardarMarcaDispositivo(cap.id, { participanteId: p.id, nombre: `${p.nombres} ${p.apellidos}` });
     setMarcandoId('');
     setConfirmado(p);
+  }
+
+  // Antes de marcar asistencia, si esta persona nunca contestó las preguntas
+  // de audiovisual (`audiovisualEquipo === ''` es la señal de "nunca se le
+  // preguntó"), se le ofrece contestarlas — sin bloquear el check-in, con
+  // "Omitir" siempre a la vista. `marcar()` en sí no se toca: el prompt solo
+  // la llama después, nunca la reemplaza.
+  const [pendingAv, setPendingAv] = useState<Participante | null>(null);
+  const [avHabilidades, setAvHabilidades] = useState<string[]>([]);
+  const [avOtro, setAvOtro] = useState('');
+  const [avEquipo, setAvEquipo] = useState<'si' | 'no' | 'algo' | ''>('');
+  const [guardandoAv, setGuardandoAv] = useState(false);
+
+  function alTocarPersona(p: Participante) {
+    // `!p.audiovisualEquipo` (no `=== ''`) a propósito: para participantes
+    // registrados antes de que este campo existiera, Firestore ni siquiera
+    // tiene la propiedad (`undefined`), no un string vacío — comparar solo
+    // contra `''` los habría dejado sin preguntarles nunca.
+    if (!p.audiovisualEquipo) {
+      setPendingAv(p);
+      setAvHabilidades([]);
+      setAvOtro('');
+      setAvEquipo('');
+    } else {
+      marcar(p);
+    }
+  }
+
+  async function guardarAudiovisualYMarcar() {
+    if (!pendingAv) return;
+    setGuardandoAv(true);
+    const habilidades = avOtro.trim() ? [...avHabilidades, avOtro.trim()] : avHabilidades;
+    await updateParticipante(
+      pendingAv.id,
+      { audiovisualHabilidades: habilidades, audiovisualEquipo: avEquipo },
+      `autoregistro-audiovisual:${pendingAv.nombres} ${pendingAv.apellidos}`
+    );
+    const p = pendingAv;
+    setGuardandoAv(false);
+    setPendingAv(null);
+    await marcar(p);
+  }
+
+  function omitirAudiovisual() {
+    const p = pendingAv;
+    setPendingAv(null);
+    if (p) marcar(p);
   }
 
   if (confirmado) {
@@ -211,7 +259,7 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
                     <button
                       key={p.id}
                       disabled={!!marcandoId}
-                      onClick={() => marcar(p)}
+                      onClick={() => alTocarPersona(p)}
                       className={`flex items-center gap-3 rounded-2xl border-[1.5px] px-4 py-3.5 text-left transition ${
                         yaMarcado ? 'bg-emerald-50 border-emerald-200' : 'border-slate-200 active:bg-slate-50'
                       }`}
@@ -247,6 +295,76 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
           </button>
         </div>
       </div>
+
+      {pendingAv && (
+        <div className="fixed inset-0 bg-black/40 flex items-end z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-[500px] mx-auto p-6">
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+            <div className="font-extrabold text-lg text-primary mb-0.5">¡Hola, {pendingAv.nombres}!</div>
+            <div className="text-xs text-slate-500 mb-4">
+              Dos preguntas rápidas y opcionales — nos ayudan a armar el equipo audiovisual.
+            </div>
+
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              ¿Tienes experiencia o habilidad en algo de esto?
+            </div>
+            <div className="flex flex-col gap-2 mb-3">
+              {HABILIDADES_AUDIOVISUAL.map((h) => (
+                <label key={h} className="flex items-center gap-2.5 bg-slate-50 rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={avHabilidades.includes(h)}
+                    onChange={(e) =>
+                      setAvHabilidades(e.target.checked ? [...avHabilidades, h] : avHabilidades.filter((x) => x !== h))
+                    }
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-semibold">{h}</span>
+                </label>
+              ))}
+            </div>
+            <input
+              className="input mb-4"
+              placeholder="Otra habilidad (opcional)"
+              value={avOtro}
+              onChange={(e) => setAvOtro(e.target.value)}
+            />
+
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              ¿Tienes equipo propio? (cámara, laptop con software de edición, etc.)
+            </div>
+            <div className="flex flex-col gap-2 mb-5">
+              {[
+                { value: 'si', label: 'Sí, tengo equipo propio' },
+                { value: 'algo', label: 'Tengo algo, no completo' },
+                { value: 'no', label: 'No tengo equipo' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setAvEquipo(opt.value as 'si' | 'no' | 'algo')}
+                  className={`text-left text-sm font-semibold rounded-xl border-[1.5px] px-3.5 py-2.5 ${
+                    avEquipo === opt.value ? 'bg-primary/10 border-primary text-primary' : 'border-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              disabled={guardandoAv}
+              onClick={guardarAudiovisualYMarcar}
+              className="w-full bg-primary text-white font-bold rounded-xl py-3.5 mb-2 disabled:opacity-50"
+            >
+              {guardandoAv ? 'Guardando…' : 'Guardar y marcar asistencia'}
+            </button>
+            <button onClick={omitirAudiovisual} className="w-full text-slate-500 font-semibold text-sm py-2">
+              Omitir y solo marcar asistencia
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

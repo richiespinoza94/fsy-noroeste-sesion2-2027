@@ -95,6 +95,19 @@ export function getCapacitacionParaCheckIn(caps: Capacitacion[], ahora: Date = n
   return candidatas[0].c;
 }
 
+/**
+ * Decide si un registro nuevo (RegistroWizard) debe marcar asistencia
+ * automática — y a cuál capacitación — separado de `submit()` a propósito
+ * para poder probarlo solo, sin tener que simular todo el flujo del
+ * formulario. Devuelve la capacitación a marcar si su ventana de check-in
+ * está abierta AHORA MISMO, o `null` si no hay ninguna (sea porque no hay
+ * capacitaciones, o porque la más cercana todavía no abre o ya cerró).
+ */
+export function getCapacitacionParaAutoMarcar(caps: Capacitacion[], ahora: Date = new Date()): Capacitacion | null {
+  const cap = getCapacitacionParaCheckIn(caps, ahora);
+  return cap && estadoVentanaCheckIn(cap, ahora) === 'abierta' ? cap : null;
+}
+
 /** Elige la capacitación más relevante para el Home/Asistencia de staff: la futura más próxima, si no la pasada más reciente. */
 export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
   if (!caps.length) return null;

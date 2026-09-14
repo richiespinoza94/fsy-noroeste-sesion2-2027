@@ -65,30 +65,24 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 25: pestaña Compromiso en Reportes (parche `0028`)
+## 6. Estado actual — Fase 26: perfil audiovisual — Paso 4 del registro + prompt en check-in (parche `0029`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 42/42 pasan)
-- **Fases 1-24**: ver historial de commits/parches.
-- **Fase 25** — nueva sub-pestaña "🎯 Compromiso" dentro de Reportes, con los 4 indicadores que Ricardo pidió tras una discusión sobre qué mide compromiso de verdad (ver razonamiento completo abajo):
-  - **Tasa de asistencia sobre elegibles** (ej. 4/5 = 80%) — indicador principal, ordena la lista.
-  - **Elegibles/Total del programa** (ej. 5/18) — mostrado como contexto de antigüedad, NO como indicador de compromiso por sí solo (ver razonamiento).
-  - **Racha perfecta** (🔥) — asistió a TODAS sus capacitaciones elegibles, sin faltar ninguna.
-  - **Asistencias totales** (número crudo) — aparte del porcentaje, para no perder de vista el volumen real de participación.
-  - `src/utils/compromiso.ts` (`calcularCompromiso()`) — lógica pura, separada para poder probarla. "Elegible" = cualquier capacitación con fecha/hora igual o posterior al momento de registro de la persona (comparado como `Date`, no como texto — `participante.timestamp` es UTC con sufijo `Z` y `cap.fecha+hora` es local sin sufijo, compararlos como string daría resultados incorrectos). 5 pruebas nuevas (37 → 42), incluida el ejemplo exacto que dio Ricardo (registro en la capacitación #14 de 18 → 5 elegibles).
-  - Verificado visualmente con Playwright antes de entregarlo.
-
-### Razonamiento detrás de los indicadores — no cambiar sin releer esto
-
-El indicador "elegibles/total" mide **cuándo se unió alguien al programa**, no cuánto le importa — alguien que se registró tarde no es necesariamente menos comprometido, puede que se haya enterado después. Presentarlo como "indicador de compromiso" castigaría injustamente a quien se unió con entusiasmo pero tarde. Por eso se muestra como contexto ("Elegible en 5/18 del programa"), en texto chico, nunca como un porcentaje destacado compitiendo visualmente con la tasa de asistencia real.
-
-La **racha perfecta** se agregó porque un mismo porcentaje (ej. 80%) puede significar cosas distintas: faltar a la primera capacitación elegible (se acomodó rápido después) no es lo mismo que faltar a la más reciente (se está enfriando) — el 🔥 solo marca a quien no faltó ninguna, sin importar el total.
+- **Fases 1-25**: ver historial de commits/parches.
+- **Fase 26** — a pedido explícito, para identificar candidatos al equipo audiovisual. Se planeó la arquitectura antes de tocar código (back + front) para no arriesgar romper el wizard ni el check-in ya probados:
+  - **Datos**: `Participante.audiovisualHabilidades: string[]` y `audiovisualEquipo: 'si'|'no'|'algo'|''` (`types.ts`). El string vacío `''` es la señal de "todavía no se le preguntó" — distinto de `'no'` ("sí se le preguntó, no tiene") — es lo que permite decidir a quién ofrecerle la pregunta la próxima vez.
+  - **Registro nuevo**: `RegistroWizard` pasó de 3 a 4 pasos — el nuevo Paso 4 ("🎬 Equipo audiovisual") es 100% opcional, no bloquea el envío del registro. 3 checkboxes de habilidades + texto libre para "otra", y 3 opciones de equipo propio. `StepIndicator` y el subtítulo se actualizaron a 4 pasos.
+  - **Alguien que ya se registró**: en `AutoCheckInScreen`, al tocar su nombre, si `!p.audiovisualEquipo` (cubre tanto `''` como `undefined` — este último es lo que tienen los participantes creados ANTES de que este campo existiera, ya que Firestore ni siquiera guarda la propiedad) aparece un bottom-sheet con las mismas 2 preguntas, con "Omitir" siempre visible, ANTES de marcar asistencia. La función `marcar()` original no se tocó — el prompt solo la llama después de guardar (o de omitir), nunca la reemplaza, para no arriesgar el mecanismo de bloqueo por dispositivo ni la ventana de tiempo ya construidos.
+  - **Visibilidad del dato**: nuevas filas "🎬 Habilidad AV" / "📷 Equipo AV" en la ficha expandida de Búsqueda.
+  - Verificado visualmente con Playwright (Paso 4 del wizard) antes de entregarlo.
+  - **A pedido explícito de Ricardo**: la lógica de "¿debo marcar asistencia automática al registrarme?" (Fase 22) vivía metida dentro de `submit()` en `RegistroWizard.tsx` — nunca se probó sola, solo indirectamente a través de sus piezas internas. Se extrajo a `getCapacitacionParaAutoMarcar()` en `capacitacionesService.ts` y se le escribieron 6 pruebas dedicadas (43-48 → 48 pruebas en total), incluidos los dos casos exactos que preguntó (llenar el formulario SIN ventana activa vs. CON ventana activa) y los bordes exactos de apertura/cierre.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
-- Exportar el resumen de Compromiso a CSV (hoy solo el CSV de asistencia cruda de la pestaña General existe).
+- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual" (el dato ya es visible en la ficha, pero no hay un chip/filtro específico todavía).
+- Incluir los campos de audiovisual en el CSV de Reportes (hoy ese CSV solo trae la matriz de asistencia).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

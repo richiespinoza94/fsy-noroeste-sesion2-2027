@@ -106,6 +106,16 @@ export default function BusquedaScreen({
                   <Row icon="🎖️" label="Experiencia" value={EXPERIENCIA_PREVIA_LABEL[p.experienciaPrevia] || 'No registrado'} />
                   <Row icon="📋" label="Asignación" value={p.asignacion || 'Sin asignar'} />
                   <Row icon="✅" label="Disponibilidad" value={DISPONIBILIDAD_LABEL[p.disponibilidad] || 'No registrado'} />
+                  <Row
+                    icon="🎬"
+                    label="Habilidad AV"
+                    value={p.audiovisualHabilidades?.length ? p.audiovisualHabilidades.join(', ') : 'Ninguna registrada'}
+                  />
+                  <Row
+                    icon="📷"
+                    label="Equipo AV"
+                    value={{ si: 'Sí, tiene equipo', algo: 'Tiene algo', no: 'No tiene equipo', '': 'No contestado' }[p.audiovisualEquipo || '']}
+                  />
                   {user.canEditAll && (
                     <button
                       onClick={() => setEditing(p)}

@@ -3,8 +3,8 @@ import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS } from '../data/
 import { EVENTO_FECHAS_LABEL } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
 import { marcarAsistencia } from '../services/asistenciaService';
-import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
-import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, type Capacitacion, type ExperienciaPrevia } from '../types';
+import { getCapacitacionParaAutoMarcar, subscribeCapacitaciones } from '../services/capacitacionesService';
+import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, HABILIDADES_AUDIOVISUAL, type Capacitacion, type ExperienciaPrevia } from '../types';
 import { normalizeEmail, normalizeName, normalizePhone, validateEmail, validatePhone } from '../utils/validation';
 
 const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] = [
@@ -32,6 +32,9 @@ const EMPTY = {
   asignacionAnterior: '',
   genero: '' as 'H' | 'M' | '',
   disponibilidad: '' as 'si' | 'no_creo' | 'no_se' | '',
+  audiovisualHabilidades: [] as string[],
+  audiovisualOtro: '',
+  audiovisualEquipo: '' as 'si' | 'no' | 'algo' | '',
 };
 
 export default function RegistroWizard() {
@@ -137,11 +140,15 @@ export default function RegistroWizard() {
       experienciaPrevia: form.experienciaPrevia as ExperienciaPrevia,
       asignacionAnterior: form.asignacionAnterior,
       disponibilidad: form.disponibilidad as 'si' | 'no_creo' | 'no_se',
+      audiovisualHabilidades: form.audiovisualOtro.trim()
+        ? [...form.audiovisualHabilidades, form.audiovisualOtro.trim()]
+        : form.audiovisualHabilidades,
+      audiovisualEquipo: form.audiovisualEquipo,
     });
     setSubmitting(false);
     if (res.ok) {
-      const cap = getCapacitacionParaCheckIn(capacitaciones);
-      if (cap && estadoVentanaCheckIn(cap) === 'abierta') {
+      const cap = getCapacitacionParaAutoMarcar(capacitaciones);
+      if (cap) {
         await marcarAsistencia(cap.id, res.id, 'presente', `autoregistro-nuevo:${form.nombres} ${form.apellidos}`);
         setCapAutoMarcada(cap);
       } else {
@@ -196,7 +203,7 @@ export default function RegistroWizard() {
               Gestión FSY 2027
             </div>
             <h1 className="text-lg font-extrabold">Registro de Consejeros</h1>
-            <p className="text-xs text-white/70 mt-1">Preparación previa al evento — 3 pasos rápidos</p>
+            <p className="text-xs text-white/70 mt-1">Preparación previa al evento — 4 pasos rápidos</p>
             <StepIndicator step={step} />
           </div>
         </div>
@@ -419,6 +426,62 @@ export default function RegistroWizard() {
             </>
           )}
 
+          {step === 4 && (
+            <>
+              <SectionHeader icon="🎬" title="Equipo audiovisual" />
+              <p className="text-xs text-slate-500 -mt-1">
+                Opcional — nos ayuda a identificar talento para el equipo audiovisual del evento.
+              </p>
+              <div className="bg-slate-50 rounded-2xl p-4 flex flex-col gap-2.5">
+                <Field label="¿Tienes experiencia o habilidad en algo de esto?">
+                  <div className="flex flex-col gap-2">
+                    {HABILIDADES_AUDIOVISUAL.map((h) => (
+                      <label key={h} className="flex items-center gap-2.5 bg-white rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={form.audiovisualHabilidades.includes(h)}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              audiovisualHabilidades: e.target.checked
+                                ? [...form.audiovisualHabilidades, h]
+                                : form.audiovisualHabilidades.filter((x) => x !== h),
+                            })
+                          }
+                          className="w-4 h-4 accent-primary"
+                        />
+                        <span className="text-sm font-semibold">{h}</span>
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="¿Alguna otra habilidad? (opcional)">
+                  <input
+                    className="input"
+                    placeholder="Ej: animación, redacción…"
+                    value={form.audiovisualOtro}
+                    onChange={(e) => setForm({ ...form, audiovisualOtro: e.target.value })}
+                  />
+                </Field>
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-4">
+                <Field label="¿Tienes equipo propio para esto? (cámara, laptop con software de edición, etc.)">
+                  <RadioRow
+                    value={form.audiovisualEquipo}
+                    onChange={(v) => setForm({ ...form, audiovisualEquipo: v as 'si' | 'no' | 'algo' })}
+                    vertical
+                    options={[
+                      { value: 'si', label: 'Sí, tengo equipo propio' },
+                      { value: 'algo', label: 'Tengo algo, no completo' },
+                      { value: 'no', label: 'No tengo equipo' },
+                    ]}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
+
           {error && <Helper error>{error}</Helper>}
 
           <div className="flex gap-2 mt-2">
@@ -427,9 +490,9 @@ export default function RegistroWizard() {
                 Atrás
               </button>
             )}
-            {step < 3 ? (
+            {step < 4 ? (
               <button
-                disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+                disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid) || (step === 3 && !step3Valid)}
                 onClick={() => setStep((s) => s + 1)}
                 className="flex-1 bg-primary text-white font-bold rounded-xl py-3 disabled:opacity-40"
               >
@@ -437,7 +500,7 @@ export default function RegistroWizard() {
               </button>
             ) : (
               <button
-                disabled={!step3Valid || submitting}
+                disabled={submitting}
                 onClick={submit}
                 className="flex-1 bg-primary text-white font-bold rounded-xl py-3 disabled:opacity-40"
               >
@@ -459,8 +522,8 @@ export default function RegistroWizard() {
 
 function StepIndicator({ step }: { step: number }) {
   return (
-    <div className="grid grid-cols-3 gap-2 mt-4">
-      {['Datos', 'Ubicación', 'Adicional'].map((label, i) => {
+    <div className="grid grid-cols-4 gap-1.5 mt-4">
+      {['Datos', 'Ubicación', 'Adicional', 'Audiovisual'].map((label, i) => {
         const n = i + 1;
         const active = step === n;
         const done = step > n;

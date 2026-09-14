@@ -76,6 +76,8 @@ export interface RegistroInput {
   experienciaPrevia: 'ninguna' | 'fsy' | 'jas' | 'ambos';
   asignacionAnterior: string;
   disponibilidad: 'si' | 'no_creo' | 'no_se';
+  audiovisualHabilidades: string[];
+  audiovisualEquipo: 'si' | 'no' | 'algo' | '';
 }
 
 export type RegistroResult =
@@ -106,6 +108,8 @@ export async function registrarParticipante(input: RegistroInput): Promise<Regis
     disponibilidad: input.disponibilidad,
     asignacion: 'Consejero', // asignación inicial por defecto, igual que en el GAS
     familiaId: '',
+    audiovisualHabilidades: input.audiovisualHabilidades,
+    audiovisualEquipo: input.audiovisualEquipo,
   };
 
   if (!db) {
