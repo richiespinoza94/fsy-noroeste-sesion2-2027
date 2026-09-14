@@ -65,24 +65,21 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 26: perfil audiovisual — Paso 4 del registro + prompt en check-in (parche `0029`)
+## 6. Estado actual — Fase 27: fix real de Compromiso — capacitaciones futuras no cuentan (parche `0030`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 42/42 pasan)
-- **Fases 1-25**: ver historial de commits/parches.
-- **Fase 26** — a pedido explícito, para identificar candidatos al equipo audiovisual. Se planeó la arquitectura antes de tocar código (back + front) para no arriesgar romper el wizard ni el check-in ya probados:
-  - **Datos**: `Participante.audiovisualHabilidades: string[]` y `audiovisualEquipo: 'si'|'no'|'algo'|''` (`types.ts`). El string vacío `''` es la señal de "todavía no se le preguntó" — distinto de `'no'` ("sí se le preguntó, no tiene") — es lo que permite decidir a quién ofrecerle la pregunta la próxima vez.
-  - **Registro nuevo**: `RegistroWizard` pasó de 3 a 4 pasos — el nuevo Paso 4 ("🎬 Equipo audiovisual") es 100% opcional, no bloquea el envío del registro. 3 checkboxes de habilidades + texto libre para "otra", y 3 opciones de equipo propio. `StepIndicator` y el subtítulo se actualizaron a 4 pasos.
-  - **Alguien que ya se registró**: en `AutoCheckInScreen`, al tocar su nombre, si `!p.audiovisualEquipo` (cubre tanto `''` como `undefined` — este último es lo que tienen los participantes creados ANTES de que este campo existiera, ya que Firestore ni siquiera guarda la propiedad) aparece un bottom-sheet con las mismas 2 preguntas, con "Omitir" siempre visible, ANTES de marcar asistencia. La función `marcar()` original no se tocó — el prompt solo la llama después de guardar (o de omitir), nunca la reemplaza, para no arriesgar el mecanismo de bloqueo por dispositivo ni la ventana de tiempo ya construidos.
-  - **Visibilidad del dato**: nuevas filas "🎬 Habilidad AV" / "📷 Equipo AV" en la ficha expandida de Búsqueda.
-  - Verificado visualmente con Playwright (Paso 4 del wizard) antes de entregarlo.
-  - **A pedido explícito de Ricardo**: la lógica de "¿debo marcar asistencia automática al registrarme?" (Fase 22) vivía metida dentro de `submit()` en `RegistroWizard.tsx` — nunca se probó sola, solo indirectamente a través de sus piezas internas. Se extrajo a `getCapacitacionParaAutoMarcar()` en `capacitacionesService.ts` y se le escribieron 6 pruebas dedicadas (43-48 → 48 pruebas en total), incluidos los dos casos exactos que preguntó (llenar el formulario SIN ventana activa vs. CON ventana activa) y los bordes exactos de apertura/cierre.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 49/49 pasan)
+- **Fases 1-26**: ver historial de commits/parches.
+- **Fase 27** — bug real reportado por Ricardo con captura: la pestaña Compromiso mostraba a alguien con 50% (1/2) cuando en realidad debería ser 100% (1/1), porque `calcularCompromiso()` solo revisaba que una capacitación fuera POSTERIOR al registro de la persona, pero nunca revisaba que YA HUBIERA OCURRIDO. Crear capacitaciones futuras (planeadas, todavía no realizadas) inflaba el denominador de "elegibles" para todo el mundo.
+  - `calcularCompromiso()` ahora recibe un `ahora: Date = new Date()` y `elegibles` exige AMBOS límites: `capMs >= regMs && capMs <= nowMs`. Una capacitación creada para la semana que viene ya no cuenta en contra de nadie hasta que realmente pase.
+  - **`totalCapacitaciones`/`cobertura` NO cambiaron a propósito** — siguen contando TODAS las creadas (incluidas las futuras), porque responden una pregunta distinta ("de cuántas planeadas", antigüedad/contexto) de la que responde `elegibles` ("de cuántas que ya pasaron, sí pudiste ir").
+  - Prueba nueva #49, con los mismos datos exactos del reporte (capacitaciones del 13 y 20 de septiembre, "ahora" entre las dos) — confirma 1/1 = 100%, no 1/2 = 50%. Las pruebas 38-42 ya existentes se actualizaron para pasar un `ahora` explícito posterior a sus capacitaciones de prueba (todas en enero 2027), ya que antes dependían implícitamente del default `new Date()` sin fijarlo.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual" (el dato ya es visible en la ficha, pero no hay un chip/filtro específico todavía).
-- Incluir los campos de audiovisual en el CSV de Reportes (hoy ese CSV solo trae la matriz de asistencia).
+- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual".
+- Incluir los campos de audiovisual en el CSV de Reportes.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

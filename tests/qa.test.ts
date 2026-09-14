@@ -271,10 +271,14 @@ function participanteFake(timestamp: string): Participante {
 }
 // 18 capacitaciones, una por día de enero 2027 (del 1 al 18) a las 18:00.
 const CAPS_18 = Array.from({ length: 18 }, (_, i) => capFake(String(i + 1), `2027-01-${String(i + 1).padStart(2, '0')}`));
+// "Ahora" fijo, posterior a las 18 — para las pruebas que asumen que todas
+// las capacitaciones de CAPS_18 ya ocurrieron (si no se fija, la prueba
+// #49 de abajo demuestra por qué eso cambia el resultado).
+const AHORA_DESPUES_DE_TODAS = new Date('2027-01-20T00:00:00');
 
 test('38. calcularCompromiso — caso de ejemplo de Ricardo: se registra en la #14 de 18, quedan 5 elegibles', () => {
   const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
-  const c = calcularCompromiso(p, CAPS_18, []);
+  const c = calcularCompromiso(p, CAPS_18, [], AHORA_DESPUES_DE_TODAS);
   assert.strictEqual(c.elegibles, 5); // 14, 15, 16, 17, 18
   assert.strictEqual(c.totalCapacitaciones, 18);
   assert.strictEqual(c.cobertura, 5 / 18);
@@ -289,7 +293,7 @@ test('39. calcularCompromiso — tasa de asistencia sobre elegibles (4 de 5 = 80
     { capacitacionId: '17', participanteId: 'p1', estado: 'presente', timestamp: '' },
     { capacitacionId: '18', participanteId: 'p1', estado: 'presente', timestamp: '' },
   ];
-  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  const c = calcularCompromiso(p, CAPS_18, asistencia, AHORA_DESPUES_DE_TODAS);
   assert.strictEqual(c.asistencias, 4);
   assert.strictEqual(c.inasistencias, 1);
   assert.strictEqual(c.tasaAsistencia, 4 / 5);
@@ -302,7 +306,7 @@ test('40. calcularCompromiso — racha perfecta cuando asistió a TODAS sus eleg
     { capacitacionId: '17', participanteId: 'p1', estado: 'presente', timestamp: '' },
     { capacitacionId: '18', participanteId: 'p1', estado: 'presente', timestamp: '' },
   ];
-  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  const c = calcularCompromiso(p, CAPS_18, asistencia, AHORA_DESPUES_DE_TODAS);
   assert.strictEqual(c.elegibles, 2);
   assert.strictEqual(c.asistencias, 2);
   assert.strictEqual(c.rachaPerfecta, true);
@@ -310,7 +314,7 @@ test('40. calcularCompromiso — racha perfecta cuando asistió a TODAS sus eleg
 
 test('41. calcularCompromiso — sin elegibles todavía (se registró después de la última), tasa es null y no cuenta como racha', () => {
   const p = participanteFake(new Date('2027-02-01T00:00:00').toISOString());
-  const c = calcularCompromiso(p, CAPS_18, []);
+  const c = calcularCompromiso(p, CAPS_18, [], new Date('2027-02-05T00:00:00'));
   assert.strictEqual(c.elegibles, 0);
   assert.strictEqual(c.tasaAsistencia, null);
   assert.strictEqual(c.rachaPerfecta, false); // 0 elegibles no es "racha", es "todavía no aplica"
@@ -321,8 +325,24 @@ test('42. calcularCompromiso — asistencia marcada en una capacitación fuera d
   // asistencia de la #5 (antes de registrarse) — no debe sumar.
   const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
   const asistencia: Asistencia[] = [{ capacitacionId: '5', participanteId: 'p1', estado: 'presente', timestamp: '' }];
-  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  const c = calcularCompromiso(p, CAPS_18, asistencia, AHORA_DESPUES_DE_TODAS);
   assert.strictEqual(c.asistencias, 0);
+});
+
+test('49. calcularCompromiso — caso real reportado: una capacitación futura ya creada NO cuenta como elegible todavía', () => {
+  // Exactamente el bug que reportó Ricardo con captura: dos capacitaciones
+  // creadas (13.09.2026 y 20.09.2026), pero "ahora" cae DESPUÉS de la
+  // primera y ANTES de la segunda — la segunda todavía no ocurrió, no
+  // puede contar en contra de nadie aunque ya esté creada en el sistema.
+  const p = participanteFake(new Date('2026-09-01T00:00:00').toISOString());
+  const caps = [capFake('c1', '2026-09-13'), capFake('c2', '2026-09-20')];
+  const ahora = new Date('2026-09-14T12:00:00'); // después de c1, antes de c2
+  const asistencia: Asistencia[] = [{ capacitacionId: 'c1', participanteId: 'p1', estado: 'presente', timestamp: '' }];
+  const c = calcularCompromiso(p, caps, asistencia, ahora);
+  assert.strictEqual(c.elegibles, 1); // solo c1 — c2 no ha pasado
+  assert.strictEqual(c.asistencias, 1);
+  assert.strictEqual(c.tasaAsistencia, 1); // 100%, no 50%
+  assert.strictEqual(c.totalCapacitaciones, 2); // esto sí sigue contando las 2 (responde otra pregunta)
 });
 
 // ── getCapacitacionParaAutoMarcar — ¿debe marcar asistencia automática al
