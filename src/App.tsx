@@ -98,13 +98,16 @@ function StaffApp() {
   if (!user) return <LoginScreen onSuccess={setUser} />;
 
   return (
-    // `min-h-screen` solo hasta `sm`: a partir de ahí el contenedor pasa a
-    // altura FIJA con scroll interno. Antes las dos convivían y `min-height`
-    // le ganaba a `height` (regla de CSS), así que en escritorio el
-    // contenedor medía 100vh en vez del calc pedido — más alto que su
-    // espacio real y, con `sm:overflow-hidden`, recortaba las últimas filas
-    // por la mitad. En móvil nunca se vio porque las clases `sm:` no aplican.
-    <div className="min-h-screen sm:min-h-0 flex flex-col max-w-[850px] mx-auto bg-[#F4F6FA] sm:my-6 sm:rounded-3xl sm:shadow-2xl sm:overflow-hidden sm:h-[calc(100vh-48px)]">
+    // Altura acotada en TODO tamaño de pantalla, no solo desktop — antes
+    // solo `sm:h-[calc(100vh-48px)]` tenía límite; en celular el shell
+    // crecía libre con el contenido (`min-h-screen` es un mínimo, no un
+    // techo), así que la página entera se alargaba con la lista y el menú
+    // inferior quedaba al final de una página larguísima en vez de fijo
+    // abajo. `dvh` (dynamic viewport height) en vez de `vh` a propósito:
+    // es la unidad pensada para el problema real de móvil donde la barra
+    // de direcciones de Safari/Chrome aparece y desaparece cambiando el
+    // alto disponible — `vh` se calcula mal en ese caso, `dvh` no.
+    <div className="h-dvh sm:h-[calc(100dvh-48px)] flex flex-col max-w-[850px] mx-auto bg-[#F4F6FA] sm:my-6 sm:rounded-3xl sm:shadow-2xl overflow-hidden">
       {!isFirebaseConfigured && (
         <div className="bg-amber-100 text-amber-800 text-xs font-semibold text-center py-1.5">
           ⚠️ Modo local — sin conexión a Firestore, los datos no se guardan entre sesiones.

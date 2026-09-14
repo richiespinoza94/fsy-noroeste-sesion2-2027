@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS } from '../data/estacas';
 import { EVENTO_FECHAS_LABEL } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
-import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, type ExperienciaPrevia } from '../types';
+import { marcarAsistencia } from '../services/asistenciaService';
+import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
+import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, type Capacitacion, type ExperienciaPrevia } from '../types';
 import { normalizeEmail, normalizeName, normalizePhone, validateEmail, validatePhone } from '../utils/validation';
 
 const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] = [
@@ -41,6 +43,15 @@ export default function RegistroWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
+  // Si hay una capacitación con la ventana de check-in abierta justo cuando
+  // alguien termina de registrarse, no tiene sentido hacerlo buscar su
+  // propio nombre otra vez en el check-in — ya está parado ahí, ya llenó
+  // el formulario. `capAutoMarcada` guarda cuál quedó marcada, para
+  // mostrarlo en la pantalla de éxito.
+  const [capAutoMarcada, setCapAutoMarcada] = useState<Capacitacion | null>(null);
+
+  useEffect(() => subscribeCapacitaciones(setCapacitaciones), []);
 
   const barrios = form.estaca ? ESTACAS_DATA[form.estaca] : null;
   // `!barrios` (no `=== null`) a propósito: cubre tanto las estacas sin
@@ -128,7 +139,16 @@ export default function RegistroWizard() {
       disponibilidad: form.disponibilidad as 'si' | 'no_creo' | 'no_se',
     });
     setSubmitting(false);
-    if (res.ok) return setSubmitted(true);
+    if (res.ok) {
+      const cap = getCapacitacionParaCheckIn(capacitaciones);
+      if (cap && estadoVentanaCheckIn(cap) === 'abierta') {
+        await marcarAsistencia(cap.id, res.id, 'presente', `autoregistro-nuevo:${form.nombres} ${form.apellidos}`);
+        setCapAutoMarcada(cap);
+      } else {
+        setCapAutoMarcada(null);
+      }
+      return setSubmitted(true);
+    }
     setError(res.message);
   }
 
@@ -138,15 +158,23 @@ export default function RegistroWizard() {
         <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl">
           <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-3xl mx-auto mb-4">✅</div>
           <h1 className="text-xl font-extrabold text-primary mb-2">¡Registro exitoso!</h1>
-          <p className="text-sm text-slate-500 leading-relaxed">
-            Gracias por prepararte como consejero para FSY 2027. Pronto recibirás información sobre las próximas
-            capacitaciones.
-          </p>
+          {capAutoMarcada ? (
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Gracias por prepararte como consejero para FSY 2027. Como <strong>{capAutoMarcada.label}</strong> está
+              en curso ahora mismo, tu asistencia ya quedó marcada — no necesitas hacer nada más.
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Gracias por prepararte como consejero para FSY 2027. Pronto recibirás información sobre las próximas
+              capacitaciones.
+            </p>
+          )}
           <button
             onClick={() => {
               setForm(EMPTY);
               setUbicacionModo('principal');
               setSubmitted(false);
+              setCapAutoMarcada(null);
               setStep(1);
             }}
             className="mt-6 w-full bg-primary text-white font-bold rounded-xl py-3"

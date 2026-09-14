@@ -65,35 +65,22 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 21: auditoría QA de Búsqueda + fix real de scroll anidado (parches `0019`-`0022`)
+## 6. Estado actual — Fase 22: altura acotada en móvil + asistencia automática al registrarse (parche `0025`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 34/34 pasan)
-- **Fases 1-20**: ver historial de commits/parches.
-- **Fase 21** — bug real de layout en escritorio reportado por Ricardo con capturas: filas de Búsqueda cortadas/encimadas, avatar mochado, sin teléfono/estaca/badges visibles, SOLO en `npm run dev` local en navegador de escritorio (funcionaba bien en móvil, funcionaba bien en el sitio desplegado en Vercel en móvil — eso descartó código y caché como culpables al principio). El diagnóstico pasó por 3 intentos:
-  1. Sospecha de caché de Vite (parche descartado, no era eso — persistía tras reinicio completo).
-  2. `min-h-screen` vs `sm:h-[calc(100vh-48px)]` compitiendo en el contenedor raíz de `App.tsx` (parche `0019`) — arreglo parcial, insuficiente.
-  3. **Causa real (parche `0021`), encontrada gracias a que Ricardo notó que bajando el zoom al 30% se veía bien**: DOS SCROLLS ANIDADOS — `<main>` tenía `overflow-y-auto` Y las pantallas hijas (Búsqueda/Asistencia/Gestión) también, con `h-full` — el hijo medía contra un padre que a su vez crecía por su propio scroll. Fix definitivo: `<main>` pasa a `overflow-hidden` (ya no scrollea), cada pantalla maneja su propio scroll; Home y Reportes (que no tenían scroll propio) recibieron `h-full overflow-y-auto`.
-  - **Regla documentada para este proyecto**: cualquier contenedor `flex-1` con `overflow-y-auto` necesita también `min-h-0`. Y: `<main>` no debe scrollear, cada pantalla hija maneja el suyo.
-  - **Auditoría de Búsqueda (parche `0022`)**, a pedido explícito tras el fix del scroll:
-    - **Paginación en tandas de 20** ("Cargar 20 más (N restantes)") — mismo problema real que ya documentó CONFEJAS a los 500 participantes (montar cientos de filas de una vez). Se reinicia a 20 automáticamente al cambiar la búsqueda o el chip de estaca.
-    - El contador de resultados ahora muestra el total real de coincidencias, no solo las 20 (o 30, antes) que se alcanzan a renderizar.
-    - Fallback `'No registrado'` para `fechaNacimiento`/`experienciaPrevia`/`disponibilidad` — participantes creados antes de que esos campos existieran (Fases 5/9) mostraban la fila en blanco en vez de un aviso claro.
+- **Fases 1-21**: ver historial de commits/parches.
+- **Fase 22** (3 pedidos de Ricardo, revisados con `ui-ux-pro-max` y `ponytail`):
+  1. **Menú inferior inalcanzable en móvil sin scroll larguísimo** — el shell (`App.tsx`) solo tenía altura ACOTADA para escritorio (`sm:h-[calc(100vh-48px)]`); en móvil solo había `min-h-screen` (un mínimo, no un techo), así que la página entera crecía con el contenido de cada pestaña en vez de que solo la lista del medio hiciera scroll — el menú inferior quedaba al final de una página larguísima. Fix: `h-dvh sm:h-[calc(100dvh-48px)]` en TODOS los tamaños de pantalla, no solo desktop. Se usa `dvh` (dynamic viewport height) en vez de `vh` a propósito — es la unidad pensada para el problema real de la barra de direcciones de Safari/Chrome móvil que aparece y desaparece cambiando el alto disponible; `vh` se calcula mal en ese caso. Verificado visualmente con Playwright headless a tamaño de iPhone (390×844) con 24 personas de prueba: el menú quedó fijo abajo, la lista scrollea sola adentro.
+  2. **"No puedo crear usuarios" en Gestión** — no era un bug aparte: `GestionScreen` depende de la misma cadena `h-full` dentro de `<main>` que Busqueda/Asistencia, así que sufría el mismo problema de altura no acotada en móvil (punto 1). Se resolvió con el mismo fix — no se encontró ningún bug funcional aparte en `createStaffAccount`/`UsuariosTab`.
+  3. **Asistencia automática al registrarse por primera vez, si hay una capacitación en curso** — `RegistroWizard` ahora se suscribe a `capacitaciones` y, justo después de un registro exitoso, reutiliza `getCapacitacionParaCheckIn()` + `estadoVentanaCheckIn()` (ya existían, construidas para el check-in público) para ver si hay una capacitación con la ventana abierta AHORA MISMO. Si la hay, llama a `marcarAsistencia()` automáticamente (auditado como `autoregistro-nuevo:{nombre}`) y la pantalla de éxito lo dice explícitamente ("tu asistencia ya quedó marcada"). Si no hay ninguna en ventana, el mensaje de éxito se queda igual que antes. No se construyó nada nuevo — solo se conectaron piezas que ya existían (`ponytail`).
+  - **Hueco menor, conocido, no cerrado**: el auto-marcado de esta fase no escribe la marca de "un check-in por dispositivo" que usa `AutoCheckInScreen` (esa función vive local/no exportada ahí) — si la misma persona después abre el check-in público y se busca a sí misma, lo vería como "disponible" en vez de "ya marcado" (tocar de nuevo no hace daño, `marcarAsistencia` es idempotente, pero la UI no lo refleja). No bloquea nada, queda anotado por si se decide cerrar después.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Editar el rol/estaca de una cuenta de staff ya creada, o eliminarla (Usuarios solo crea y activa/desactiva).
 - Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
-- El mismo patrón de paginación de esta fase no se aplicó todavía a Asistencia/Reportes — solo a Búsqueda. Candidato si el mismo síntoma aparece ahí.
-
-### CAUSA REAL del bug de filas aplastadas en Búsqueda (parche `0023`) — los 3 parches anteriores (`0019`-`0021`) NO la arreglaron del todo
-
-Después de 3 intentos sobre el contenedor externo (`App.tsx`), el bug seguía. La causa real estaba en la fila misma, en `BusquedaScreen.tsx`: cada fila de resultado tiene `overflow-hidden` (para que las esquinas redondeadas recorten bien el header + detalle expandible). Por especificación de CSS, un ítem flex con cualquier `overflow` que no sea `visible` pierde su mínimo de tamaño basado en contenido y pasa a tener mínimo `0` — así que cuando el contenedor (`flex flex-col`, con scroll) no tenía espacio de sobra, en vez de activar el scroll, el navegador **aplastaba cada fila** para que cupieran todas. Con más personas, más aplastamiento — coincide exactamente con lo reportado ("si aparecen muchos se apilan").
-
-**Fix real:** agregar `shrink-0` a cada fila (`BusquedaScreen.tsx`, el `<div key={p.id}>` de la lista de resultados). Verificado con una réplica exacta del CSS compilado real, renderizada con Playwright headless en el sandbox (antes/después, mismos datos) — reprodujo el bug pixel por pixel y confirmó el fix visualmente antes de entregarlo, no solo por teoría.
-
-**Regla para este proyecto, agregada a las anteriores:** cualquier ítem hijo de un `flex flex-col` con scroll (osea, cualquier fila de una lista) que tenga su propio `overflow-hidden` (para recortar esquinas redondeadas u otro contenido) DEBE llevar también `shrink-0` — si no, es candidato a este mismo bug apenas la lista no quepa entera en la pantalla.
+- Que el auto-registro con asistencia marcada también escriba la marca de "un check-in por dispositivo" (ver hueco menor arriba).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
