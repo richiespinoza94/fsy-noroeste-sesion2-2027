@@ -65,20 +65,21 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 23: filtro Ventanilla/Puente Piedra/Pro Lima/Otras (parche `0026`)
+## 6. Estado actual — Fase 24: menú inferior inteligente + reporte CSV descargable (parche `0027`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 37/37 pasan)
-- **Fases 1-22**: ver historial de commits/parches.
-- **Fase 23** — Búsqueda y Reportes listaban las 11 estacas una por una en su filtro; como esta sesión FSY es específicamente para Ventanilla/Puente Piedra/Pro Lima, se consolidó a 4 opciones: esas 3 + "Otras" (agrupa las 8 restantes).
-  - Nuevo helper compartido `estacaEnFiltro()` en `data/estacas.ts` (junto con `FILTRO_OTRAS`) — usado tanto en `BusquedaScreen` (chips) como en `ReportesScreen` (`<select>` y el desglose "Por estaca", que también se consolidó a 4 filas en vez de hasta 11).
-  - 3 pruebas de QA nuevas para el helper (34 → 37).
+- **Fases 1-23**: ver historial de commits/parches.
+- **Fase 24** (a pedido explícito, revisado con `ponytail` y `ui-ux-pro-max`):
+  - **Menú inferior inteligente**: se esconde al bajar en cualquier lista, reaparece al subir un poco — mismo patrón que YouTube/Instagram. `src/utils/useScrollDirection.ts` (hook compartido, con umbral de 8px para no dispararse por rebotes de 1-2px) conectado a las 5 pantallas. El `<nav>` en `App.tsx` pasó de ser un elemento normal del flex (`shrink-0`) a flotar encima del contenido (`absolute bottom-0` + `translate-y-full`/`translate-y-0` con transición) — así esconderlo no hace que el contenido salte para ocupar su lugar, solo revela lo que ya estaba ahí debajo. `navHidden` se resetea a visible cada vez que se cambia de pestaña. **Verificado visualmente con Playwright** (scroll hacia abajo → se esconde; scroll hacia arriba → reaparece) antes de entregarlo, mismo estándar que el bug de las filas aplastadas.
+  - **Descargar reporte completo (CSV)** en Reportes — botón junto al selector de estaca. `src/utils/csvExport.ts`: una fila por participante, una columna por cada capacitación (en orden cronológico) con su estado (Presente/Ausente/Justificado/Sin marca). Incluye BOM UTF-8 al inicio del archivo — sin eso, Excel en Windows rompe los acentos/ñ.
+  - **Pendiente de definir con Ricardo, no construido todavía**: una pestaña de "resumen de compromiso" por participante (capacitaciones elegibles desde que se registró, asistencias/inasistencias sobre esas, e indicadores de constancia) — se le presentó un análisis de qué métricas realmente miden compromiso vs. solo antigüedad, pendiente de que confirme cuáles quiere antes de construirlo.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
-- Que el auto-registro con asistencia marcada también escriba la marca de "un check-in por dispositivo" (ver Fase 22).
+- Resumen de compromiso/constancia por participante en Reportes (ver arriba — pendiente de definir métricas).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

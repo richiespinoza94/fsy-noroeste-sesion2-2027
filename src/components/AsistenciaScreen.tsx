@@ -2,17 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
 import { getNextCapacitacion } from '../services/capacitacionesService';
 import type { Asistencia, Capacitacion, Participante, SessionUser } from '../types';
+import { useScrollDirection } from '../utils/useScrollDirection';
 import QrAsistenciaModal from './QrAsistenciaModal';
 
 export default function AsistenciaScreen({
   user,
   participantes,
   capacitaciones,
+  onNavHiddenChange,
 }: {
   user: SessionUser;
   participantes: Participante[];
   capacitaciones: Capacitacion[];
+  onNavHiddenChange: (hidden: boolean) => void;
 }) {
+  const handleScroll = useScrollDirection(onNavHiddenChange);
   const [capId, setCapId] = useState('');
   const [asistencia, setAsistencia] = useState<Record<string, Asistencia>>({});
   const [query, setQuery] = useState('');
@@ -93,7 +97,7 @@ export default function AsistenciaScreen({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2 pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2 pb-24" onScroll={handleScroll}>
         {filtered.map((p) => {
           const estado = asistencia[p.id]?.estado;
           const checked = estado === 'presente';

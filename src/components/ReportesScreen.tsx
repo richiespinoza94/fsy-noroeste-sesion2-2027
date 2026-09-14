@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
+import { buildAsistenciaCsv, downloadCsv } from '../utils/csvExport';
+import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
 
 export default function ReportesScreen({
   participantes,
   capacitaciones,
+  onNavHiddenChange,
 }: {
   participantes: Participante[];
   capacitaciones: Capacitacion[];
+  onNavHiddenChange: (hidden: boolean) => void;
 }) {
+  const handleScroll = useScrollDirection(onNavHiddenChange);
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
 
@@ -45,14 +50,23 @@ export default function ReportesScreen({
   const chartWidth = Math.max(attByCap.length * (BAR_W + GAP) + GAP, 280);
 
   return (
-    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4">
-      <select className="input" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
-        <option value="">Todas las estacas</option>
-        {ESTACAS_PRINCIPALES.map((e) => (
-          <option key={e} value={e}>{e}</option>
-        ))}
-        <option value={FILTRO_OTRAS}>Otras</option>
-      </select>
+    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
+      <div className="flex gap-2">
+        <select className="input flex-1" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
+          <option value="">Todas las estacas</option>
+          {ESTACAS_PRINCIPALES.map((e) => (
+            <option key={e} value={e}>{e}</option>
+          ))}
+          <option value={FILTRO_OTRAS}>Otras</option>
+        </select>
+        <button
+          onClick={() => downloadCsv(buildAsistenciaCsv(participantes, capsOrdenadas, asistencia), `asistencia-fsy-2027-${new Date().toISOString().slice(0, 10)}.csv`)}
+          className="shrink-0 bg-primary text-white font-bold text-xs rounded-xl px-3 flex items-center gap-1.5"
+          title="Descargar CSV con todos los participantes y su asistencia a cada capacitación"
+        >
+          📥 CSV
+        </button>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Metric label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />

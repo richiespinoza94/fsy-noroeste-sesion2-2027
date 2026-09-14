@@ -18,6 +18,7 @@ import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } fro
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion } from '../services/capacitacionesService';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
+import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, type Asignacion, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type SessionUser, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
@@ -27,11 +28,14 @@ export default function GestionScreen({
   user,
   participantes,
   capacitaciones,
+  onNavHiddenChange,
 }: {
   user: SessionUser;
   participantes: Participante[];
   capacitaciones: Capacitacion[];
+  onNavHiddenChange: (hidden: boolean) => void;
 }) {
+  const handleScroll = useScrollDirection(onNavHiddenChange);
   const [sub, setSub] = useState<SubTab>('familias');
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
@@ -65,7 +69,7 @@ export default function GestionScreen({
           </button>
         ))}
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24" onScroll={handleScroll}>
         {sub === 'familias' && (
           <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} />
         )}

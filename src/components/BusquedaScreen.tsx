@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
 import { fuzzyIncludes } from '../utils/search';
+import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
 function matches(p: Participante, query: string): boolean {
@@ -17,10 +18,13 @@ const DISPONIBILIDAD_LABEL: Record<Disponibilidad, string> = {
 export default function BusquedaScreen({
   user,
   participantes,
+  onNavHiddenChange,
 }: {
   user: SessionUser;
   participantes: Participante[];
+  onNavHiddenChange: (hidden: boolean) => void;
 }) {
+  const handleScroll = useScrollDirection(onNavHiddenChange);
   const [query, setQuery] = useState('');
   const [filterEstaca, setFilterEstaca] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -70,7 +74,7 @@ export default function BusquedaScreen({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24 flex flex-col gap-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24 flex flex-col gap-2" onScroll={handleScroll}>
         {results.map((p) => {
           const open = expandedId === p.id;
           return (

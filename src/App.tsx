@@ -76,6 +76,8 @@ function StaffApp() {
   const [participantesLoaded, setParticipantesLoaded] = useState(false);
   const [capacitacionesLoaded, setCapacitacionesLoaded] = useState(false);
   const cargandoDatos = !participantesLoaded || !capacitacionesLoaded;
+  const [navHidden, setNavHidden] = useState(false);
+  useEffect(() => setNavHidden(false), [tab]);
 
   useEffect(() => {
     if (!user) return;
@@ -97,6 +99,12 @@ function StaffApp() {
 
   if (!user) return <LoginScreen onSuccess={setUser} />;
 
+  // Menú inferior que se esconde al bajar en la lista y reaparece al subir
+  // — mismo patrón que YouTube/Instagram. `navHidden` vive acá arriba
+  // porque el menú es un solo elemento compartido por las 5 pantallas, no
+  // algo que cada una controle por su cuenta.
+  const navProps = { onNavHiddenChange: setNavHidden };
+
   return (
     // Altura acotada en TODO tamaño de pantalla, no solo desktop — antes
     // solo `sm:h-[calc(100vh-48px)]` tenía límite; en celular el shell
@@ -107,7 +115,9 @@ function StaffApp() {
     // es la unidad pensada para el problema real de móvil donde la barra
     // de direcciones de Safari/Chrome aparece y desaparece cambiando el
     // alto disponible — `vh` se calcula mal en ese caso, `dvh` no.
-    <div className="h-dvh sm:h-[calc(100dvh-48px)] flex flex-col max-w-[850px] mx-auto bg-[#F4F6FA] sm:my-6 sm:rounded-3xl sm:shadow-2xl overflow-hidden">
+    // `relative` es necesario para que el <nav> (ahora `absolute`) flote
+    // anclado a ESTE contenedor y no a toda la ventana.
+    <div className="h-dvh sm:h-[calc(100dvh-48px)] relative flex flex-col max-w-[850px] mx-auto bg-[#F4F6FA] sm:my-6 sm:rounded-3xl sm:shadow-2xl overflow-hidden">
       {!isFirebaseConfigured && (
         <div className="bg-amber-100 text-amber-800 text-xs font-semibold text-center py-1.5">
           ⚠️ Modo local — sin conexión a Firestore, los datos no se guardan entre sesiones.
@@ -139,25 +149,36 @@ function StaffApp() {
           <main> pueda encogerse dentro del flex padre. */}
       <main className="flex-1 min-h-0 overflow-hidden">
         {tab === 'home' && (
-          <HomeScreen user={user} participantes={participantes} capacitaciones={capacitaciones} cargando={cargandoDatos} onNavigate={setTab} />
+          <HomeScreen
+            user={user}
+            participantes={participantes}
+            capacitaciones={capacitaciones}
+            cargando={cargandoDatos}
+            onNavigate={setTab}
+            {...navProps}
+          />
         )}
         {tab !== 'home' && (
           <Suspense fallback={<PantallaCargando />}>
             {tab === 'asistencia' && (
-              <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
+              <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
-            {tab === 'busqueda' && <BusquedaScreen user={user} participantes={participantes} />}
+            {tab === 'busqueda' && <BusquedaScreen user={user} participantes={participantes} {...navProps} />}
             {tab === 'gestion' && (
-              <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} />
+              <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
             {tab === 'reportes' && user.canViewReports && (
-              <ReportesScreen participantes={participantes} capacitaciones={capacitaciones} />
+              <ReportesScreen participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
           </Suspense>
         )}
       </main>
 
-      <nav className="bg-white border-t border-slate-200 flex shrink-0">
+      <nav
+        className={`absolute bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 flex shrink-0 transition-transform duration-300 ${
+          navHidden ? 'translate-y-full' : 'translate-y-0'
+        }`}
+      >
         {(
           [
             { id: 'home', icon: '🏠', label: 'Inicio' },
