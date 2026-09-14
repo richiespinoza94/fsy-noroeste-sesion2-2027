@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, downloadCsv } from '../utils/csvExport';
+import { calcularCompromiso } from '../utils/compromiso';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
+
+type SubTab = 'general' | 'compromiso';
 
 export default function ReportesScreen({
   participantes,
@@ -15,6 +18,7 @@ export default function ReportesScreen({
   onNavHiddenChange: (hidden: boolean) => void;
 }) {
   const handleScroll = useScrollDirection(onNavHiddenChange);
+  const [sub, setSub] = useState<SubTab>('general');
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
 
@@ -46,11 +50,37 @@ export default function ReportesScreen({
   ].filter((x) => x.n > 0);
   const byRol = ASIGNACIONES.map((r) => ({ rol: r, n: segmento.filter((p) => p.asignacion === r).length })).filter((x) => x.n > 0);
 
+  // Compromiso por persona: quién se preparó con tiempo y con constancia,
+  // no solo quién "asistió más" en números absolutos — ordenado por tasa de
+  // asistencia sobre lo que realmente pudo hacer (sin tasa aún = al final).
+  const compromiso = useMemo(
+    () =>
+      segmento
+        .map((p) => ({ p, c: calcularCompromiso(p, capsOrdenadas, asistencia) }))
+        .sort((a, b) => (b.c.tasaAsistencia ?? -1) - (a.c.tasaAsistencia ?? -1)),
+    [segmento, capsOrdenadas, asistencia]
+  );
+
   const BAR_W = 44, GAP = 16, H = 100;
   const chartWidth = Math.max(attByCap.length * (BAR_W + GAP) + GAP, 280);
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
+      <div className="flex bg-white rounded-xl p-1 shadow-sm">
+        <button
+          onClick={() => setSub('general')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg ${sub === 'general' ? 'bg-primary text-white' : 'text-slate-500'}`}
+        >
+          📊 General
+        </button>
+        <button
+          onClick={() => setSub('compromiso')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg ${sub === 'compromiso' ? 'bg-primary text-white' : 'text-slate-500'}`}
+        >
+          🎯 Compromiso
+        </button>
+      </div>
+
       <div className="flex gap-2">
         <select className="input flex-1" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
           <option value="">Todas las estacas</option>
@@ -68,12 +98,14 @@ export default function ReportesScreen({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Metric label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />
-        <Metric label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
-        <Metric label="Asistencia promedio" value={`${avgAtt}%`} color="#E8863A" icon="📈" />
-        <Metric label="Capacitaciones" value={capacitaciones.length} color="#9C27B0" icon="📅" />
-      </div>
+      {sub === 'general' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />
+            <Metric label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
+            <Metric label="Asistencia promedio" value={`${avgAtt}%`} color="#E8863A" icon="📈" />
+            <Metric label="Capacitaciones" value={capacitaciones.length} color="#9C27B0" icon="📅" />
+          </div>
 
       {attByCap.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -153,6 +185,43 @@ export default function ReportesScreen({
           </div>
         ))}
       </div>
+        </>
+      )}
+
+      {sub === 'compromiso' && (
+        <>
+          <div className="text-[11px] text-slate-500 px-1 leading-relaxed">
+            Ordenado por tasa de asistencia sobre lo que cada quien realmente pudo hacer desde que se registró — no
+            por cuánto tiempo lleva en el programa, para no castigar a quien se unió después.
+          </div>
+          <div className="flex flex-col gap-2">
+            {compromiso.map(({ p, c }) => (
+              <div key={p.id} className="bg-white rounded-2xl p-3.5 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold truncate flex items-center gap-1.5">
+                      {p.nombres} {p.apellidos}
+                      {c.rachaPerfecta && <span title="Asistió a todas las capacitaciones desde que se registró">🔥</span>}
+                    </div>
+                    <div className="text-[11px] text-slate-500">{p.estaca}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-extrabold text-primary">
+                      {c.tasaAsistencia === null ? '—' : `${Math.round(c.tasaAsistencia * 100)}%`}
+                    </div>
+                    <div className="text-[10px] text-slate-500">{c.asistencias}/{c.elegibles} asistencias</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                  <span>{c.asistencias} asistencias totales · {c.inasistencias} inasistencias</span>
+                  <span>Elegible en {c.elegibles}/{c.totalCapacitaciones} del programa</span>
+                </div>
+              </div>
+            ))}
+            {compromiso.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin participantes en este segmento.</div>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -65,21 +65,30 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 24: menú inferior inteligente + reporte CSV descargable (parche `0027`)
+## 6. Estado actual — Fase 25: pestaña Compromiso en Reportes (parche `0028`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 37/37 pasan)
-- **Fases 1-23**: ver historial de commits/parches.
-- **Fase 24** (a pedido explícito, revisado con `ponytail` y `ui-ux-pro-max`):
-  - **Menú inferior inteligente**: se esconde al bajar en cualquier lista, reaparece al subir un poco — mismo patrón que YouTube/Instagram. `src/utils/useScrollDirection.ts` (hook compartido, con umbral de 8px para no dispararse por rebotes de 1-2px) conectado a las 5 pantallas. El `<nav>` en `App.tsx` pasó de ser un elemento normal del flex (`shrink-0`) a flotar encima del contenido (`absolute bottom-0` + `translate-y-full`/`translate-y-0` con transición) — así esconderlo no hace que el contenido salte para ocupar su lugar, solo revela lo que ya estaba ahí debajo. `navHidden` se resetea a visible cada vez que se cambia de pestaña. **Verificado visualmente con Playwright** (scroll hacia abajo → se esconde; scroll hacia arriba → reaparece) antes de entregarlo, mismo estándar que el bug de las filas aplastadas.
-  - **Descargar reporte completo (CSV)** en Reportes — botón junto al selector de estaca. `src/utils/csvExport.ts`: una fila por participante, una columna por cada capacitación (en orden cronológico) con su estado (Presente/Ausente/Justificado/Sin marca). Incluye BOM UTF-8 al inicio del archivo — sin eso, Excel en Windows rompe los acentos/ñ.
-  - **Pendiente de definir con Ricardo, no construido todavía**: una pestaña de "resumen de compromiso" por participante (capacitaciones elegibles desde que se registró, asistencias/inasistencias sobre esas, e indicadores de constancia) — se le presentó un análisis de qué métricas realmente miden compromiso vs. solo antigüedad, pendiente de que confirme cuáles quiere antes de construirlo.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 42/42 pasan)
+- **Fases 1-24**: ver historial de commits/parches.
+- **Fase 25** — nueva sub-pestaña "🎯 Compromiso" dentro de Reportes, con los 4 indicadores que Ricardo pidió tras una discusión sobre qué mide compromiso de verdad (ver razonamiento completo abajo):
+  - **Tasa de asistencia sobre elegibles** (ej. 4/5 = 80%) — indicador principal, ordena la lista.
+  - **Elegibles/Total del programa** (ej. 5/18) — mostrado como contexto de antigüedad, NO como indicador de compromiso por sí solo (ver razonamiento).
+  - **Racha perfecta** (🔥) — asistió a TODAS sus capacitaciones elegibles, sin faltar ninguna.
+  - **Asistencias totales** (número crudo) — aparte del porcentaje, para no perder de vista el volumen real de participación.
+  - `src/utils/compromiso.ts` (`calcularCompromiso()`) — lógica pura, separada para poder probarla. "Elegible" = cualquier capacitación con fecha/hora igual o posterior al momento de registro de la persona (comparado como `Date`, no como texto — `participante.timestamp` es UTC con sufijo `Z` y `cap.fecha+hora` es local sin sufijo, compararlos como string daría resultados incorrectos). 5 pruebas nuevas (37 → 42), incluida el ejemplo exacto que dio Ricardo (registro en la capacitación #14 de 18 → 5 elegibles).
+  - Verificado visualmente con Playwright antes de entregarlo.
+
+### Razonamiento detrás de los indicadores — no cambiar sin releer esto
+
+El indicador "elegibles/total" mide **cuándo se unió alguien al programa**, no cuánto le importa — alguien que se registró tarde no es necesariamente menos comprometido, puede que se haya enterado después. Presentarlo como "indicador de compromiso" castigaría injustamente a quien se unió con entusiasmo pero tarde. Por eso se muestra como contexto ("Elegible en 5/18 del programa"), en texto chico, nunca como un porcentaje destacado compitiendo visualmente con la tasa de asistencia real.
+
+La **racha perfecta** se agregó porque un mismo porcentaje (ej. 80%) puede significar cosas distintas: faltar a la primera capacitación elegible (se acomodó rápido después) no es lo mismo que faltar a la más reciente (se está enfriando) — el 🔥 solo marca a quien no faltó ninguna, sin importar el total.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Restringir Asistencia/Búsqueda por familia para Auxiliar (decisión consciente de dejarlo fuera, ver Fase 20).
-- Resumen de compromiso/constancia por participante en Reportes (ver arriba — pendiente de definir métricas).
+- Exportar el resumen de Compromiso a CSV (hoy solo el CSV de asistencia cruda de la pestaña General existe).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

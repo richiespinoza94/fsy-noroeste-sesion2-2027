@@ -10,8 +10,9 @@ import {
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
+import { calcularCompromiso } from '../src/utils/compromiso';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
-import type { Capacitacion } from '../src/types';
+import type { Asistencia, Capacitacion, Participante } from '../src/types';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -253,6 +254,75 @@ test('37. estacaEnFiltro — FILTRO_OTRAS acepta cualquier estaca fuera de las 3
   assert.strictEqual(estacaEnFiltro('Miramar', FILTRO_OTRAS), true);
   assert.strictEqual(estacaEnFiltro('Ventanilla', FILTRO_OTRAS), false);
   assert.strictEqual(estacaEnFiltro('Pro Lima', FILTRO_OTRAS), false);
+});
+
+// ── calcularCompromiso — elegibilidad, tasa, cobertura, racha ──────────────
+
+function capFake(id: string, fecha: string, hora = '18:00'): Capacitacion {
+  return { id, label: `Cap ${id}`, fecha, hora, lugar: 'X', oficial: true };
+}
+function participanteFake(timestamp: string): Participante {
+  return {
+    id: 'p1', timestamp, nombres: 'Test', apellidos: 'Persona', fechaNacimiento: '2005-01-01',
+    telefono: '987654321', correo: 'test@correo.com', estaca: 'Ventanilla', barrio: 'Ventanilla',
+    genero: 'H', experienciaPrevia: 'ninguna', asignacionAnterior: '', disponibilidad: 'si',
+    asignacion: 'Consejero', familiaId: '',
+  };
+}
+// 18 capacitaciones, una por día de enero 2027 (del 1 al 18) a las 18:00.
+const CAPS_18 = Array.from({ length: 18 }, (_, i) => capFake(String(i + 1), `2027-01-${String(i + 1).padStart(2, '0')}`));
+
+test('38. calcularCompromiso — caso de ejemplo de Ricardo: se registra en la #14 de 18, quedan 5 elegibles', () => {
+  const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
+  const c = calcularCompromiso(p, CAPS_18, []);
+  assert.strictEqual(c.elegibles, 5); // 14, 15, 16, 17, 18
+  assert.strictEqual(c.totalCapacitaciones, 18);
+  assert.strictEqual(c.cobertura, 5 / 18);
+});
+
+test('39. calcularCompromiso — tasa de asistencia sobre elegibles (4 de 5 = 80%)', () => {
+  const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
+  const asistencia: Asistencia[] = [
+    { capacitacionId: '14', participanteId: 'p1', estado: 'presente', timestamp: '' },
+    { capacitacionId: '15', participanteId: 'p1', estado: 'presente', timestamp: '' },
+    { capacitacionId: '16', participanteId: 'p1', estado: 'ausente', timestamp: '' },
+    { capacitacionId: '17', participanteId: 'p1', estado: 'presente', timestamp: '' },
+    { capacitacionId: '18', participanteId: 'p1', estado: 'presente', timestamp: '' },
+  ];
+  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  assert.strictEqual(c.asistencias, 4);
+  assert.strictEqual(c.inasistencias, 1);
+  assert.strictEqual(c.tasaAsistencia, 4 / 5);
+  assert.strictEqual(c.rachaPerfecta, false);
+});
+
+test('40. calcularCompromiso — racha perfecta cuando asistió a TODAS sus elegibles', () => {
+  const p = participanteFake(new Date('2027-01-17T18:00:00').toISOString());
+  const asistencia: Asistencia[] = [
+    { capacitacionId: '17', participanteId: 'p1', estado: 'presente', timestamp: '' },
+    { capacitacionId: '18', participanteId: 'p1', estado: 'presente', timestamp: '' },
+  ];
+  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  assert.strictEqual(c.elegibles, 2);
+  assert.strictEqual(c.asistencias, 2);
+  assert.strictEqual(c.rachaPerfecta, true);
+});
+
+test('41. calcularCompromiso — sin elegibles todavía (se registró después de la última), tasa es null y no cuenta como racha', () => {
+  const p = participanteFake(new Date('2027-02-01T00:00:00').toISOString());
+  const c = calcularCompromiso(p, CAPS_18, []);
+  assert.strictEqual(c.elegibles, 0);
+  assert.strictEqual(c.tasaAsistencia, null);
+  assert.strictEqual(c.rachaPerfecta, false); // 0 elegibles no es "racha", es "todavía no aplica"
+});
+
+test('42. calcularCompromiso — asistencia marcada en una capacitación fuera del rango elegible no cuenta', () => {
+  // Se registró en la #14, pero por algún motivo hay un registro de
+  // asistencia de la #5 (antes de registrarse) — no debe sumar.
+  const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
+  const asistencia: Asistencia[] = [{ capacitacionId: '5', participanteId: 'p1', estado: 'presente', timestamp: '' }];
+  const c = calcularCompromiso(p, CAPS_18, asistencia);
+  assert.strictEqual(c.asistencias, 0);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);
