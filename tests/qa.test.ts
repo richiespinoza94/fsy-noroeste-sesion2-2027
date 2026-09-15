@@ -346,6 +346,32 @@ test('49. calcularCompromiso — caso real reportado: una capacitación futura y
   assert.strictEqual(c.totalCapacitaciones, 2); // esto sí sigue contando las 2 (responde otra pregunta)
 });
 
+test('57. calcularCompromiso — se registra DURANTE una capacitación en curso (auto-marcado): esa capacitación cuenta como elegible aunque su timestamp quede después', () => {
+  // Caso real reportado con captura: 4 personas asistieron de verdad (se
+  // registraron a mitad de la capacitación, vía el auto-marcado del
+  // registro) pero aparecían con "0/0 asistencias" — porque su timestamp
+  // de registro (18:20) queda DESPUÉS de la hora de inicio de la
+  // capacitación (18:00) a la que sí asistieron en ese mismo momento.
+  const cap = capFake('c1', '2026-09-13', '18:00');
+  const p = participanteFake(new Date('2026-09-13T18:20:00').toISOString()); // se registró 20 min después de que empezó
+  const asistencia: Asistencia[] = [{ capacitacionId: 'c1', participanteId: 'p1', estado: 'presente', timestamp: '' }];
+  const ahora = new Date('2026-09-13T19:00:00');
+  const c = calcularCompromiso(p, [cap], asistencia, ahora);
+  assert.strictEqual(c.elegibles, 1); // no 0 — hay evidencia real de que sí fue
+  assert.strictEqual(c.asistencias, 1);
+  assert.strictEqual(c.tasaAsistencia, 1); // 100%, no null/0%
+});
+
+test('58. calcularCompromiso — una capacitación anterior al registro SIN asistencia real sigue sin contar (la excepción es solo con evidencia)', () => {
+  // Confirma que el fix del caso 57 no abre la puerta a contar cualquier
+  // capacitación pasada — solo cuenta si hay un registro real de "presente".
+  const cap = capFake('c1', '2026-09-13', '18:00');
+  const p = participanteFake(new Date('2026-09-13T18:20:00').toISOString());
+  const c = calcularCompromiso(p, [cap], [], new Date('2026-09-13T19:00:00'));
+  assert.strictEqual(c.elegibles, 0);
+  assert.strictEqual(c.tasaAsistencia, null);
+});
+
 // ── getCapacitacionParaAutoMarcar — ¿debe marcar asistencia automática al
 // registrarse por primera vez? Separado de estadoVentanaCheckIn/
 // getCapacitacionParaCheckIn a propósito: aunque por dentro reusa esas dos,
