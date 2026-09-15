@@ -3,6 +3,7 @@ import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaSer
 import { getNextCapacitacion } from '../services/capacitacionesService';
 import type { Asistencia, Capacitacion, Participante, SessionUser } from '../types';
 import { useScrollDirection } from '../utils/useScrollDirection';
+import { nombreCorto } from '../utils/nombreCorto';
 import QrAsistenciaModal from './QrAsistenciaModal';
 
 export default function AsistenciaScreen({
@@ -110,7 +111,7 @@ export default function AsistenciaScreen({
               }`}
             >
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold truncate">{p.nombres} {p.apellidos}</div>
+                <div className="text-sm font-bold truncate">{nombreCorto(p.nombres, p.apellidos)}</div>
                 <div className="text-[11px] text-slate-500 truncate">⛪ {p.estaca}</div>
               </div>
               <button

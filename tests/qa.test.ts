@@ -11,6 +11,7 @@ import {
 import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
+import { nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 import type { Asistencia, Capacitacion, Participante } from '../src/types';
 
@@ -382,6 +383,37 @@ test('47. getCapacitacionParaAutoMarcar — justo en el borde de apertura (1h an
 test('48. getCapacitacionParaAutoMarcar — justo en el borde de cierre (3h después exacto) SÍ marca, 1 segundo más tarde no', () => {
   assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], new Date('2027-01-25T21:00:00'))?.id, 'ref');
   assert.strictEqual(getCapacitacionParaAutoMarcar([CAP_REF], new Date('2027-01-25T21:00:01')), null);
+});
+
+// ── nombreCorto — primer nombre + primer apellido, sin cortar partículas ──
+
+test('50. primerApellido — apellido simple sin partícula, corta al primero (descarta el materno)', () => {
+  assert.strictEqual(primerApellido('Gamarra Dioses'), 'Gamarra');
+});
+
+test('51. primerApellido — "De La Cruz Rodriguez" no se corta en "De" — arrastra la partícula completa', () => {
+  assert.strictEqual(primerApellido('De La Cruz Rodriguez'), 'De La Cruz');
+});
+
+test('52. primerApellido — "Del Carmen Flores" arrastra "Del" con el nombre que sigue', () => {
+  assert.strictEqual(primerApellido('Del Carmen Flores'), 'Del Carmen');
+});
+
+test('53. primerApellido — "De Los Santos Pardo", dos partículas seguidas antes del nombre real', () => {
+  assert.strictEqual(primerApellido('De Los Santos Pardo'), 'De Los Santos');
+});
+
+test('54. primerApellido — un solo apellido (sin materno) se queda igual', () => {
+  assert.strictEqual(primerApellido('Pérez'), 'Pérez');
+});
+
+test('55. primerNombre — nombre compuesto se corta al primero', () => {
+  assert.strictEqual(primerNombre('Maria Jose'), 'Maria');
+});
+
+test('56. nombreCorto — junta primer nombre + primer apellido completo', () => {
+  assert.strictEqual(nombreCorto('Benjamin Cesar', 'Gamarra Dioses'), 'Benjamin Gamarra');
+  assert.strictEqual(nombreCorto('Ana', 'De La Cruz Rodriguez'), 'Ana De La Cruz');
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

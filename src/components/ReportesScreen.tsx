@@ -4,6 +4,7 @@ import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
 import { useScrollDirection } from '../utils/useScrollDirection';
+import { nombreCorto } from '../utils/nombreCorto';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
 
 type SubTab = 'general' | 'compromiso';
@@ -199,9 +200,11 @@ export default function ReportesScreen({
               <div key={p.id} className="bg-white rounded-2xl p-3.5 shadow-sm">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm font-bold truncate flex items-center gap-1.5">
-                      {p.nombres} {p.apellidos}
-                      {c.rachaPerfecta && <span title="Asistió a todas las capacitaciones desde que se registró">🔥</span>}
+                    <div className="text-sm font-bold flex items-center gap-1.5">
+                      <span className="truncate">{nombreCorto(p.nombres, p.apellidos)}</span>
+                      {c.rachaPerfecta && (
+                        <span className="shrink-0" title="Asistió a todas las capacitaciones desde que se registró">🔥</span>
+                      )}
                     </div>
                     <div className="text-[11px] text-slate-500">{p.estaca}</div>
                   </div>

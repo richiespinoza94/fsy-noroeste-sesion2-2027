@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
 import { fuzzyIncludes } from '../utils/search';
+import { nombreCorto } from '../utils/nombreCorto';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
@@ -31,8 +32,14 @@ export default function BusquedaScreen({
   const [editing, setEditing] = useState<Participante | null>(null);
   const PAGE_SIZE = 20;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const MIN_QUERY = 3;
 
   const allResults = useMemo(() => {
+    // No mostrar a todo el roster de una sola vez sin ningún filtro —
+    // recién aparecen resultados al escribir al menos 3 letras, o al tocar
+    // un chip de estaca (acción explícita, funciona aunque el buscador
+    // esté vacío).
+    if (query.trim().length < MIN_QUERY && !filterEstaca) return [];
     let list = participantes.filter((p) => matches(p, query));
     if (filterEstaca) list = list.filter((p) => estacaEnFiltro(p.estaca, filterEstaca));
     return list;
@@ -69,9 +76,11 @@ export default function BusquedaScreen({
             Otras
           </Chip>
         </div>
-        <div className="text-[11px] text-slate-500 mt-1">
-          {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}
-        </div>
+        {(query.trim().length >= MIN_QUERY || filterEstaca) && (
+          <div className="text-[11px] text-slate-500 mt-1">
+            {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24 flex flex-col gap-2" onScroll={handleScroll}>
@@ -85,7 +94,7 @@ export default function BusquedaScreen({
               >
                 <Avatar nombres={p.nombres} apellidos={p.apellidos} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold truncate">{p.nombres} {p.apellidos}</div>
+                  <div className="text-sm font-bold truncate">{nombreCorto(p.nombres, p.apellidos)}</div>
                   <div className="text-[11px] text-slate-500 truncate">📱 {p.telefono} · ⛪ {p.estaca}</div>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap">
                     <Badge>{p.estaca}</Badge>
@@ -129,7 +138,15 @@ export default function BusquedaScreen({
             </div>
           );
         })}
-        {results.length === 0 && (
+        {results.length === 0 && query.trim().length < MIN_QUERY && !filterEstaca && (
+          <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
+            <div className="text-3xl mb-2">🔍</div>
+            <div className="text-sm text-slate-500">
+              Escribe al menos 3 letras (nombre, estaca o barrio), o elige una estaca arriba.
+            </div>
+          </div>
+        )}
+        {results.length === 0 && (query.trim().length >= MIN_QUERY || filterEstaca) && (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <div className="text-3xl mb-2">🔍</div>
             <div className="text-sm text-slate-500">Sin resultados para esta búsqueda.</div>

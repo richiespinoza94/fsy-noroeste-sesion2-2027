@@ -65,14 +65,14 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 27: fix real de Compromiso — capacitaciones futuras no cuentan (parche `0030`)
+## 6. Estado actual — Fase 28: nombres cortos + umbral de búsqueda (parche `0031`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 49/49 pasan)
-- **Fases 1-26**: ver historial de commits/parches.
-- **Fase 27** — bug real reportado por Ricardo con captura: la pestaña Compromiso mostraba a alguien con 50% (1/2) cuando en realidad debería ser 100% (1/1), porque `calcularCompromiso()` solo revisaba que una capacitación fuera POSTERIOR al registro de la persona, pero nunca revisaba que YA HUBIERA OCURRIDO. Crear capacitaciones futuras (planeadas, todavía no realizadas) inflaba el denominador de "elegibles" para todo el mundo.
-  - `calcularCompromiso()` ahora recibe un `ahora: Date = new Date()` y `elegibles` exige AMBOS límites: `capMs >= regMs && capMs <= nowMs`. Una capacitación creada para la semana que viene ya no cuenta en contra de nadie hasta que realmente pase.
-  - **`totalCapacitaciones`/`cobertura` NO cambiaron a propósito** — siguen contando TODAS las creadas (incluidas las futuras), porque responden una pregunta distinta ("de cuántas planeadas", antigüedad/contexto) de la que responde `elegibles` ("de cuántas que ya pasaron, sí pudiste ir").
-  - Prueba nueva #49, con los mismos datos exactos del reporte (capacitaciones del 13 y 20 de septiembre, "ahora" entre las dos) — confirma 1/1 = 100%, no 1/2 = 50%. Las pruebas 38-42 ya existentes se actualizaron para pasar un `ahora` explícito posterior a sus capacitaciones de prueba (todas en enero 2027), ya que antes dependían implícitamente del default `new Date()` sin fijarlo.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 56/56 pasan)
+- **Fases 1-27**: ver historial de commits/parches.
+- **Fase 28** (revisado con `ui-ux-pro-max`, `ponytail`, `frontend-design`, a pedido explícito con captura):
+  - **`src/utils/nombreCorto.ts`** — "primer nombre + primer apellido" para filas de lista compactas (Búsqueda, Asistencia, Compromiso en Reportes), cuidando apellidos peruanos compuestos con partícula ("De La Cruz", "Del Castillo", "De Los Santos") — arrastra la partícula hasta la primera palabra que no lo sea, en vez de cortar en "De" a secas. **No se tocó** el check-in público (`AutoCheckInScreen`) ni el CSV de Reportes — ahí se mantiene el nombre completo a propósito (autoidentificación y registro oficial). 7 pruebas nuevas (49 → 56).
+  - **Bug real encontrado en el camino**: en la fila de Compromiso, `truncate` estaba aplicado a toda la fila (nombre + ícono 🔥 juntos) en vez de solo al texto del nombre — con nombres largos, el emoji se recortaba de forma rara (se veía como un puntito naranja en vez de la llama completa, visible en la captura que mandó Ricardo). Se separó: `truncate` solo en un `<span>` con el nombre, `shrink-0` en el ícono aparte.
+  - **Umbral de 3 letras en Búsqueda** — antes se mostraban los ~14+ participantes completos con el buscador vacío; ahora no aparece nada hasta escribir 3 letras (nombre, estaca o barrio) O tocar un chip de estaca (que sigue funcionando con el buscador vacío, es una acción explícita distinta). Mensaje distinto según el caso: "escribe al menos 3 letras…" vs. "sin resultados para esta búsqueda" — para no confundir "todavía no buscaste" con "buscaste y no había nadie". El contador de resultados tampoco se muestra hasta que hay una búsqueda real.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
@@ -80,6 +80,7 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Filtro dedicado en Búsqueda para "solo con habilidad audiovisual".
 - Incluir los campos de audiovisual en el CSV de Reportes.
+- Autocomplete de sugerencias por categoría (nombre/estaca/barrio) en Búsqueda — se implementó la interpretación más simple (umbral de 3 letras antes de mostrar resultados); si Ricardo en realidad quería un dropdown de sugerencias separado, es una fase aparte.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
