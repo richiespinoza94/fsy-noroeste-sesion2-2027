@@ -125,6 +125,11 @@ export default function BusquedaScreen({
                     label="Equipo AV"
                     value={{ si: 'Sí, tiene equipo', algo: 'Tiene algo', no: 'No tiene equipo', '': 'No contestado' }[p.audiovisualEquipo || '']}
                   />
+                  <Row
+                    icon="🔒"
+                    label="Consentimiento"
+                    value={p.consentimientoDatosFecha ? `Aceptado (${p.consentimientoDatosFecha.slice(0, 10)})` : 'Pendiente'}
+                  />
                   {user.canEditAll && (
                     <button
                       onClick={() => setEditing(p)}

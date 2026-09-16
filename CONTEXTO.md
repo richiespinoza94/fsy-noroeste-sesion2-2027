@@ -65,20 +65,23 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 30: Compromiso — la evidencia real de asistencia siempre gana (parche `0033`)
+## 6. Estado actual — Fase 31: consentimiento de datos e imagen — obligatorio (parche `0034`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 59/59 pasan)
-- **Fases 1-29**: ver historial de commits/parches.
-- **Fase 30** — corrección sobre la Fase 29: el fix anterior limitó la excepción a "registro dentro de las 3h del inicio de la capacitación", por una suposición propia (no pedida) de que había que proteger contra asistencias mal marcadas. Ricardo reportó con captura que eso seguía dejando fuera casos reales: personas cuya asistencia se marcó A MANO desde Asistencia, fuera de esa ventana, seguían mostrando "—" en vez de 100% aunque sí asistieron.
-  - **Regla simplificada y definitiva**: si hay un registro de asistencia `presente` para una capacitación, esa capacitación SIEMPRE cuenta como elegible — sin importar cuándo se marcó ni qué tan lejos esté de la fecha de registro de la persona. Se quitó la constante `TOLERANCIA_REGISTRO_DURANTE_MS` (3h) por completo. Si algún día se marca a la persona equivocada por error, la corrección es desmarcarla desde Asistencia — el cálculo de compromiso no debe intentar adivinar/filtrar eso por su cuenta.
-  - La prueba #42 (que antes afirmaba lo contrario — era una suposición mía, no un requisito real) se corrigió para reflejar el comportamiento correcto. Prueba nueva #59 con el caso exacto de la captura (registro después de ambas capacitaciones, asistencia marcada a mano).
+- **Fases 1-30**: ver historial de commits/parches.
+- **Fase 31** — a pedido explícito, planeado con `ux-ui-pro-max`/`ponytail` antes de implementar:
+  - **Dato**: `Participante.consentimientoDatosFecha: string` — mismo patrón sentinel que `audiovisualEquipo` (`''` = no ha aceptado, ISO string = aceptó en ese momento). Se guarda la FECHA, no un booleano, porque para un consentimiento legal importa cuándo se dio.
+  - **Registro nuevo**: va al final del Paso 4 existente (NO un Paso 5 nuevo — `ponytail`), como tarjeta claramente separada de lo audiovisual (ícono 🔒, encabezado propio "Consentimiento"), con asterisco rojo de obligatorio. Es el ÚNICO campo requerido del Paso 4 — `step4Valid` nuevo, el botón "Enviar registro" se bloquea sin la casilla marcada, con su propio mensaje en "Faltan: …".
+  - **Ya registrados**: se extendió el mismo prompt de audiovisual en `AutoCheckInScreen` para también revisar `consentimientoDatosFecha`. Diferencia clave con audiovisual: **no tiene botón "Omitir"** — si falta el consentimiento, "Guardar y marcar asistencia" queda deshabilitado hasta marcar la casilla. Si además falta lo audiovisual, esa parte se muestra igual (opcional) en el mismo formulario. El botón "Omitir y solo marcar asistencia" solo aparece cuando lo único pendiente es audiovisual (consentimiento ya resuelto).
+  - Visible en la ficha expandida de Búsqueda ("🔒 Consentimiento: Aceptado (fecha)" o "Pendiente").
+  - Verificado visualmente con Playwright antes de entregarlo.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual".
-- Incluir los campos de audiovisual en el CSV de Reportes.
+- Documento legal completo de política de privacidad enlazado — el texto del consentimiento es autocontenido en el checkbox, no hay una página aparte con el texto completo todavía.
+- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual" ni para "consentimiento pendiente".
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

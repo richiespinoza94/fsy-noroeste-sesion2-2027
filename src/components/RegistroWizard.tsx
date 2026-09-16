@@ -35,6 +35,7 @@ const EMPTY = {
   audiovisualHabilidades: [] as string[],
   audiovisualOtro: '',
   audiovisualEquipo: '' as 'si' | 'no' | 'algo' | '',
+  aceptaConsentimiento: false,
 };
 
 export default function RegistroWizard() {
@@ -98,6 +99,9 @@ export default function RegistroWizard() {
     !!form.disponibilidad &&
     !!form.experienciaPrevia &&
     (form.experienciaPrevia === 'ninguna' || !!form.asignacionAnterior);
+  // Lo único obligatorio del Paso 4 es el consentimiento — todo lo
+  // audiovisual sigue siendo opcional.
+  const step4Valid = form.aceptaConsentimiento;
 
   // Lista legible de qué falta completar en el paso actual — el botón se
   // queda gris igual que antes, pero ahora explica por qué en vez de dejar
@@ -120,6 +124,8 @@ export default function RegistroWizard() {
       if (!form.experienciaPrevia) faltan.push('Experiencia previa');
       if (form.experienciaPrevia && form.experienciaPrevia !== 'ninguna' && !form.asignacionAnterior) faltan.push('Asignación anterior');
       if (!form.disponibilidad) faltan.push('Disponibilidad');
+    } else if (step === 4) {
+      if (!form.aceptaConsentimiento) faltan.push('Aceptar el tratamiento de datos');
     }
     return faltan;
   }, [step, form, isBarrioLibre]);
@@ -144,6 +150,7 @@ export default function RegistroWizard() {
         ? [...form.audiovisualHabilidades, form.audiovisualOtro.trim()]
         : form.audiovisualHabilidades,
       audiovisualEquipo: form.audiovisualEquipo,
+      consentimientoDatosFecha: new Date().toISOString(),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -479,6 +486,25 @@ export default function RegistroWizard() {
                   />
                 </Field>
               </div>
+
+              <SectionHeader icon="🔒" title="Consentimiento" />
+              <label
+                className={`flex items-start gap-3 rounded-2xl border-[1.5px] p-4 cursor-pointer ${
+                  form.aceptaConsentimiento ? 'bg-primary/5 border-primary' : 'bg-white border-slate-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.aceptaConsentimiento}
+                  onChange={(e) => setForm({ ...form, aceptaConsentimiento: e.target.checked })}
+                  className="w-5 h-5 mt-0.5 accent-primary shrink-0"
+                />
+                <span className="text-sm leading-relaxed">
+                  <span className="text-red-500 font-bold">* </span>
+                  Acepto el tratamiento de mis datos personales y el uso de mi imagen (fotos y video) para fines del
+                  evento FSY 2027, conforme a la Ley de Protección de Datos Personales.
+                </span>
+              </label>
             </>
           )}
 
@@ -500,7 +526,7 @@ export default function RegistroWizard() {
               </button>
             ) : (
               <button
-                disabled={submitting}
+                disabled={submitting || !step4Valid}
                 onClick={submit}
                 className="flex-1 bg-primary text-white font-bold rounded-xl py-3 disabled:opacity-40"
               >

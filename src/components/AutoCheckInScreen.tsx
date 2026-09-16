@@ -95,47 +95,53 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
     setConfirmado(p);
   }
 
-  // Antes de marcar asistencia, si esta persona nunca contestó las preguntas
-  // de audiovisual (`audiovisualEquipo === ''` es la señal de "nunca se le
-  // preguntó"), se le ofrece contestarlas — sin bloquear el check-in, con
-  // "Omitir" siempre a la vista. `marcar()` en sí no se toca: el prompt solo
-  // la llama después, nunca la reemplaza.
+  // Antes de marcar asistencia, si a esta persona le falta el
+  // consentimiento (obligatorio) y/o nunca contestó audiovisual (opcional),
+  // se le ofrece resolverlo aquí. `marcar()` en sí no se toca: el prompt
+  // solo la llama después, nunca la reemplaza.
+  //
+  // `!p.campo` (no `=== ''`) a propósito en los dos: para participantes
+  // registrados antes de que estos campos existieran, Firestore ni
+  // siquiera tiene la propiedad (`undefined`), no un string vacío.
   const [pendingAv, setPendingAv] = useState<Participante | null>(null);
   const [avHabilidades, setAvHabilidades] = useState<string[]>([]);
   const [avOtro, setAvOtro] = useState('');
   const [avEquipo, setAvEquipo] = useState<'si' | 'no' | 'algo' | ''>('');
+  const [aceptoConsentimiento, setAceptoConsentimiento] = useState(false);
   const [guardandoAv, setGuardandoAv] = useState(false);
+  const faltaConsentimiento = !!pendingAv && !pendingAv.consentimientoDatosFecha;
+  const faltaAudiovisual = !!pendingAv && !pendingAv.audiovisualEquipo;
 
   function alTocarPersona(p: Participante) {
-    // `!p.audiovisualEquipo` (no `=== ''`) a propósito: para participantes
-    // registrados antes de que este campo existiera, Firestore ni siquiera
-    // tiene la propiedad (`undefined`), no un string vacío — comparar solo
-    // contra `''` los habría dejado sin preguntarles nunca.
-    if (!p.audiovisualEquipo) {
+    if (!p.consentimientoDatosFecha || !p.audiovisualEquipo) {
       setPendingAv(p);
       setAvHabilidades([]);
       setAvOtro('');
       setAvEquipo('');
+      setAceptoConsentimiento(false);
     } else {
       marcar(p);
     }
   }
 
-  async function guardarAudiovisualYMarcar() {
-    if (!pendingAv) return;
+  async function guardarYMarcar() {
+    if (!pendingAv || (faltaConsentimiento && !aceptoConsentimiento)) return;
     setGuardandoAv(true);
-    const habilidades = avOtro.trim() ? [...avHabilidades, avOtro.trim()] : avHabilidades;
-    await updateParticipante(
-      pendingAv.id,
-      { audiovisualHabilidades: habilidades, audiovisualEquipo: avEquipo },
-      `autoregistro-audiovisual:${pendingAv.nombres} ${pendingAv.apellidos}`
-    );
+    const changes: Partial<Participante> = {};
+    if (faltaConsentimiento) changes.consentimientoDatosFecha = new Date().toISOString();
+    if (faltaAudiovisual) {
+      changes.audiovisualHabilidades = avOtro.trim() ? [...avHabilidades, avOtro.trim()] : avHabilidades;
+      changes.audiovisualEquipo = avEquipo;
+    }
+    await updateParticipante(pendingAv.id, changes, `autoregistro-consentimiento:${pendingAv.nombres} ${pendingAv.apellidos}`);
     const p = pendingAv;
     setGuardandoAv(false);
     setPendingAv(null);
     await marcar(p);
   }
 
+  // Solo se puede omitir cuando lo único pendiente es lo audiovisual — el
+  // consentimiento nunca tiene salida de "omitir", es obligatorio de verdad.
   function omitirAudiovisual() {
     const p = pendingAv;
     setPendingAv(null);
@@ -298,70 +304,103 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
 
       {pendingAv && (
         <div className="fixed inset-0 bg-black/40 flex items-end z-50">
-          <div className="bg-white rounded-t-3xl w-full max-w-[500px] mx-auto p-6">
+          <div className="bg-white rounded-t-3xl w-full max-w-[500px] mx-auto p-6 max-h-[90vh] overflow-y-auto">
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
             <div className="font-extrabold text-lg text-primary mb-0.5">¡Hola, {pendingAv.nombres}!</div>
-            <div className="text-xs text-slate-500 mb-4">
-              Dos preguntas rápidas y opcionales — nos ayudan a armar el equipo audiovisual.
-            </div>
 
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-              ¿Tienes experiencia o habilidad en algo de esto?
-            </div>
-            <div className="flex flex-col gap-2 mb-3">
-              {HABILIDADES_AUDIOVISUAL.map((h) => (
-                <label key={h} className="flex items-center gap-2.5 bg-slate-50 rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={avHabilidades.includes(h)}
-                    onChange={(e) =>
-                      setAvHabilidades(e.target.checked ? [...avHabilidades, h] : avHabilidades.filter((x) => x !== h))
-                    }
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <span className="text-sm font-semibold">{h}</span>
-                </label>
-              ))}
-            </div>
-            <input
-              className="input mb-4"
-              placeholder="Otra habilidad (opcional)"
-              value={avOtro}
-              onChange={(e) => setAvOtro(e.target.value)}
-            />
-
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-              ¿Tienes equipo propio? (cámara, laptop con software de edición, etc.)
-            </div>
-            <div className="flex flex-col gap-2 mb-5">
-              {[
-                { value: 'si', label: 'Sí, tengo equipo propio' },
-                { value: 'algo', label: 'Tengo algo, no completo' },
-                { value: 'no', label: 'No tengo equipo' },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setAvEquipo(opt.value as 'si' | 'no' | 'algo')}
-                  className={`text-left text-sm font-semibold rounded-xl border-[1.5px] px-3.5 py-2.5 ${
-                    avEquipo === opt.value ? 'bg-primary/10 border-primary text-primary' : 'border-slate-200'
+            {faltaConsentimiento && (
+              <>
+                <div className="text-xs text-slate-500 mb-3">Antes de marcar tu asistencia, necesitamos esto:</div>
+                <label
+                  className={`flex items-start gap-3 rounded-2xl border-[1.5px] p-4 mb-4 cursor-pointer ${
+                    aceptoConsentimiento ? 'bg-primary/5 border-primary' : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+                  <input
+                    type="checkbox"
+                    checked={aceptoConsentimiento}
+                    onChange={(e) => setAceptoConsentimiento(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 accent-primary shrink-0"
+                  />
+                  <span className="text-sm leading-relaxed">
+                    <span className="text-red-500 font-bold">* </span>
+                    Acepto el tratamiento de mis datos personales y el uso de mi imagen (fotos y video) para fines
+                    del evento FSY 2027, conforme a la Ley de Protección de Datos Personales.
+                  </span>
+                </label>
+              </>
+            )}
+
+            {faltaAudiovisual && (
+              <>
+                <div className="text-xs text-slate-500 mb-4">
+                  {faltaConsentimiento ? 'Y dos preguntas rápidas y opcionales' : 'Dos preguntas rápidas y opcionales'} —
+                  nos ayudan a armar el equipo audiovisual.
+                </div>
+
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  ¿Tienes experiencia o habilidad en algo de esto?
+                </div>
+                <div className="flex flex-col gap-2 mb-3">
+                  {HABILIDADES_AUDIOVISUAL.map((h) => (
+                    <label key={h} className="flex items-center gap-2.5 bg-slate-50 rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={avHabilidades.includes(h)}
+                        onChange={(e) =>
+                          setAvHabilidades(e.target.checked ? [...avHabilidades, h] : avHabilidades.filter((x) => x !== h))
+                        }
+                        className="w-4 h-4 accent-primary"
+                      />
+                      <span className="text-sm font-semibold">{h}</span>
+                    </label>
+                  ))}
+                </div>
+                <input
+                  className="input mb-4"
+                  placeholder="Otra habilidad (opcional)"
+                  value={avOtro}
+                  onChange={(e) => setAvOtro(e.target.value)}
+                />
+
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  ¿Tienes equipo propio? (cámara, laptop con software de edición, etc.)
+                </div>
+                <div className="flex flex-col gap-2 mb-5">
+                  {[
+                    { value: 'si', label: 'Sí, tengo equipo propio' },
+                    { value: 'algo', label: 'Tengo algo, no completo' },
+                    { value: 'no', label: 'No tengo equipo' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setAvEquipo(opt.value as 'si' | 'no' | 'algo')}
+                      className={`text-left text-sm font-semibold rounded-xl border-[1.5px] px-3.5 py-2.5 ${
+                        avEquipo === opt.value ? 'bg-primary/10 border-primary text-primary' : 'border-slate-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <button
-              disabled={guardandoAv}
-              onClick={guardarAudiovisualYMarcar}
+              disabled={guardandoAv || (faltaConsentimiento && !aceptoConsentimiento)}
+              onClick={guardarYMarcar}
               className="w-full bg-primary text-white font-bold rounded-xl py-3.5 mb-2 disabled:opacity-50"
             >
               {guardandoAv ? 'Guardando…' : 'Guardar y marcar asistencia'}
             </button>
-            <button onClick={omitirAudiovisual} className="w-full text-slate-500 font-semibold text-sm py-2">
-              Omitir y solo marcar asistencia
-            </button>
+            {/* El consentimiento nunca tiene salida de "omitir" — solo se
+                puede saltar cuando lo único pendiente es lo audiovisual. */}
+            {!faltaConsentimiento && (
+              <button onClick={omitirAudiovisual} className="w-full text-slate-500 font-semibold text-sm py-2">
+                Omitir y solo marcar asistencia
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -61,6 +61,11 @@ export interface Participante {
   // es lo que permite ofrecer la pregunta la próxima vez que haga check-in.
   audiovisualHabilidades: string[]; // de HABILIDADES_AUDIOVISUAL, + texto libre si "Otra"
   audiovisualEquipo: EquipoAudiovisual;
+  // Obligatorio, a diferencia de lo audiovisual. Se guarda la fecha (no un
+  // booleano) porque para un consentimiento legal importa CUÁNDO se dio,
+  // no solo si — mismo patrón sentinel que audiovisualEquipo: '' = todavía
+  // no aceptó, cualquier ISO string = aceptó en ese momento.
+  consentimientoDatosFecha: string;
 }
 
 export interface Familia {

@@ -78,6 +78,7 @@ export interface RegistroInput {
   disponibilidad: 'si' | 'no_creo' | 'no_se';
   audiovisualHabilidades: string[];
   audiovisualEquipo: 'si' | 'no' | 'algo' | '';
+  consentimientoDatosFecha: string;
 }
 
 export type RegistroResult =
@@ -110,6 +111,7 @@ export async function registrarParticipante(input: RegistroInput): Promise<Regis
     familiaId: '',
     audiovisualHabilidades: input.audiovisualHabilidades,
     audiovisualEquipo: input.audiovisualEquipo,
+    consentimientoDatosFecha: input.consentimientoDatosFecha,
   };
 
   if (!db) {
