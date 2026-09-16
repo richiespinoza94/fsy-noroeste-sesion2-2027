@@ -65,23 +65,19 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 31: consentimiento de datos e imagen — obligatorio (parche `0034`)
+## 6. Estado actual — Fase 32: fechas del evento + filtro de audiovisual en Búsqueda (parche `0035`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 59/59 pasan)
-- **Fases 1-30**: ver historial de commits/parches.
-- **Fase 31** — a pedido explícito, planeado con `ux-ui-pro-max`/`ponytail` antes de implementar:
-  - **Dato**: `Participante.consentimientoDatosFecha: string` — mismo patrón sentinel que `audiovisualEquipo` (`''` = no ha aceptado, ISO string = aceptó en ese momento). Se guarda la FECHA, no un booleano, porque para un consentimiento legal importa cuándo se dio.
-  - **Registro nuevo**: va al final del Paso 4 existente (NO un Paso 5 nuevo — `ponytail`), como tarjeta claramente separada de lo audiovisual (ícono 🔒, encabezado propio "Consentimiento"), con asterisco rojo de obligatorio. Es el ÚNICO campo requerido del Paso 4 — `step4Valid` nuevo, el botón "Enviar registro" se bloquea sin la casilla marcada, con su propio mensaje en "Faltan: …".
-  - **Ya registrados**: se extendió el mismo prompt de audiovisual en `AutoCheckInScreen` para también revisar `consentimientoDatosFecha`. Diferencia clave con audiovisual: **no tiene botón "Omitir"** — si falta el consentimiento, "Guardar y marcar asistencia" queda deshabilitado hasta marcar la casilla. Si además falta lo audiovisual, esa parte se muestra igual (opcional) en el mismo formulario. El botón "Omitir y solo marcar asistencia" solo aparece cuando lo único pendiente es audiovisual (consentimiento ya resuelto).
-  - Visible en la ficha expandida de Búsqueda ("🔒 Consentimiento: Aceptado (fecha)" o "Pendiente").
-  - Verificado visualmente con Playwright antes de entregarlo.
+- **Fases 1-31**: ver historial de commits/parches.
+- **Fase 32**:
+  - **Fechas del evento**: `del 25 al 29 de enero` → `del 18 al 23 de enero de 2027`, en `data/evento.ts` — único lugar que hay que tocar (centralizado desde la Fase 5), se refleja solo en la pregunta de disponibilidad del registro y en la tarjeta del QR de recepción. Se asumió que el mes sigue siendo enero, ya que no se indicó otro.
+  - **Filtro de audiovisual en Búsqueda** — botón `🎬 AV` al costado de los chips de estaca (no dentro del grupo, a propósito: son filtros independientes que se pueden combinar, ej. "Ventanilla" + "con habilidad AV" a la vez, a diferencia de las estacas que son mutuamente excluyentes). Filtra por `audiovisualHabilidades.length > 0` — "tiene experiencia", no por tener equipo. Funciona como acción explícita, igual que un chip de estaca: muestra resultados aunque el buscador esté vacío.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Documento legal completo de política de privacidad enlazado — el texto del consentimiento es autocontenido en el checkbox, no hay una página aparte con el texto completo todavía.
-- Filtro dedicado en Búsqueda para "solo con habilidad audiovisual" ni para "consentimiento pendiente".
+- Filtro de "consentimiento pendiente" en Búsqueda (solo existe el de audiovisual por ahora).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

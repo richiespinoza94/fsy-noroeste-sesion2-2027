@@ -28,22 +28,28 @@ export default function BusquedaScreen({
   const handleScroll = useScrollDirection(onNavHiddenChange);
   const [query, setQuery] = useState('');
   const [filterEstaca, setFilterEstaca] = useState('');
+  const [soloAudiovisual, setSoloAudiovisual] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Participante | null>(null);
   const PAGE_SIZE = 20;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const MIN_QUERY = 3;
+  // Se repite en varios lugares (mostrar resultados, mostrar el contador,
+  // qué mensaje de "vacío" usar) — un chip de estaca o el filtro de
+  // audiovisual son acciones explícitas, igual que escribir 3 letras.
+  const hayFiltroActivo = !!filterEstaca || soloAudiovisual;
 
   const allResults = useMemo(() => {
     // No mostrar a todo el roster de una sola vez sin ningún filtro —
     // recién aparecen resultados al escribir al menos 3 letras, o al tocar
-    // un chip de estaca (acción explícita, funciona aunque el buscador
-    // esté vacío).
-    if (query.trim().length < MIN_QUERY && !filterEstaca) return [];
+    // un chip de estaca / el filtro de audiovisual (acciones explícitas,
+    // funcionan aunque el buscador esté vacío).
+    if (query.trim().length < MIN_QUERY && !hayFiltroActivo) return [];
     let list = participantes.filter((p) => matches(p, query));
     if (filterEstaca) list = list.filter((p) => estacaEnFiltro(p.estaca, filterEstaca));
+    if (soloAudiovisual) list = list.filter((p) => p.audiovisualHabilidades?.length);
     return list;
-  }, [participantes, query, filterEstaca]);
+  }, [participantes, query, filterEstaca, soloAudiovisual, hayFiltroActivo]);
   // Montar cientos de filas de una sola vez (cada una con su propio botón
   // expandible) es el mismo problema real que ya documentó CONFEJAS 2026 a
   // los 500 participantes — se pagina en tandas desde el principio en vez
@@ -63,20 +69,31 @@ export default function BusquedaScreen({
             setVisibleCount(PAGE_SIZE);
           }}
         />
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
-            Todas
-          </Chip>
-          {ESTACAS_PRINCIPALES.map((e) => (
-            <Chip key={e} active={filterEstaca === e} onClick={() => { setFilterEstaca(filterEstaca === e ? '' : e); setVisibleCount(PAGE_SIZE); }}>
-              {e}
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-2 overflow-x-auto pb-1 flex-1">
+            <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
+              Todas
             </Chip>
-          ))}
-          <Chip active={filterEstaca === FILTRO_OTRAS} onClick={() => { setFilterEstaca(filterEstaca === FILTRO_OTRAS ? '' : FILTRO_OTRAS); setVisibleCount(PAGE_SIZE); }}>
-            Otras
-          </Chip>
+            {ESTACAS_PRINCIPALES.map((e) => (
+              <Chip key={e} active={filterEstaca === e} onClick={() => { setFilterEstaca(filterEstaca === e ? '' : e); setVisibleCount(PAGE_SIZE); }}>
+                {e}
+              </Chip>
+            ))}
+            <Chip active={filterEstaca === FILTRO_OTRAS} onClick={() => { setFilterEstaca(filterEstaca === FILTRO_OTRAS ? '' : FILTRO_OTRAS); setVisibleCount(PAGE_SIZE); }}>
+              Otras
+            </Chip>
+          </div>
+          <button
+            onClick={() => { setSoloAudiovisual((v) => !v); setVisibleCount(PAGE_SIZE); }}
+            title="Solo con experiencia en audiovisuales"
+            className={`shrink-0 text-xs font-bold rounded-full px-3.5 py-2.5 whitespace-nowrap border-[1.5px] ${
+              soloAudiovisual ? 'bg-accent border-accent text-primary' : 'bg-white border-slate-200 text-slate-600'
+            }`}
+          >
+            🎬 AV
+          </button>
         </div>
-        {(query.trim().length >= MIN_QUERY || filterEstaca) && (
+        {(query.trim().length >= MIN_QUERY || hayFiltroActivo) && (
           <div className="text-[11px] text-slate-500 mt-1">
             {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}
           </div>
@@ -143,7 +160,7 @@ export default function BusquedaScreen({
             </div>
           );
         })}
-        {results.length === 0 && query.trim().length < MIN_QUERY && !filterEstaca && (
+        {results.length === 0 && query.trim().length < MIN_QUERY && !hayFiltroActivo && (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <div className="text-3xl mb-2">🔍</div>
             <div className="text-sm text-slate-500">
@@ -151,7 +168,7 @@ export default function BusquedaScreen({
             </div>
           </div>
         )}
-        {results.length === 0 && (query.trim().length >= MIN_QUERY || filterEstaca) && (
+        {results.length === 0 && (query.trim().length >= MIN_QUERY || hayFiltroActivo) && (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <div className="text-3xl mb-2">🔍</div>
             <div className="text-sm text-slate-500">Sin resultados para esta búsqueda.</div>
