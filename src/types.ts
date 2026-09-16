@@ -38,6 +38,11 @@ export const ASIGNACIONES_PREVIAS = [
 
 export type EquipoAudiovisual = 'si' | 'no' | 'algo' | '';
 export const HABILIDADES_AUDIOVISUAL = ['Edición de video', 'Fotografía', 'Diseño gráfico'] as const;
+// Opción explícita, separada de las habilidades reales — antes, alguien sin
+// ninguna experiencia terminaba escribiendo "No" en el campo de texto
+// libre de "otra habilidad", ensuciando el dato. Al marcarla se destildan
+// las demás (y viceversa) — ver la lógica en RegistroWizard/AutoCheckInScreen.
+export const SIN_EXPERIENCIA_AV = 'No tengo experiencia';
 
 export interface Participante {
   id: string;

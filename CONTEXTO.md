@@ -65,19 +65,21 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 32: fechas del evento + filtro de audiovisual en Búsqueda (parche `0035`)
+## 6. Estado actual — Fase 33: fix del filtro de audiovisual + opción explícita "No tengo experiencia" (parche `0036`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 59/59 pasan)
-- **Fases 1-31**: ver historial de commits/parches.
-- **Fase 32**:
-  - **Fechas del evento**: `del 25 al 29 de enero` → `del 18 al 23 de enero de 2027`, en `data/evento.ts` — único lugar que hay que tocar (centralizado desde la Fase 5), se refleja solo en la pregunta de disponibilidad del registro y en la tarjeta del QR de recepción. Se asumió que el mes sigue siendo enero, ya que no se indicó otro.
-  - **Filtro de audiovisual en Búsqueda** — botón `🎬 AV` al costado de los chips de estaca (no dentro del grupo, a propósito: son filtros independientes que se pueden combinar, ej. "Ventanilla" + "con habilidad AV" a la vez, a diferencia de las estacas que son mutuamente excluyentes). Filtra por `audiovisualHabilidades.length > 0` — "tiene experiencia", no por tener equipo. Funciona como acción explícita, igual que un chip de estaca: muestra resultados aunque el buscador esté vacío.
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 66/66 pasan)
+- **Fases 1-32**: ver historial de commits/parches.
+- **Fase 33** — bug real reportado por Ricardo con captura: el filtro "🎬 AV" de Búsqueda mostraba a alguien que había escrito "No" en el campo de texto libre "¿Alguna otra habilidad?", pensando que respondía "no tengo" en vez de dejarlo vacío — el filtro solo revisaba si el array tenía algo adentro, sin distinguir una habilidad real de una respuesta negativa.
+  - **Fix en el origen (idea de Ricardo)**: se agregó la opción explícita **"No tengo experiencia"** como 4to checkbox, mutuamente excluyente con las 3 reales — marcarla destilda las demás, y viceversa. Mismo comportamiento en `RegistroWizard` (registro nuevo) y `AutoCheckInScreen` (check-in de ya registrados).
+  - **Fix defensivo (para los datos ya guardados así)**: `src/utils/audiovisual.ts` — `tieneExperienciaAudiovisual()` y `habilidadesParaMostrar()` reconocen una lista de respuestas negativas comunes ("no", "ninguna", "n/a", "No tengo experiencia", etc.) y no las cuentan como experiencia real, tanto en el filtro de Búsqueda como en lo que se muestra en la ficha. No hace falta limpiar manualmente los datos ya guardados así — el código ahora los interpreta bien solo.
+  - Placeholder del campo de texto libre aclarado ("…déjalo vacío si no tienes otra") en ambos lugares, como refuerzo adicional.
+  - 7 pruebas nuevas (59 → 66), incluida la #60 con el caso exacto reportado (`['No']` no cuenta como experiencia).
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
 - Panel de contexto lateral en desktop para el registro (pendiente de decisión, ver Fase 6).
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
-- Filtro de "consentimiento pendiente" en Búsqueda (solo existe el de audiovisual por ahora).
+- Filtro de "consentimiento pendiente" en Búsqueda.
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 

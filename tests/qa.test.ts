@@ -12,6 +12,7 @@ import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionPar
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
+import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 import type { Asistencia, Capacitacion, Participante } from '../src/types';
 
@@ -456,6 +457,40 @@ test('59. calcularCompromiso — caso real: registro después de ambas capacitac
   assert.strictEqual(c.elegibles, 1);
   assert.strictEqual(c.asistencias, 1);
   assert.strictEqual(c.tasaAsistencia, 1);
+});
+
+// ── tieneExperienciaAudiovisual — no confundir "escribió algo" con "tiene experiencia" ─
+
+test('60. tieneExperienciaAudiovisual — caso real reportado: escribió "No" en el texto libre, no cuenta como experiencia', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual(['No']), false);
+});
+
+test('61. tieneExperienciaAudiovisual — array vacío o sin datos no cuenta', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual([]), false);
+  assert.strictEqual(tieneExperienciaAudiovisual(undefined), false);
+});
+
+test('62. tieneExperienciaAudiovisual — una habilidad real de la lista de checkboxes sí cuenta', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual(['Edición de video']), true);
+});
+
+test('63. tieneExperienciaAudiovisual — variantes de "ninguna"/"n/a" tampoco cuentan, sin importar mayúsculas o espacios', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual(['Ninguna']), false);
+  assert.strictEqual(tieneExperienciaAudiovisual(['  N/A  ']), false);
+  assert.strictEqual(tieneExperienciaAudiovisual(['NO TENGO']), false);
+});
+
+test('64. tieneExperienciaAudiovisual — una habilidad real mezclada con una respuesta negativa igual cuenta', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual(['Fotografía', 'No']), true);
+});
+
+test('65. habilidadesParaMostrar — quita las respuestas negativas de la lista a mostrar', () => {
+  assert.deepStrictEqual(habilidadesParaMostrar(['No']), []);
+  assert.deepStrictEqual(habilidadesParaMostrar(['Fotografía', 'No']), ['Fotografía']);
+});
+
+test('66. tieneExperienciaAudiovisual — la opción explícita "No tengo experiencia" tampoco cuenta', () => {
+  assert.strictEqual(tieneExperienciaAudiovisual(['No tengo experiencia']), false);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

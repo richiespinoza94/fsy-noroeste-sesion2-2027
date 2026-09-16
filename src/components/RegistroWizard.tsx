@@ -4,7 +4,7 @@ import { EVENTO_FECHAS_LABEL } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
 import { marcarAsistencia } from '../services/asistenciaService';
 import { getCapacitacionParaAutoMarcar, subscribeCapacitaciones } from '../services/capacitacionesService';
-import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, HABILIDADES_AUDIOVISUAL, type Capacitacion, type ExperienciaPrevia } from '../types';
+import { ASIGNACIONES_PREVIAS, EXPERIENCIA_PREVIA_LABEL, HABILIDADES_AUDIOVISUAL, SIN_EXPERIENCIA_AV, type Capacitacion, type ExperienciaPrevia } from '../types';
 import { normalizeEmail, normalizeName, normalizePhone, validateEmail, validatePhone } from '../utils/validation';
 
 const EXPERIENCIA_PREVIA_OPTIONS: { value: ExperienciaPrevia; label: string }[] = [
@@ -450,9 +450,13 @@ export default function RegistroWizard() {
                           onChange={(e) =>
                             setForm({
                               ...form,
-                              audiovisualHabilidades: e.target.checked
+                              // Marcar una habilidad real quita "No tengo
+                              // experiencia" si estaba marcada — no tiene
+                              // sentido tener ambas a la vez.
+                              audiovisualHabilidades: (e.target.checked
                                 ? [...form.audiovisualHabilidades, h]
-                                : form.audiovisualHabilidades.filter((x) => x !== h),
+                                : form.audiovisualHabilidades.filter((x) => x !== h)
+                              ).filter((x) => x !== SIN_EXPERIENCIA_AV),
                             })
                           }
                           className="w-4 h-4 accent-primary"
@@ -460,12 +464,28 @@ export default function RegistroWizard() {
                         <span className="text-sm font-semibold">{h}</span>
                       </label>
                     ))}
+                    <label className="flex items-center gap-2.5 bg-white rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={form.audiovisualHabilidades.includes(SIN_EXPERIENCIA_AV)}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            // Marcarla reemplaza cualquier otra selección —
+                            // son mutuamente excluyentes.
+                            audiovisualHabilidades: e.target.checked ? [SIN_EXPERIENCIA_AV] : [],
+                          })
+                        }
+                        className="w-4 h-4 accent-primary"
+                      />
+                      <span className="text-sm font-semibold text-slate-500">{SIN_EXPERIENCIA_AV}</span>
+                    </label>
                   </div>
                 </Field>
                 <Field label="¿Alguna otra habilidad? (opcional)">
                   <input
                     className="input"
-                    placeholder="Ej: animación, redacción…"
+                    placeholder="Ej: animación, redacción… (déjalo vacío si no tienes otra)"
                     value={form.audiovisualOtro}
                     onChange={(e) => setForm({ ...form, audiovisualOtro: e.target.value })}
                   />

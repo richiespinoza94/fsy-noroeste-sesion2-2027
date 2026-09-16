@@ -3,6 +3,7 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { updateParticipante } from '../services/participantsService';
 import { fuzzyIncludes } from '../utils/search';
 import { nombreCorto } from '../utils/nombreCorto';
+import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
@@ -47,7 +48,7 @@ export default function BusquedaScreen({
     if (query.trim().length < MIN_QUERY && !hayFiltroActivo) return [];
     let list = participantes.filter((p) => matches(p, query));
     if (filterEstaca) list = list.filter((p) => estacaEnFiltro(p.estaca, filterEstaca));
-    if (soloAudiovisual) list = list.filter((p) => p.audiovisualHabilidades?.length);
+    if (soloAudiovisual) list = list.filter((p) => tieneExperienciaAudiovisual(p.audiovisualHabilidades));
     return list;
   }, [participantes, query, filterEstaca, soloAudiovisual, hayFiltroActivo]);
   // Montar cientos de filas de una sola vez (cada una con su propio botón
@@ -135,7 +136,7 @@ export default function BusquedaScreen({
                   <Row
                     icon="🎬"
                     label="Habilidad AV"
-                    value={p.audiovisualHabilidades?.length ? p.audiovisualHabilidades.join(', ') : 'Ninguna registrada'}
+                    value={habilidadesParaMostrar(p.audiovisualHabilidades).length ? habilidadesParaMostrar(p.audiovisualHabilidades).join(', ') : 'Ninguna registrada'}
                   />
                   <Row
                     icon="📷"

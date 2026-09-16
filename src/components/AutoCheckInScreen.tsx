@@ -3,7 +3,7 @@ import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaSer
 import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
 import { subscribeParticipantes, updateParticipante } from '../services/participantsService';
 import type { Asistencia, Capacitacion, Participante } from '../types';
-import { HABILIDADES_AUDIOVISUAL } from '../types';
+import { HABILIDADES_AUDIOVISUAL, SIN_EXPERIENCIA_AV } from '../types';
 import { fuzzyIncludes } from '../utils/search';
 
 // Un check-in por dispositivo, por capacitación — evita que una sola persona
@@ -348,17 +348,30 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
                         type="checkbox"
                         checked={avHabilidades.includes(h)}
                         onChange={(e) =>
-                          setAvHabilidades(e.target.checked ? [...avHabilidades, h] : avHabilidades.filter((x) => x !== h))
+                          setAvHabilidades(
+                            (e.target.checked ? [...avHabilidades, h] : avHabilidades.filter((x) => x !== h)).filter(
+                              (x) => x !== SIN_EXPERIENCIA_AV
+                            )
+                          )
                         }
                         className="w-4 h-4 accent-primary"
                       />
                       <span className="text-sm font-semibold">{h}</span>
                     </label>
                   ))}
+                  <label className="flex items-center gap-2.5 bg-slate-50 rounded-xl border-[1.5px] border-slate-200 px-3.5 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={avHabilidades.includes(SIN_EXPERIENCIA_AV)}
+                      onChange={(e) => setAvHabilidades(e.target.checked ? [SIN_EXPERIENCIA_AV] : [])}
+                      className="w-4 h-4 accent-primary"
+                    />
+                    <span className="text-sm font-semibold text-slate-500">{SIN_EXPERIENCIA_AV}</span>
+                  </label>
                 </div>
                 <input
                   className="input mb-4"
-                  placeholder="Otra habilidad (opcional)"
+                  placeholder="Otra habilidad (déjalo vacío si no tienes otra)"
                   value={avOtro}
                   onChange={(e) => setAvOtro(e.target.value)}
                 />
