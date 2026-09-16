@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { loginStaff, setupPasswordFirstTime } from '../services/authService';
+import { EVENTO_NOMBRE } from '../data/evento';
 import type { SessionUser } from '../types';
 
 export default function LoginScreen({ onSuccess }: { onSuccess: (u: SessionUser) => void }) {
@@ -55,7 +56,8 @@ export default function LoginScreen({ onSuccess }: { onSuccess: (u: SessionUser)
               Gestión FSY 2027
             </div>
             <h1 className="text-xl font-extrabold">Acceso de Equipo</h1>
-            <p className="text-sm text-white/75 mt-1">Preparación de consejeros antes del evento</p>
+            <p className="text-sm font-bold text-accent mt-1">{EVENTO_NOMBRE}</p>
+            <p className="text-xs text-white/70 mt-0.5">Preparación de consejeros antes del evento</p>
           </div>
         </div>
 

@@ -65,15 +65,15 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 33: fix del filtro de audiovisual + opción explícita "No tengo experiencia" (parche `0036`)
+## 6. Estado actual — Fase 34: nombre específico del evento, visible en todo lo público (parche `0037`)
 
 ### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 66/66 pasan)
-- **Fases 1-32**: ver historial de commits/parches.
-- **Fase 33** — bug real reportado por Ricardo con captura: el filtro "🎬 AV" de Búsqueda mostraba a alguien que había escrito "No" en el campo de texto libre "¿Alguna otra habilidad?", pensando que respondía "no tengo" en vez de dejarlo vacío — el filtro solo revisaba si el array tenía algo adentro, sin distinguir una habilidad real de una respuesta negativa.
-  - **Fix en el origen (idea de Ricardo)**: se agregó la opción explícita **"No tengo experiencia"** como 4to checkbox, mutuamente excluyente con las 3 reales — marcarla destilda las demás, y viceversa. Mismo comportamiento en `RegistroWizard` (registro nuevo) y `AutoCheckInScreen` (check-in de ya registrados).
-  - **Fix defensivo (para los datos ya guardados así)**: `src/utils/audiovisual.ts` — `tieneExperienciaAudiovisual()` y `habilidadesParaMostrar()` reconocen una lista de respuestas negativas comunes ("no", "ninguna", "n/a", "No tengo experiencia", etc.) y no las cuentan como experiencia real, tanto en el filtro de Búsqueda como en lo que se muestra en la ficha. No hace falta limpiar manualmente los datos ya guardados así — el código ahora los interpreta bien solo.
-  - Placeholder del campo de texto libre aclarado ("…déjalo vacío si no tienes otra") en ambos lugares, como refuerzo adicional.
-  - 7 pruebas nuevas (59 → 66), incluida la #60 con el caso exacto reportado (`['No']` no cuenta como experiencia).
+- **Fases 1-33**: ver historial de commits/parches.
+- **Fase 34** — bug de UX real reportado por Ricardo: gente que ya había ido a Confe JAS o a otra sesión de FSY leía "¿Es tu primera vez en esta preparación?" y pensaba en esa OTRA experiencia — porque en ningún lado del formulario público se decía explícitamente que esto es "FSY Noroeste · Sesión 2", solo el genérico "FSY 2027".
+  - Nueva constante `EVENTO_NOMBRE` en `data/evento.ts` (asumido "FSY Noroeste · Sesión 2" por el nombre del repo de GitHub — corregible en un solo lugar si el nombre oficial es otro).
+  - Se hizo prominente (no solo un badge chico) en `PublicEntry` (la pantalla que reportó Ricardo), y la pregunta pasó a decir explícitamente "¿Es tu primera vez en la preparación de FSY Noroeste · Sesión 2?". También agregado en `RegistroWizard`, `AutoCheckInScreen` y `LoginScreen` por consistencia. En el header compacto de staff (`App.tsx`) se agregó de forma más discreta, sin sumar una línea nueva al espacio ya ajustado del encabezado — ahí la ambigüedad importa menos porque el staff ya sabe qué evento administra.
+  - **Bug adicional encontrado en el camino**: el botón "Sí, es mi primera vez" seguía diciendo "3 pasos rápidos" — desactualizado desde que el wizard pasó a 4 pasos (Fase 26, audiovisual). Corregido.
+  - Verificado visualmente con Playwright antes de entregarlo.
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).

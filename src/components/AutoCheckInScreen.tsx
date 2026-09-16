@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { marcarAsistencia, subscribeAsistencia } from '../services/asistenciaService';
 import { estadoVentanaCheckIn, getCapacitacionParaCheckIn, subscribeCapacitaciones } from '../services/capacitacionesService';
 import { subscribeParticipantes, updateParticipante } from '../services/participantsService';
+import { EVENTO_NOMBRE } from '../data/evento';
 import type { Asistencia, Capacitacion, Participante } from '../types';
 import { HABILIDADES_AUDIOVISUAL, SIN_EXPERIENCIA_AV } from '../types';
 import { fuzzyIncludes } from '../utils/search';
@@ -179,15 +180,16 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
               Gestión FSY 2027
             </div>
             <h1 className="text-lg font-extrabold">Marcar mi asistencia</h1>
+            <p className="text-xs font-bold text-accent mt-1">{EVENTO_NOMBRE}</p>
             {cargando ? (
-              <p className="text-xs text-white/70 mt-1">Cargando…</p>
+              <p className="text-xs text-white/70 mt-0.5">Cargando…</p>
             ) : cap ? (
-              <p className="text-xs text-white/70 mt-1">
+              <p className="text-xs text-white/70 mt-0.5">
                 {ventana === 'abierta' ? '📍 ' : '📅 '}
                 {cap.label} · {cap.fecha} {cap.hora && `· ${cap.hora}`}
               </p>
             ) : (
-              <p className="text-xs text-white/70 mt-1">No hay capacitaciones programadas todavía.</p>
+              <p className="text-xs text-white/70 mt-0.5">No hay capacitaciones programadas todavía.</p>
             )}
           </div>
         </div>

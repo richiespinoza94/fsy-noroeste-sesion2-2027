@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS } from '../data/estacas';
-import { EVENTO_FECHAS_LABEL } from '../data/evento';
+import { EVENTO_FECHAS_LABEL, EVENTO_NOMBRE } from '../data/evento';
 import { checkDuplicates, registrarParticipante, type DuplicateCheck } from '../services/participantsService';
 import { marcarAsistencia } from '../services/asistenciaService';
 import { getCapacitacionParaAutoMarcar, subscribeCapacitaciones } from '../services/capacitacionesService';
@@ -210,7 +210,8 @@ export default function RegistroWizard() {
               Gestión FSY 2027
             </div>
             <h1 className="text-lg font-extrabold">Registro de Consejeros</h1>
-            <p className="text-xs text-white/70 mt-1">Preparación previa al evento — 4 pasos rápidos</p>
+            <p className="text-xs font-bold text-accent mt-1">{EVENTO_NOMBRE}</p>
+            <p className="text-xs text-white/70 mt-0.5">Preparación previa al evento — 4 pasos rápidos</p>
             <StepIndicator step={step} />
           </div>
         </div>

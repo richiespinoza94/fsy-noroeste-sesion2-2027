@@ -5,6 +5,7 @@ import { isFirebaseConfigured } from './firebase';
 import { getStoredSession, logout } from './services/authService';
 import { subscribeCapacitaciones } from './services/capacitacionesService';
 import { subscribeParticipantes } from './services/participantsService';
+import { EVENTO_NOMBRE } from './data/evento';
 import type { Capacitacion, Participante, SessionUser } from './types';
 
 // Code-splitting: Login y Home se cargan de entrada (son lo primero que ve
@@ -127,7 +128,7 @@ function StaffApp() {
       <header className="bg-gradient-to-br from-primary to-primary-dark text-white px-4 py-3 flex items-center gap-3">
         <div className="flex-1">
           <div className="font-extrabold text-sm">Gestión FSY 2027</div>
-          <div className="text-[10px] font-bold text-accent tracking-wide">PREPARACIÓN DE CONSEJEROS</div>
+          <div className="text-[10px] font-bold text-accent tracking-wide">{EVENTO_NOMBRE.toUpperCase()} · CONSEJEROS</div>
         </div>
         <button
           onClick={() => {

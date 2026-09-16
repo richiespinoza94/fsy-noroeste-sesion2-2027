@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import AutoCheckInScreen from './AutoCheckInScreen';
 import RegistroWizard from './RegistroWizard';
+import { EVENTO_NOMBRE } from '../data/evento';
 
 type Modo = 'elegir' | 'registro' | 'asistencia';
 
@@ -20,12 +21,19 @@ export default function PublicEntry() {
               Gestión FSY 2027
             </div>
             <h1 className="text-xl font-extrabold">¡Bienvenido!</h1>
-            <p className="text-sm text-white/75 mt-1">Preparación de consejeros previa al evento</p>
+            {/* Nombre de ESTA sesión, prominente — no solo "FSY 2027" a
+                secas. Gente que ya asistió a Confe JAS o a otra sesión de
+                FSY leía "¿es tu primera vez?" pensando en esa otra
+                experiencia, no en esta. */}
+            <p className="text-sm font-bold text-accent mt-1">{EVENTO_NOMBRE}</p>
+            <p className="text-xs text-white/70 mt-0.5">Preparación de consejeros previa al evento</p>
           </div>
         </div>
 
         <div className="p-6 flex flex-col gap-4">
-          <p className="text-sm font-bold text-slate-700 text-center">¿Es tu primera vez en esta preparación?</p>
+          <p className="text-sm font-bold text-slate-700 text-center">
+            ¿Es tu primera vez en la preparación de {EVENTO_NOMBRE}?
+          </p>
 
           <button
             onClick={() => setModo('registro')}
@@ -34,7 +42,7 @@ export default function PublicEntry() {
             <span className="text-2xl">🆕</span>
             <div className="flex-1">
               <div className="text-sm font-extrabold text-primary">Sí, es mi primera vez</div>
-              <div className="text-xs text-slate-500 mt-0.5">Voy a registrarme (3 pasos rápidos)</div>
+              <div className="text-xs text-slate-500 mt-0.5">Voy a registrarme (4 pasos rápidos)</div>
             </div>
             <span className="text-primary">›</span>
           </button>
