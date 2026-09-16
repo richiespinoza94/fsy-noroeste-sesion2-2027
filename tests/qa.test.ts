@@ -321,13 +321,15 @@ test('41. calcularCompromiso — sin elegibles todavía (se registró después d
   assert.strictEqual(c.rachaPerfecta, false); // 0 elegibles no es "racha", es "todavía no aplica"
 });
 
-test('42. calcularCompromiso — asistencia marcada en una capacitación fuera del rango elegible no cuenta', () => {
-  // Se registró en la #14, pero por algún motivo hay un registro de
-  // asistencia de la #5 (antes de registrarse) — no debe sumar.
+test('42. calcularCompromiso — una asistencia marcada por un admin fuera de la ventana normal SÍ cuenta (la evidencia real gana)', () => {
+  // Se registró en la #14, pero un admin marcó su asistencia a la #5
+  // manualmente desde Asistencia, fuera de tiempo — debe contar igual: si
+  // el admin la marcó, el cálculo de compromiso confía en eso.
   const p = participanteFake(new Date('2027-01-14T18:00:00').toISOString());
   const asistencia: Asistencia[] = [{ capacitacionId: '5', participanteId: 'p1', estado: 'presente', timestamp: '' }];
   const c = calcularCompromiso(p, CAPS_18, asistencia, AHORA_DESPUES_DE_TODAS);
-  assert.strictEqual(c.asistencias, 0);
+  assert.strictEqual(c.asistencias, 1);
+  assert.strictEqual(c.elegibles, 6); // las 5 normales (14-18) + la #5 por la asistencia real
 });
 
 test('49. calcularCompromiso — caso real reportado: una capacitación futura ya creada NO cuenta como elegible todavía', () => {
@@ -440,6 +442,20 @@ test('55. primerNombre — nombre compuesto se corta al primero', () => {
 test('56. nombreCorto — junta primer nombre + primer apellido completo', () => {
   assert.strictEqual(nombreCorto('Benjamin Cesar', 'Gamarra Dioses'), 'Benjamin Gamarra');
   assert.strictEqual(nombreCorto('Ana', 'De La Cruz Rodriguez'), 'Ana De La Cruz');
+});
+
+test('59. calcularCompromiso — caso real: registro después de ambas capacitaciones, asistencia marcada a mano desde Asistencia — 100%, no "—"', () => {
+  // El caso exacto de Dulce/Yulissa en la captura: se registraron después
+  // de que ambas capacitaciones ya habían pasado (por eso "Elegible en 0/2"
+  // con la lógica vieja), pero un admin les marcó presente a mano en una de
+  // ellas desde Asistencia. Debe verse 100%, no "—".
+  const caps = [capFake('c1', '2026-09-13', '18:00'), capFake('c2', '2026-09-20', '18:00')];
+  const p = participanteFake(new Date('2026-09-25T00:00:00').toISOString()); // se registró después de las dos
+  const asistencia: Asistencia[] = [{ capacitacionId: 'c1', participanteId: 'p1', estado: 'presente', timestamp: '' }];
+  const c = calcularCompromiso(p, caps, asistencia, new Date('2026-09-26T00:00:00'));
+  assert.strictEqual(c.elegibles, 1);
+  assert.strictEqual(c.asistencias, 1);
+  assert.strictEqual(c.tasaAsistencia, 1);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

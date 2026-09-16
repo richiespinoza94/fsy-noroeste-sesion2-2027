@@ -65,14 +65,13 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - Reglas de Firestore abiertas (`allow read, write: if true`) — el control real ocurre a nivel de aplicación. **Riesgo aceptado explícitamente**, documentado en `firestore.rules`.
 - Primer acceso: se crea el usuario sin `passwordHash`; al intentar entrar, la app detecta que falta y pide crear una contraseña (`código NEEDS_SETUP`).
 
-## 6. Estado actual — Fase 29: fix de Compromiso — registro durante capacitación en curso (parche `0032`)
+## 6. Estado actual — Fase 30: Compromiso — la evidencia real de asistencia siempre gana (parche `0033`)
 
-### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 58/58 pasan)
-- **Fases 1-28**: ver historial de commits/parches.
-- **Fase 29** — bug real reportado por Ricardo con captura: varias personas que SÍ asistieron aparecían en Compromiso como "0/0 asistencias", "Elegible en 0/2", con tasa `—` en vez de 100%.
-  - **Causa**: al registrarse DURANTE una capacitación en curso (la función de asistencia automática del registro, Fase 22), su `timestamp` de registro queda unos minutos DESPUÉS del inicio de esa misma capacitación (ej. capacitación 18:00, se registra 18:20). La regla de "elegible" (`cap >= registro`) excluía esa capacitación de su propio conteo, aunque literalmente asistieron en ese momento.
-  - **Fix**: si hay un registro de asistencia `presente` real Y el registro de la persona cayó dentro de las 3 horas siguientes al inicio de la capacitación (misma ventana de 3h que usa `estadoVentanaCheckIn` en toda la app), esa capacitación cuenta como elegible igual. **Acotado a propósito a 3 horas** — la evidencia real gana a la regla de fechas, pero solo para la capacitación en la que de verdad ocurrió el registro, no para cualquier capacitación pasada con una asistencia marcada (eso seguiría siendo un dato anómalo a ignorar, ver prueba #58 vs. la #42 que ya existía).
-  - 2 pruebas nuevas (56 → 58): #57 reproduce el caso real (registro 20 min después del inicio, cuenta); #58 confirma que sin asistencia real, no cuenta (la excepción es solo con evidencia).
+### Construido y verificado (`npx tsc -b`, `npx vite build`, `npx tsx tests/qa.test.ts` — 59/59 pasan)
+- **Fases 1-29**: ver historial de commits/parches.
+- **Fase 30** — corrección sobre la Fase 29: el fix anterior limitó la excepción a "registro dentro de las 3h del inicio de la capacitación", por una suposición propia (no pedida) de que había que proteger contra asistencias mal marcadas. Ricardo reportó con captura que eso seguía dejando fuera casos reales: personas cuya asistencia se marcó A MANO desde Asistencia, fuera de esa ventana, seguían mostrando "—" en vez de 100% aunque sí asistieron.
+  - **Regla simplificada y definitiva**: si hay un registro de asistencia `presente` para una capacitación, esa capacitación SIEMPRE cuenta como elegible — sin importar cuándo se marcó ni qué tan lejos esté de la fecha de registro de la persona. Se quitó la constante `TOLERANCIA_REGISTRO_DURANTE_MS` (3h) por completo. Si algún día se marca a la persona equivocada por error, la corrección es desmarcarla desde Asistencia — el cálculo de compromiso no debe intentar adivinar/filtrar eso por su cuenta.
+  - La prueba #42 (que antes afirmaba lo contrario — era una suposición mía, no un requisito real) se corrigió para reflejar el comportamiento correcto. Prueba nueva #59 con el caso exacto de la captura (registro después de ambas capacitaciones, asistencia marcada a mano).
 
 ### Explícitamente NO construido todavía
 - Edición de `fechaNacimiento` y `experienciaPrevia` desde la ficha de Búsqueda (hoy son de solo lectura ahí).
@@ -80,7 +79,6 @@ Correo + contraseña (decisión explícita de Ricardo, no PIN). Mismo patrón de
 - El app del evento en sí — proyecto nuevo y separado, no iniciado.
 - Filtro dedicado en Búsqueda para "solo con habilidad audiovisual".
 - Incluir los campos de audiovisual en el CSV de Reportes.
-- Autocomplete de sugerencias por categoría (nombre/estaca/barrio) en Búsqueda — se implementó la interpretación más simple (umbral de 3 letras).
 
 ### Nota real de campo — correo como ID del documento, no como fuente de verdad del dato
 
