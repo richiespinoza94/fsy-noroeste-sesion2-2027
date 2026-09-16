@@ -24,6 +24,15 @@ union all
 select 'Sin escritura directa de solicitudes',
  not has_table_privilege('authenticated','public.replacement_requests','INSERT')
  and not has_table_privilege('authenticated','public.replacement_requests','UPDATE')
- and not has_table_privilege('authenticated','public.replacement_requests','DELETE');
+ and not has_table_privilege('authenticated','public.replacement_requests','DELETE')
+union all
+select 'RPC IA restringida: ' || signature,
+ not has_function_privilege('anon',signature,'EXECUTE')
+ and not has_function_privilege('authenticated',signature,'EXECUTE')
+from unnest(array[
+ 'public.apply_document_validation(uuid,text,text,jsonb,jsonb,boolean,boolean,text)',
+ 'public.claim_document_analysis(uuid)',
+ 'public.finish_document_analysis(uuid,integer,jsonb,text)'
+]) as internal_rpc(signature);
 -- Todos deben ser true. Esta comprobación no sustituye las pruebas de permisos
 -- con cuentas reales ni la prueba completa de Auth, Storage, PostgREST y OCR.

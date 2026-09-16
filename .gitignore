@@ -10,3 +10,5 @@ dist
 
 .agents/
 **/.edge-preview/
+
+supabase/.temp/

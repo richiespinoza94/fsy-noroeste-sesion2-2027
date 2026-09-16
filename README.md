@@ -1,3 +1,5 @@
+> Conexión real configurada el 16/09/2026 en `dshunrsnkkioxpdazaxx`. Ver `docs/CONEXION_SUPABASE.md` para migraciones aplicadas y pendientes operativos. `.env.local` está excluido de Git.
+
 # Entrega actual: MVP3 (0.3.0)
 
 Permutas disponibles desde cada expediente; solicitudes e historial en **Operación → Permutas**. Preparar entrante, completar documentos, solicitar revisión y aprobar el cambio conserva el mismo cupo. Cancelar o no aprobar mantiene al titular anterior. El modo demo pierde sus datos al recargar.

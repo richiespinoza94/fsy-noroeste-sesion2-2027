@@ -9,6 +9,7 @@ const db = new PGlite()
 await db.exec(`
 
 create role anon; create role authenticated; create role service_role bypassrls;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 
 create schema auth; create schema storage; create schema net;
 
