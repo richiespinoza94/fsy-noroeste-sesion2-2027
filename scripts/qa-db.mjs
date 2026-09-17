@@ -3,6 +3,7 @@ import { PGlite } from '../.qa-tools/node_modules/@electric-sql/pglite/dist/inde
 import fs from 'node:fs'
 
 import assert from 'node:assert/strict'
+import { REGISTRATION_COLUMNS } from '../src/lib/registrationCsv.ts'
 
 const db = new PGlite()
 
@@ -291,5 +292,25 @@ assert.equal((await db.query('select id from replacement_requests')).rows.length
 
 await assert.rejects(db.query('select start_replacement($1,$2,$3)',[next,JSON.stringify(candidate),'Sin acceso']),/NOT_ALLOWED/)
 
+await actor(admin)
+const csvSession = (await db.query('select id from sessions limit 1')).rows[0].id
+const csvRow = Object.fromEntries(REGISTRATION_COLUMNS.map(k=>[k,'']))
+Object.assign(csvRow,{Estaca:'Estaca CSV',Barrio:'Barrio CSV','Nombre de pila':'Persona CSV',Apellido:'Prueba','Fecha de nacimiento':'2010-01-01',Sexo:'Mujer','Tipo de solicitud':'Participante','Información médica':'Original, con coma\ny salto',Extra:'Campo adicional'})
+const importCsv = rows=>db.query('select public.import_registration_csv($1,$2) as result',[csvSession,JSON.stringify(rows)])
+assert.equal((await importCsv([csvRow])).rows[0].result.imported,1)
+assert.deepEqual((await db.query('select source_answers from registration_forms')).rows[0].source_answers,csvRow)
+assert.equal((await importCsv([csvRow])).rows[0].result.skipped,1)
+await assert.rejects(importCsv([{...csvRow,'Información médica':'Cambio'}]),/POSSIBLE_DUPLICATE/)
+await assert.rejects(importCsv([{...csvRow,'Nombre de pila':'No debe persistir'},{...csvRow,'Nombre de pila':'Consejero','Tipo de solicitud':'Consejero'}]),/PARTICIPANTS_ONLY/)
+assert.equal((await db.query("select id from participants where first_name='No debe persistir'")).rows.length,0)
+const {Extra,...incomplete}=csvRow; delete incomplete.Barrio
+await assert.rejects(importCsv([incomplete]),/MISSING_CSV_COLUMNS/)
+await actor(leader)
+await assert.rejects(importCsv([csvRow]),/NOT_ALLOWED/)
+assert.equal((await db.query('select * from registration_forms')).rows.length,0)
+await assert.rejects(db.query('delete from registration_forms'),/permission denied/)
+await db.exec('reset role')
+assert.equal((await db.query("select has_function_privilege('anon','public.import_registration_csv(uuid,jsonb)','execute') as allowed")).rows[0].allowed,false)
+console.log('OK CSV SQL: conservación completa, reintentos, duplicados, rollback integral y permisos.')
 await db.close()
 

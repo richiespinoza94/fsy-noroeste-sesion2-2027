@@ -516,3 +516,15 @@ html { scroll-padding-bottom: 100px; }
 }
 
 html:has(.upload-dialog[open]) { overflow:hidden; }
+.csv-import { min-width: 0; }
+.csv-file-name { overflow-wrap: anywhere; }
+.csv-import input[type="file"] { width: 100%; min-width: 0; }
+.csv-import .button { white-space: normal; }
+.csv-preview { max-height: 480px; overflow: auto; border-block: 1px solid var(--deep-blue); }
+.csv-preview details { padding: 12px 0; overflow-wrap: anywhere; }
+.csv-preview summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+.csv-preview dl { margin: 12px 0; }
+.csv-preview dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; padding: 8px 0; }
+.csv-preview dt { font-weight: 700; }
+.csv-preview dd { margin: 0; white-space: pre-wrap; }
+@media (max-width: 600px) { .csv-preview dl > div { grid-template-columns: minmax(0, 1fr); gap: 4px; } }

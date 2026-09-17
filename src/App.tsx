@@ -4,6 +4,7 @@ import { createRepository } from './data/repository'
 import { ParticipantFields } from './ParticipantFields'
 import { ReplacementPanel, ReplacementQueue } from './Replacements'
 import { DocumentReview } from './DocumentReview'
+import { CsvImport } from './CsvImport'
 import { Icon } from './icons'
 import type { AdminUnit, DashboardData, DocumentItem, DocumentType, ParticipantDetail, ParticipantImportInput, ParticipantSummary, Repository, Viewer } from './types'
 import { STATUS_LABELS } from './types'
@@ -566,7 +567,7 @@ function AdminQueue({ viewer }: { viewer: Viewer }) {
       </div>
 
       {tab === 'replacements' ? <ReplacementQueue repository={repository} onOpen={id => go(`jovenes/${id}`)} /> : tab === 'import' && canImport ? (
-        <ParticipantImportForm units={units.data ?? []} loadingUnits={units.loading} loadError={units.error} onCreated={() => queue.reload()} />
+        <><CsvImport onCreated={() => { queue.reload(); units.reload() }} /><ParticipantImportForm units={units.data ?? []} loadingUnits={units.loading} loadError={units.error} onCreated={() => queue.reload()} /></>
       ) : (
         <>
           <div className="section-heading"><div><h2>Requieren revisión</h2><p>Aprueba cada documento antes de confirmar la inscripción. Puedes revisar archivos aunque falten otros por enviar.</p></div></div>
@@ -620,7 +621,7 @@ function ParticipantImportForm({ units, loadingUnits, loadError, onCreated }: { 
 
   return (
     <section className="admin-import-card" aria-labelledby="import-title">
-      <div className="section-heading"><div><p className="eyebrow">Importación manual</p><h2 id="import-title">Agregar participante</h2><p>Alta uno por uno hasta disponer del formato oficial de importación masiva. El sistema crea también su cupo para conservar trazabilidad.</p></div></div>
+      <div className="section-heading"><div><p className="eyebrow">Importación manual</p><h2 id="import-title">Agregar participante</h2><p>Agrega un inscrito individual a una unidad existente. El sistema crea también su cupo para conservar trazabilidad.</p></div></div>
       {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
       <form className="admin-import-form" onSubmit={submit}>
         <label className="field field--wide">Unidad<select value={form.unitId} onChange={(event) => change('unitId', event.target.value)} required disabled={loadingUnits || !units.length}><option value="">Selecciona una unidad</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.stakeName} · {unit.name}</option>)}</select></label>

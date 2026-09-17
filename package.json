@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "qa": "node scripts/qa.mjs && node scripts/qa-ai.mjs && node scripts/qa-worker.mjs && node scripts/qa-demo.mjs && node scripts/qa-brand.mjs",
+    "qa": "node scripts/qa.mjs && node scripts/qa-ai.mjs && node scripts/qa-worker.mjs && node scripts/qa-demo.mjs && node scripts/qa-brand.mjs && node scripts/qa-csv.mjs",
     "qa:db": "node scripts/qa-db.mjs"
   },
   "dependencies": {
