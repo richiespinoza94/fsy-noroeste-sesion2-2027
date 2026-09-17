@@ -33,7 +33,7 @@ const admin: Viewer = {
   id: 'demo-admin',
   username: 'admin.fsy',
   displayName: 'Equipo FSY',
-  role: 'SESSION_ADMIN',
+  role: 'SUPER_ADMIN',
   unitId: null,
   unitName: null,
   stakeName: null,

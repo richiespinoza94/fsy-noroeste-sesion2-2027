@@ -5,9 +5,11 @@ import { ParticipantFields } from './ParticipantFields'
 import { ReplacementPanel, ReplacementQueue } from './Replacements'
 import { DocumentReview } from './DocumentReview'
 import { CsvImport } from './CsvImport'
+import { UserAdministration } from './UserAdministration'
+import { supabase } from './lib/supabase'
 import { Icon } from './icons'
 import type { AdminUnit, DashboardData, DocumentItem, DocumentType, ParticipantDetail, ParticipantImportInput, ParticipantSummary, Repository, Viewer } from './types'
-import { STATUS_LABELS } from './types'
+import { STATUS_LABELS, ROLE_LABELS } from './types'
 
 const repository = createRepository()
 
@@ -544,7 +546,7 @@ function AdminQueue({ viewer }: { viewer: Viewer }) {
   const canImport = ['SUPER_ADMIN', 'SESSION_ADMIN'].includes(viewer.role)
   const queue = useAsync(() => canReview ? repository.getAdminQueue() : Promise.resolve([]), [viewer.id])
   const units = useAsync<AdminUnit[]>(() => canImport ? repository.getAdminUnits() : Promise.resolve([]), [viewer.id])
-  const [tab, setTab] = useState<'review' | 'import' | 'replacements'>('review')
+  const [tab, setTab] = useState<'review' | 'import' | 'replacements' | 'users'>('review')
   const [busyId, setBusyId] = useState('')
   const [actionError, setActionError] = useState('')
 
@@ -564,9 +566,10 @@ function AdminQueue({ viewer }: { viewer: Viewer }) {
         <button aria-pressed={tab === 'review'} className={tab === 'review' ? 'is-active' : ''} onClick={() => setTab('review')}>Revisión {queue.data?.length ? <span>{queue.data.length}</span> : null}</button>
         <button aria-pressed={tab === 'replacements'} className={tab === 'replacements' ? 'is-active' : ''} onClick={() => setTab('replacements')}>Permutas</button>
         {canImport ? <button aria-pressed={tab === 'import'} className={tab === 'import' ? 'is-active' : ''} onClick={() => setTab('import')}>Carga inicial</button> : null}
+        {viewer.role === 'SUPER_ADMIN' ? <button aria-pressed={tab === 'users'} className={tab === 'users' ? 'is-active' : ''} onClick={() => setTab('users')}>Usuarios</button> : null}
       </div>
 
-      {tab === 'replacements' ? <ReplacementQueue repository={repository} onOpen={id => go(`jovenes/${id}`)} /> : tab === 'import' && canImport ? (
+      {tab === 'users' && viewer.role === 'SUPER_ADMIN' ? <UserAdministration units={units.data ?? []} /> : tab === 'replacements' ? <ReplacementQueue repository={repository} onOpen={id => go(`jovenes/${id}`)} /> : tab === 'import' && canImport ? (
         <><CsvImport onCreated={() => { queue.reload(); units.reload() }} /><ParticipantImportForm units={units.data ?? []} loadingUnits={units.loading} loadError={units.error} onCreated={() => queue.reload()} /></>
       ) : (
         <>
@@ -654,12 +657,39 @@ function Account({ viewer, onSignOut }: { viewer: Viewer; onSignOut: () => void 
       <header className="page-header"><div><p className="eyebrow">Cuenta</p><h1>{viewer.displayName}</h1><p className="lead">{viewer.stakeName ?? 'Administración de sesión'}</p></div></header>
       <section className="account-card">
         <DataPair label="Usuario" value={viewer.username} />
-        <DataPair label="Rol" value={viewer.role === 'UNIT_LEADER' ? 'Líder de unidad' : 'Equipo FSY'} />
+        <DataPair label="Rol" value={ROLE_LABELS[viewer.role]} />
         {viewer.unitName ? <DataPair label="Unidad" value={viewer.unitName} /> : null}
+        {supabase ? <ChangePassword /> : null}
         <button className="button button--danger button--wide" onClick={signOut}><Icon name="logout" size={18} /> Cerrar sesión</button>
       </section>
     </div>
   )
+}
+
+function ChangePassword() {
+  const [password, setPassword] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  async function save(event: FormEvent) {
+    event.preventDefault(); setError(''); setSuccess('')
+    if (password !== repeat) { setError('Las contraseñas no coinciden.'); return }
+    if (!supabase || busy) return
+    setBusy(true)
+    try {
+      const result = await supabase.auth.updateUser({ password })
+      if (result.error) throw result.error
+      setPassword(''); setRepeat(''); setSuccess('Contraseña actualizada.')
+    } catch { setError('No pudimos actualizarla. Vuelve a iniciar sesión e inténtalo nuevamente.') }
+    finally { setBusy(false) }
+  }
+  return <details><summary>Cambiar contraseña</summary><form className="form-stack" onSubmit={save}>
+    <label>Nueva contraseña<input type="password" autoComplete="new-password" minLength={12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required disabled={busy} /></label>
+    <label>Repetir contraseña<input type="password" autoComplete="new-password" minLength={12} maxLength={128} value={repeat} onChange={e => setRepeat(e.target.value)} required disabled={busy} /></label>
+    {error ? <p className="form-error" role="alert">{error}</p> : null}{success ? <p role="status">{success}</p> : null}
+    <button className="button button--secondary" disabled={busy}>{busy ? 'Guardando…' : 'Actualizar contraseña'}</button>
+  </form></details>
 }
 
 function DataPair({ label, value }: { label: string; value: string }) {

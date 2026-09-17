@@ -312,5 +312,16 @@ await assert.rejects(db.query('delete from registration_forms'),/permission deni
 await db.exec('reset role')
 assert.equal((await db.query("select has_function_privilege('anon','public.import_registration_csv(uuid,jsonb)','execute') as allowed")).rows[0].allowed,false)
 console.log('OK CSV SQL: conservación completa, reintentos, duplicados, rollback integral y permisos.')
+await db.query('update profiles set unit_id=$1 where id=$2',[unit,leader])
+await assert.rejects(db.query(`insert into auth.users(id,email,raw_app_meta_data) values ('00000000-0000-4000-8000-000000000088','duplicate-unit@test',$1)`,[JSON.stringify({role:'UNIT_LEADER',unit_id:unit})]),/one_leader_account_per_unit/)
+const supervisorId='00000000-0000-4000-8000-000000000089'
+await db.query(`insert into auth.users(id,email,raw_app_meta_data) values ($1,'supervisor@test','{"role":"REVIEWER"}')`,[supervisorId])
+await actor(supervisorId)
+assert.equal((await db.query('select public.is_admin() as review, public.can_manage_session() as manage')).rows[0].review,true)
+assert.equal((await db.query('select public.can_manage_session() as manage')).rows[0].manage,false)
+assert.equal((await db.query('update document_requirements set required=false returning id')).rows.length,0)
+assert.equal((await db.query('update profiles set role=\'SUPER_ADMIN\' where id=$1 returning id',[supervisorId])).rows.length,0)
+assert.ok((await db.query('select id from participants')).rows.length>0)
+console.log('OK usuarios: una cuenta por unidad, supervisor revisa sin configurar requisitos ni elevar su rol.')
 await db.close()
 

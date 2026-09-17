@@ -17,6 +17,12 @@ export type ParticipantStatus =
   | 'REPLACED'
   | 'CANCELLED'
 
+export const ROLE_LABELS: Record<Role, string> = {
+  SUPER_ADMIN: 'Administrador principal', SESSION_ADMIN: 'Administrador de sesión',
+  STAKE_COORDINATOR: 'Coordinador de estaca', UNIT_LEADER: 'Cuenta de barrio',
+  REVIEWER: 'Supervisor', SUPPORT: 'Soporte',
+}
+
 export type DocumentType =
   | 'REGISTRATION_FORM'
   | 'IMAGE_AUTHORIZATION'
