@@ -47,7 +47,7 @@ export interface Viewer {
 export interface SessionInfo {
   id: string
   name: string
-  deadline: string
+  deadline: string | null
 }
 
 export interface Analysis {

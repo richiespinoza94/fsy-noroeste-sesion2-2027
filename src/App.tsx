@@ -227,7 +227,7 @@ function Dashboard({ viewer }: { viewer: Viewer }) {
   if (loading) return <PageSkeleton />
   if (error || !data) return <ErrorState message={error} />
 
-  const days = daysUntil(data.session.deadline)
+  const days = data.session.deadline ? daysUntil(data.session.deadline) : 0
   const attentionText = data.attention === 1 ? '1 joven necesita atención' : `${data.attention} jóvenes necesitan atención`
 
   return (
@@ -241,7 +241,7 @@ function Dashboard({ viewer }: { viewer: Viewer }) {
         {viewer.role !== 'UNIT_LEADER' ? <button className="button button--secondary desktop-only" onClick={() => go('revision')}><Icon name="shield" size={18} /> Abrir revisión</button> : null}
       </header>
 
-      <section className="deadline-card" aria-label={`${days} días para completar expedientes`}>
+      {data.session.deadline ? <section className="deadline-card" aria-label={`${days} días para completar expedientes`}>
         <div className="deadline-stamp"><strong>{Math.max(days, 0)}</strong><span>días</span></div>
         <div className="deadline-copy">
           <p>{days > 7 ? 'para completar tus expedientes' : days > 2 ? 'restantes para completar tus expedientes' : 'para resolver lo pendiente'}</p>
@@ -249,7 +249,7 @@ function Dashboard({ viewer }: { viewer: Viewer }) {
           {days <= 2 && data.attention ? <small>{attentionText}</small> : null}
         </div>
         <div className="deadline-path" aria-hidden="true"><i /><i /><i /><i /></div>
-      </section>
+      </section> : <section className="info-banner"><Icon name="clock" /><div><strong>Plazo pendiente de configuración</strong><p>El equipo FSY publicará aquí la fecha límite para completar los expedientes.</p></div></section>}
 
       <section className="summary-row" aria-label="Resumen de participantes">
         <SummaryMetric value={data.total} label="Tus participantes" />

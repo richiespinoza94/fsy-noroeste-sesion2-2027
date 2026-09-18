@@ -27,6 +27,19 @@ Deno.serve(async (req: Request) => {
     let input: Record<string, unknown>
     try { input = JSON.parse(bodyText) } catch { return reply({ error: 'INVALID_INPUT' }, 400) }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return reply({ error: 'INVALID_INPUT' }, 400)
+    if (input.action === 'reset_password') {
+      const { userId, password } = input
+      if (typeof userId !== 'string' || !/^[0-9a-f-]{36}$/i.test(userId)
+        || typeof password !== 'string' || password.length < 12 || password.length > 128) return reply({ error: 'INVALID_INPUT' }, 400)
+      const target = await db.from('profiles').select('role').eq('id', userId).single()
+      if (target.error || !target.data || !['UNIT_LEADER', 'REVIEWER', 'SESSION_ADMIN'].includes(target.data.role)) return reply({ error: 'RESET_NOT_ALLOWED' }, 403)
+      const result = await db.auth.admin.updateUserById(userId, { password, app_metadata: {
+        password_reset_by: identity.user.id, password_reset_at: new Date().toISOString(),
+      } })
+      if (result.error) return reply({ error: 'RESET_FAILED' }, 503)
+      return reply({ id: userId, reset: true })
+    }
+    if (input.action && input.action !== 'create') return reply({ error: 'INVALID_INPUT' }, 400)
     const { username, password, displayName, role, unitId } = input
     if (typeof username !== 'string' || !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(username)
       || typeof password !== 'string' || password.length < 12 || password.length > 128

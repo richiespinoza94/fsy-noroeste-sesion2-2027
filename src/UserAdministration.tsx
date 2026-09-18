@@ -16,6 +16,20 @@ export function UserAdministration({ units }: { units: AdminUnit[] }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [resetAccount, setResetAccount] = useState<Account | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  async function reset(event: FormEvent) {
+    event.preventDefault()
+    if (!supabase || !resetAccount || busy) return
+    setBusy(true); setError(''); setSuccess('')
+    try {
+      const result = await supabase.functions.invoke('create-portal-user', { body: { action: 'reset_password', userId: resetAccount.id, password: resetPassword } })
+      if (result.error || !result.data?.reset) throw new Error('No se confirmó el restablecimiento. Verifica tu sesión e inténtalo nuevamente.')
+      setSuccess(`Contraseña restablecida para ${resetAccount.username}. Entrégala al responsable.`)
+      setResetAccount(null); setResetPassword('')
+    } catch (e) { setError(e instanceof Error ? e.message : 'No pudimos restablecer la contraseña.') }
+    finally { setBusy(false) }
+  }
   async function load() {
     if (!supabase) { setLoading(false); return }
     setLoading(true)
@@ -69,6 +83,7 @@ export function UserAdministration({ units }: { units: AdminUnit[] }) {
       <div className="field--wide"><p>El usuario ingresa con este nombre y contraseña; no se enviará un correo. Podrá cambiar la contraseña desde su cuenta.</p>{error ? <p className="form-error" role="alert">{error}</p> : null}{success ? <p className="form-success" role="status">{success}</p> : null}<button className="button button--primary" disabled={!supabase || busy || loading || (role === 'UNIT_LEADER' && !available.some(u => u.id === unitId))}>{busy ? 'Creando…' : 'Crear cuenta'}</button></div>
     </form>
     <div className="section-heading"><h3>Cuentas existentes</h3><button className="button button--quiet" disabled={busy || loading} onClick={() => void load()}>Actualizar</button></div>
-    {loading ? <p role="status">Cargando cuentas…</p> : <ul className="account-list">{accounts.map(a => <li key={a.id}><strong>{a.display_name}</strong><span>{a.username} · {ROLE_LABELS[a.role]}</span>{a.unit_id ? <small>{units.find(u => u.id === a.unit_id)?.name ?? 'Unidad asignada'}</small> : null}</li>)}</ul>}
+    {loading ? <p role="status">Cargando cuentas…</p> : <ul className="account-list">{accounts.map(a => <li key={a.id}><strong>{a.display_name}</strong><span>{a.username} · {ROLE_LABELS[a.role]}</span>{a.unit_id ? <small>{units.find(u => u.id === a.unit_id)?.name ?? 'Unidad asignada'}</small> : null}{['UNIT_LEADER','REVIEWER','SESSION_ADMIN'].includes(a.role) ? <button className="button button--secondary" disabled={busy} onClick={() => { setResetAccount(a); setResetPassword(''); setError(''); setSuccess('') }}>Restablecer contraseña de {a.username}</button> : null}</li>)}</ul>}
+    {resetAccount ? <form className="form-stack" onSubmit={reset} aria-label="Restablecer contraseña"><h3>Restablecer contraseña de {resetAccount.username}</h3><p>La contraseña anterior dejará de servir para nuevos ingresos. Esta acción no cierra las sesiones que ya estén abiertas.</p><label>Nueva contraseña provisional<input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={resetPassword} onChange={e => setResetPassword(e.target.value)} disabled={busy} autoFocus /></label><button className="button button--primary" disabled={busy}>{busy ? 'Restableciendo…' : 'Confirmar restablecimiento'}</button><button type="button" className="button button--quiet" disabled={busy} onClick={() => { setResetAccount(null); setResetPassword('') }}>Cancelar</button></form> : null}
   </section>
 }

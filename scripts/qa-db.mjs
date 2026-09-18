@@ -323,5 +323,13 @@ assert.equal((await db.query('update document_requirements set required=false re
 assert.equal((await db.query('update profiles set role=\'SUPER_ADMIN\' where id=$1 returning id',[supervisorId])).rows.length,0)
 assert.ok((await db.query('select id from participants')).rows.length>0)
 console.log('OK usuarios: una cuenta por unidad, supervisor revisa sin configurar requisitos ni elevar su rol.')
+await db.exec('reset role')
+await db.exec("update sessions set status='CLOSED'; insert into sessions(name,year,deadline,status) values ('Sesión borrador QA',2027,null,'DRAFT')")
+await assert.rejects(db.exec("insert into sessions(name,year,deadline,status) values ('No activar sin plazo',2027,null,'ACTIVE')"),/active_session_needs_deadline/)
+await actor(admin)
+const draftDashboard=(await db.query('select leader_dashboard_summary() as summary')).rows[0].summary
+assert.equal(draftDashboard.session_name,'Sesión borrador QA')
+assert.equal(draftDashboard.deadline,null)
+console.log('OK sesión borrador: plazo sin publicar, dashboard disponible y activación sin fecha rechazada.')
 await db.close()
 

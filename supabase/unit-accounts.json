@@ -1,0 +1,92 @@
+[
+  {
+    "stake": "Ventanilla",
+    "unit": "Ventanilla",
+    "username": "ventanilla_ventanilla"
+  },
+  {
+    "stake": "Ventanilla",
+    "unit": "Los Álamos",
+    "username": "losalamos_ventanilla"
+  },
+  {
+    "stake": "Ventanilla",
+    "unit": "Naval",
+    "username": "naval_ventanilla"
+  },
+  {
+    "stake": "Ventanilla",
+    "unit": "Angamos",
+    "username": "angamos_ventanilla"
+  },
+  {
+    "stake": "Ventanilla",
+    "unit": "Pedro Beltrán",
+    "username": "pedrobeltran_ventanilla"
+  },
+  {
+    "stake": "Ventanilla",
+    "unit": "Mi Perú",
+    "username": "miperu_ventanilla"
+  },
+  {
+    "stake": "Puente Piedra",
+    "unit": "Zapallal 1",
+    "username": "zapallal1_puentepiedra"
+  },
+  {
+    "stake": "Puente Piedra",
+    "unit": "Zapallal 2",
+    "username": "zapallal2_puentepiedra"
+  },
+  {
+    "stake": "Puente Piedra",
+    "unit": "Las Lomas",
+    "username": "laslomas_puentepiedra"
+  },
+  {
+    "stake": "Puente Piedra",
+    "unit": "Arenas",
+    "username": "arenas_puentepiedra"
+  },
+  {
+    "stake": "Puente Piedra",
+    "unit": "Puente Piedra",
+    "username": "puentepiedra_puentepiedra"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "Barrio Laderas",
+    "username": "laderas_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "San Diego",
+    "username": "sandiego_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "Famesa 1",
+    "username": "famesa1_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "ProLima 1",
+    "username": "prolima1_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "ProLima 2",
+    "username": "prolima2_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "Ensenada",
+    "username": "ensenada_prolima"
+  },
+  {
+    "stake": "Pro Lima",
+    "unit": "Santa Rosa",
+    "username": "santarosa_prolima"
+  }
+]
