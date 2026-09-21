@@ -8,11 +8,13 @@ import {
   validateEmail,
   validatePhone,
 } from '../src/utils/validation';
-import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
+import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../src/utils/asistenciaStats';
 import { nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
+import type { Asistencia, Capacitacion, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 import type { Asistencia, Capacitacion, Participante } from '../src/types';
 
@@ -491,6 +493,118 @@ test('65. habilidadesParaMostrar — quita las respuestas negativas de la lista 
 
 test('66. tieneExperienciaAudiovisual — la opción explícita "No tengo experiencia" tampoco cuenta', () => {
   assert.strictEqual(tieneExperienciaAudiovisual(['No tengo experiencia']), false);
+});
+
+// ── asistenciaStats — presentes/ausentes/% por capacitación, y el promedio ─
+
+function personaFake(id: string): Participante {
+  return {
+    id, timestamp: new Date('2027-01-01T00:00:00').toISOString(), nombres: 'Test', apellidos: id,
+    fechaNacimiento: '2005-01-01', telefono: '987654321', correo: `${id}@correo.com`, estaca: 'Ventanilla',
+    barrio: 'Ventanilla', genero: 'H', experienciaPrevia: 'ninguna', asignacionAnterior: '', disponibilidad: 'si',
+    asignacion: 'Consejero', familiaId: '',
+  } as Participante;
+}
+const SEGMENTO_4 = ['a', 'b', 'c', 'd'].map(personaFake);
+const CAP_UNICA = [capFake('u1', '2027-01-05')];
+
+test('67. calcularAsistenciaPorCapacitacion — cuenta presentes/ausentes/justificados/sinMarca correctamente', () => {
+  const asistencia: Asistencia[] = [
+    { capacitacionId: 'u1', participanteId: 'a', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'b', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'c', estado: 'ausente', timestamp: '' },
+    // 'd' no tiene marca — cuenta como sinMarca, no como registro
+  ];
+  const [stat] = calcularAsistenciaPorCapacitacion(SEGMENTO_4, CAP_UNICA, asistencia);
+  assert.strictEqual(stat.presentes, 2);
+  assert.strictEqual(stat.ausentes, 1);
+  assert.strictEqual(stat.justificados, 0);
+  assert.strictEqual(stat.sinMarca, 1);
+  assert.strictEqual(stat.registros, 3);
+  assert.strictEqual(stat.pct, 50); // 2 de 4 = 50%
+});
+
+test('68. calcularAsistenciaPorCapacitacion — ignora marcas de personas fuera del segmento (filtro de estaca/audiovisual ya aplicado antes)', () => {
+  const asistencia: Asistencia[] = [
+    { capacitacionId: 'u1', participanteId: 'fuera-del-segmento', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'a', estado: 'presente', timestamp: '' },
+  ];
+  const [stat] = calcularAsistenciaPorCapacitacion(SEGMENTO_4, CAP_UNICA, asistencia);
+  assert.strictEqual(stat.presentes, 1);
+  assert.strictEqual(stat.registros, 1);
+});
+
+test('69. promedioAsistencia — ignora capacitaciones sin ningún registro (no las cuenta como 0%)', () => {
+  const dosCaps = [capFake('u1', '2027-01-05'), capFake('u2', '2027-01-06')];
+  const asistencia: Asistencia[] = [
+    { capacitacionId: 'u1', participanteId: 'a', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'b', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'c', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'u1', participanteId: 'd', estado: 'presente', timestamp: '' },
+    // u2 sin ninguna marca todavía
+  ];
+  const porCap = calcularAsistenciaPorCapacitacion(SEGMENTO_4, dosCaps, asistencia);
+  assert.strictEqual(promedioAsistencia(porCap), 100); // solo u1 cuenta (100%), u2 se ignora
+});
+
+test('70. promedioAsistencia — sin ninguna capacitación con registros, el promedio es 0', () => {
+  const porCap = calcularAsistenciaPorCapacitacion(SEGMENTO_4, CAP_UNICA, []);
+  assert.strictEqual(promedioAsistencia(porCap), 0);
+});
+
+// ── getCapacitacionParaHome — en vivo vs. última capacitación ──────────────
+
+test('71. getCapacitacionParaHome — sin capacitaciones creadas todavía → null', () => {
+  assert.strictEqual(getCapacitacionParaHome([]), null);
+});
+
+test('72. getCapacitacionParaHome — todas son futuras (evento no ha empezado) → null', () => {
+  const caps = [capFake('f1', '2027-03-01', '09:00')];
+  const ahora = new Date('2027-01-01T00:00:00');
+  assert.strictEqual(getCapacitacionParaHome(caps, ahora), null);
+});
+
+test('73. getCapacitacionParaHome — "ahora" cae dentro del rango [hora, horaFin] → en curso', () => {
+  const cap: Capacitacion = { id: 'c1', label: 'Sesión', fecha: '2027-01-10', hora: '09:00', horaFin: '12:00', lugar: 'X', oficial: true };
+  const r = getCapacitacionParaHome([cap], new Date('2027-01-10T10:30:00'));
+  assert.strictEqual(r?.cap.id, 'c1');
+  assert.strictEqual(r?.enCurso, true);
+});
+
+test('74. getCapacitacionParaHome — justo pasada la horaFin exacta, ya no está en curso, es "última"', () => {
+  const cap: Capacitacion = { id: 'c1', label: 'Sesión', fecha: '2027-01-10', hora: '09:00', horaFin: '12:00', lugar: 'X', oficial: true };
+  const r = getCapacitacionParaHome([cap], new Date('2027-01-10T12:00:01'));
+  assert.strictEqual(r?.cap.id, 'c1');
+  assert.strictEqual(r?.enCurso, false);
+});
+
+test('75. getCapacitacionParaHome — sin horaFin, usa 3h por defecto (mismo valor que la ventana pública)', () => {
+  const cap: Capacitacion = { id: 'c1', label: 'Sesión', fecha: '2027-01-10', hora: '09:00', lugar: 'X', oficial: true };
+  const dentro = getCapacitacionParaHome([cap], new Date('2027-01-10T11:59:00'));
+  const fuera = getCapacitacionParaHome([cap], new Date('2027-01-10T12:01:00'));
+  assert.strictEqual(dentro?.enCurso, true);
+  assert.strictEqual(fuera?.enCurso, false);
+});
+
+test('76. getCapacitacionParaHome — horaFin inválida (antes que hora, dato mal cargado) cae al valor por defecto en vez de invertir el rango', () => {
+  const cap: Capacitacion = { id: 'c1', label: 'Sesión', fecha: '2027-01-10', hora: '09:00', horaFin: '08:00', lugar: 'X', oficial: true };
+  const r = getCapacitacionParaHome([cap], new Date('2027-01-10T10:00:00'));
+  assert.strictEqual(r?.enCurso, true); // sigue "en curso" gracias al fallback de 3h, no queda huérfana
+});
+
+test('77. getCapacitacionParaHome — dos capacitaciones el mismo día en curso a la vez → gana la que empezó más tarde', () => {
+  const manana: Capacitacion = { id: 'manana', label: 'Mañana', fecha: '2027-01-10', hora: '08:00', horaFin: '13:00', lugar: 'X', oficial: true };
+  const tarde: Capacitacion = { id: 'tarde', label: 'Tarde', fecha: '2027-01-10', hora: '12:00', horaFin: '17:00', lugar: 'X', oficial: true };
+  const r = getCapacitacionParaHome([manana, tarde], new Date('2027-01-10T12:30:00')); // dentro de ambos rangos
+  assert.strictEqual(r?.cap.id, 'tarde');
+  assert.strictEqual(r?.enCurso, true);
+});
+
+test('78. getCapacitacionParaHome — ninguna en curso → la más reciente que ya terminó ("última capacitación")', () => {
+  const caps = [capFake('c1', '2027-01-05', '09:00'), capFake('c2', '2027-01-10', '09:00')];
+  const r = getCapacitacionParaHome(caps, new Date('2027-01-15T00:00:00'));
+  assert.strictEqual(r?.cap.id, 'c2'); // la del 10, no la del 5
+  assert.strictEqual(r?.enCurso, false);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

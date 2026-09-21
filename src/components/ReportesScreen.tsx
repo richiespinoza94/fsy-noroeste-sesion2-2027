@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
-import { buildAsistenciaCsv, downloadCsv } from '../utils/csvExport';
+import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
+import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
+import MetricCard from './MetricCard';
 
 type SubTab = 'general' | 'compromiso';
 
@@ -37,17 +39,14 @@ export default function ReportesScreen({
     [capacitaciones]
   );
 
-  const segmentoIds = new Set(segmento.map((p) => p.id));
-  const attByCap = capsOrdenadas.map((c) => {
-    const rows = asistencia.filter((a) => a.capacitacionId === c.id && segmentoIds.has(a.participanteId));
-    const presentes = rows.filter((a) => a.estado === 'presente').length;
-    const ausentes = rows.filter((a) => a.estado === 'ausente').length;
-    const justificados = rows.filter((a) => a.estado === 'justificado').length;
-    const pct = segmento.length ? Math.round((presentes / segmento.length) * 100) : 0;
-    return { cap: c, presentes, ausentes, justificados, sinMarca: Math.max(segmento.length - rows.length, 0), pct, registros: rows.length };
-  });
-  const conRegistros = attByCap.filter((c) => c.registros > 0);
-  const avgAtt = conRegistros.length ? Math.round(conRegistros.reduce((s, c) => s + c.pct, 0) / conRegistros.length) : 0;
+  // Extraído a utils/asistenciaStats.ts — lo usa también HomeScreen para la
+  // tarjeta de "asistencia en vivo / última capacitación", ya no vive
+  // duplicado en 2 componentes.
+  const attByCap = useMemo(
+    () => calcularAsistenciaPorCapacitacion(segmento, capsOrdenadas, asistencia),
+    [segmento, capsOrdenadas, asistencia]
+  );
+  const avgAtt = useMemo(() => promedioAsistencia(attByCap), [attByCap]);
 
   const byEstaca = [
     ...ESTACAS_PRINCIPALES.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })),
@@ -104,9 +103,27 @@ export default function ReportesScreen({
           🎬 AV
         </button>
         <button
-          onClick={() => downloadCsv(buildAsistenciaCsv(participantes, capsOrdenadas, asistencia), `asistencia-fsy-2027-${new Date().toISOString().slice(0, 10)}.csv`)}
+          onClick={() => {
+            // El reporte descargado cambia según la pestaña activa — antes
+            // siempre bajaba la matriz de asistencia (pensada para
+            // Compromiso) aunque se descargara desde General, y encima
+            // ignoraba los filtros de estaca/audiovisual (usaba
+            // `participantes` completo, no `segmento`). Los dos se arreglan
+            // acá: siempre `segmento` (el filtrado), y el tipo de reporte
+            // según `sub`.
+            const fecha = new Date().toISOString().slice(0, 10);
+            if (sub === 'general') {
+              downloadCsv(buildRegistroCsv(segmento), `registro-fsy-2027-${fecha}.csv`);
+            } else {
+              downloadCsv(buildAsistenciaCsv(segmento, capsOrdenadas, asistencia), `asistencia-fsy-2027-${fecha}.csv`);
+            }
+          }}
           className="shrink-0 bg-primary text-white font-bold text-xs rounded-xl px-3 flex items-center gap-1.5"
-          title="Descargar CSV con todos los participantes y su asistencia a cada capacitación"
+          title={
+            sub === 'general'
+              ? 'Descargar CSV con todos los datos del formulario de registro (del segmento filtrado)'
+              : 'Descargar CSV con la asistencia de cada participante a cada capacitación (del segmento filtrado)'
+          }
         >
           📥 CSV
         </button>
@@ -121,10 +138,10 @@ export default function ReportesScreen({
       {sub === 'general' && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Metric label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />
-            <Metric label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
-            <Metric label="Asistencia promedio" value={`${avgAtt}%`} color="#E8863A" icon="📈" />
-            <Metric label="Capacitaciones" value={capacitaciones.length} color="#9C27B0" icon="📅" />
+            <MetricCard label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />
+            <MetricCard label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
+            <MetricCard label="Asistencia promedio" value={`${avgAtt}%`} color="#E8863A" icon="📈" />
+            <MetricCard label="Capacitaciones" value={capacitaciones.length} color="#9C27B0" icon="📅" />
           </div>
 
       {attByCap.length > 0 && (
@@ -248,20 +265,6 @@ export default function ReportesScreen({
   );
 }
 
-function Metric({ label, value, color, icon }: { label: string; value: number | string; color: string; icon: string }) {
-  return (
-    <div className="bg-white rounded-2xl p-3.5 shadow-sm border-l-[4px]" style={{ borderLeftColor: color }}>
-      <div className="flex items-center gap-2">
-        <span className="text-lg">{icon}</span>
-        <div>
-          <div className="text-lg font-extrabold" style={{ color }}>{value}</div>
-          <div className="text-[10px] text-slate-500 font-semibold">{label}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Mark({ label, bg, fg }: { label: string; bg: string; fg: string }) {
   return (
     <span className="rounded-full px-1.5 py-0.5 font-bold" style={{ background: bg, color: fg }}>
@@ -269,3 +272,4 @@ function Mark({ label, bg, fg }: { label: string; bg: string; fg: string }) {
     </span>
   );
 }
+

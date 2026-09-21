@@ -15,6 +15,14 @@ export const EXPERIENCIA_PREVIA_LABEL: Record<ExperienciaPrevia, string> = {
   ambos: 'Sí, en ambos',
 };
 
+// Antes vivía solo dentro de BusquedaScreen.tsx — se movió acá para poder
+// reusarlo también en la exportación CSV de Reportes, sin duplicar el texto.
+export const DISPONIBILIDAD_LABEL: Record<Disponibilidad, string> = {
+  si: 'Sí, disponible',
+  no_creo: 'No cree poder',
+  no_se: 'Aún no lo sabe',
+};
+
 export const ASIGNACIONES = [
   'Coordinador General',
   'Coordinador Auxiliar',
@@ -92,7 +100,8 @@ export interface Capacitacion {
   id: string;
   label: string;
   fecha: string; // yyyy-MM-dd
-  hora: string; // HH:mm
+  hora: string; // HH:mm — inicio
+  horaFin?: string; // HH:mm — opcional; sin esto, se asume una duración por defecto (ver capacitacionesService.ts). Sirve para distinguir "en curso" de "terminada" cuando hay 2 capacitaciones el mismo día.
   lugar: string;
   oficial: boolean;
 }

@@ -108,6 +108,59 @@ export function getCapacitacionParaAutoMarcar(caps: Capacitacion[], ahora: Date 
   return cap && estadoVentanaCheckIn(cap, ahora) === 'abierta' ? cap : null;
 }
 
+/**
+ * Elige QUÉ capacitación mostrar en la tarjeta de asistencia del Home —
+ * distinta de getNextCapacitacion() (que mira hacia ADELANTE, la próxima) y
+ * de getCapacitacionParaCheckIn() (pensada para el check-in público). Esta
+ * mira hacia el momento actual y hacia ATRÁS:
+ *
+ * 1) si hay una capacitación EN CURSO ahora mismo (entre su hora de inicio
+ *    y su hora de fin), esa gana y se marca `enCurso: true` — el admin ve
+ *    la asistencia de HOY en vivo, no la de la sesión pasada.
+ * 2) si dos quedaran en curso al mismo tiempo (dos sesiones programadas el
+ *    mismo día que se solapan), gana la que empezó más tarde — la más
+ *    específica de las dos en ese momento.
+ * 3) si ninguna está en curso, la más reciente que YA TERMINÓ — "última
+ *    capacitación".
+ * 4) si el evento ni siquiera ha empezado (todas son futuras), no hay nada
+ *    que mostrar todavía → null.
+ *
+ * `horaFin` es opcional (capacitaciones creadas antes de este campo, o
+ * dejado en blanco a propósito) — sin ella, se asume la misma duración por
+ * defecto que ya usa la ventana de check-in público (3h), para no dejar
+ * capacitaciones viejas sin clasificar. Si horaFin quedara antes que hora
+ * (dato mal cargado), también se cae al valor por defecto en vez de
+ * producir un rango invertido.
+ */
+export function getCapacitacionParaHome(
+  caps: Capacitacion[],
+  ahora: Date = new Date()
+): { cap: Capacitacion; enCurso: boolean } | null {
+  const parsed = caps
+    .map((c) => {
+      const inicio = new Date(`${c.fecha}T${c.hora || '00:00'}`);
+      let fin = c.horaFin ? new Date(`${c.fecha}T${c.horaFin}`) : null;
+      if (!fin || isNaN(fin.getTime()) || fin.getTime() <= inicio.getTime()) {
+        fin = new Date(inicio.getTime() + VENTANA_DESPUES_MS);
+      }
+      return { c, inicio, fin };
+    })
+    .filter((x) => !isNaN(x.inicio.getTime()));
+  if (!parsed.length) return null;
+
+  const nowMs = ahora.getTime();
+  const enCurso = parsed.filter((x) => nowMs >= x.inicio.getTime() && nowMs <= x.fin.getTime());
+  if (enCurso.length) {
+    enCurso.sort((a, b) => b.inicio.getTime() - a.inicio.getTime());
+    return { cap: enCurso[0].c, enCurso: true };
+  }
+
+  const pasadas = parsed.filter((x) => x.fin.getTime() < nowMs).sort((a, b) => b.inicio.getTime() - a.inicio.getTime());
+  if (pasadas.length) return { cap: pasadas[0].c, enCurso: false };
+
+  return null;
+}
+
 /** Elige la capacitación más relevante para el Home/Asistencia de staff: la futura más próxima, si no la pasada más reciente. */
 export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
   if (!caps.length) return null;

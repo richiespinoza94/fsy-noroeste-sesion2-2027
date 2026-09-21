@@ -561,6 +561,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
   const [label, setLabel] = useState('');
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('09:00');
+  const [horaFin, setHoraFin] = useState('');
   const [lugar, setLugar] = useState('');
   const [armedId, setArmedId] = useState<string | null>(null);
 
@@ -589,13 +590,20 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
 
   async function submit() {
     if (!fecha) return;
+    // horaFin: cadena vacía si se deja en blanco, NUNCA `undefined` — a
+    // diferencia de CONFEJAS 2026 (su app hermana), este proyecto no tiene
+    // un stripUndefined() antes de setDoc, y Firestore rechaza cualquier
+    // campo con valor `undefined` con un error genérico. Como el resto del
+    // modelo (asignacionAnterior, familiaId) ya usa '' como "sin dato", se
+    // sigue el mismo patrón acá en vez de portar ese helper para un solo campo.
     await addCapacitacion(
-      { label: label || `Capacitación — ${fecha}`, fecha, hora, lugar: lugar || 'Por confirmar', oficial: true },
+      { label: label || `Capacitación — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar', oficial: true },
       user.correo
     );
     setAdding(false);
     setLabel('');
     setFecha('');
+    setHoraFin('');
     setLugar('');
   }
 
@@ -612,7 +620,25 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-2">
           <input className="input" placeholder="Nombre (opcional)" value={label} onChange={(e) => setLabel(e.target.value)} />
           <input className="input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-          <input className="input" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Hora inicio</div>
+              <input className="input" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+            </div>
+            <div className="flex-1">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Hora final (opcional)</div>
+              <input className="input" type="time" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} />
+            </div>
+          </div>
+          {/* Solo aparece si hay otra capacitación el mismo día — cubre el
+              caso real que motivó agregar horaFin: dos sesiones un mismo
+              sábado, y sin hora final no hay forma de saber en el Home si
+              la de la mañana ya terminó o si "está en curso" toda la tarde. */}
+          {fecha && !horaFin && capacitaciones.filter((c) => c.fecha === fecha).length > 0 && (
+            <div className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-2">
+              ⚠️ Ya hay otra capacitación este mismo día — pon la hora final para que el Home no las confunda.
+            </div>
+          )}
           <input className="input" placeholder="Lugar" value={lugar} onChange={(e) => setLugar(e.target.value)} />
           <div className="flex gap-2">
             <button onClick={submit} className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm">Confirmar</button>
@@ -638,7 +664,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">📅</div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold truncate">{c.label}</div>
-              <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora} · {c.lugar}</div>
+              <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora}{c.horaFin ? `–${c.horaFin}` : ''} · {c.lugar}</div>
             </div>
             {user.canEditAll && (
               armed ? (

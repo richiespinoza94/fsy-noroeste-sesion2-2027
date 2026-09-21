@@ -5,17 +5,11 @@ import { fuzzyIncludes } from '../utils/search';
 import { nombreCorto } from '../utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
+import { ASIGNACIONES, DISPONIBILIDAD_LABEL, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
 function matches(p: Participante, query: string): boolean {
   return fuzzyIncludes(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`, query);
 }
-
-const DISPONIBILIDAD_LABEL: Record<Disponibilidad, string> = {
-  si: 'Sí, disponible',
-  no_creo: 'No cree poder',
-  no_se: 'Aún no lo sabe',
-};
 
 export default function BusquedaScreen({
   user,

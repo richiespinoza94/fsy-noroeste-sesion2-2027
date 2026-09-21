@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
-import type { Capacitacion, Participante, SessionUser } from '../types';
-import { getNextCapacitacion } from '../services/capacitacionesService';
+import { useEffect, useMemo, useState } from 'react';
+import type { Asistencia, Capacitacion, Participante, SessionUser } from '../types';
+import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
+import { subscribeAllAsistencia } from '../services/asistenciaService';
+import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
 import { useScrollDirection } from '../utils/useScrollDirection';
+import MetricCard from './MetricCard';
 
 export default function HomeScreen({
   user,
@@ -19,12 +22,30 @@ export default function HomeScreen({
   onNavHiddenChange: (hidden: boolean) => void;
 }) {
   const handleScroll = useScrollDirection(onNavHiddenChange);
+  const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
+  useEffect(() => subscribeAllAsistencia(setAsistencia), []);
+
   // Derivados memoizados — misma lección que ya está documentada en
   // CONFEJAS (CONTEXTO.md, "cálculos sin memoizar" sobre 500 personas):
   // mejor aplicarla desde ahora que es gratis, que esperar a redescubrirla
   // cuando el roster crezca.
   const next = useMemo(() => getNextCapacitacion(capacitaciones), [capacitaciones]);
   const confirmados = useMemo(() => participantes.filter((p) => p.disponibilidad === 'si').length, [participantes]);
+
+  const capsOrdenadas = useMemo(
+    () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
+    [capacitaciones]
+  );
+  const porCap = useMemo(
+    () => calcularAsistenciaPorCapacitacion(participantes, capsOrdenadas, asistencia),
+    [participantes, capsOrdenadas, asistencia]
+  );
+  const promedio = useMemo(() => promedioAsistencia(porCap), [porCap]);
+
+  // La capacitación que corresponde mostrar AHORA: en curso si hay una
+  // sesión ocurriendo en este momento, si no la última que ya terminó.
+  const relevante = useMemo(() => getCapacitacionParaHome(capacitaciones), [capacitaciones]);
+  const statsRelevante = relevante ? porCap.find((s) => s.cap.id === relevante.cap.id) : null;
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
@@ -39,7 +60,7 @@ export default function HomeScreen({
               <div className="text-lg font-extrabold">{next?.label || 'Sin capacitaciones programadas'}</div>
               {next && (
                 <div className="text-sm opacity-80 mt-1">
-                  {next.fecha} {next.hora && `· ${next.hora}`} · {next.lugar}
+                  {next.fecha} {next.hora && `· ${next.hora}${next.horaFin ? `–${next.horaFin}` : ''}`} · {next.lugar}
                 </div>
               )}
             </>
@@ -48,8 +69,36 @@ export default function HomeScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Metric label="Consejeros registrados" value={participantes.length} color="#0E2954" icon="👥" cargando={cargando} />
-        <Metric label="Confirmados para el evento" value={confirmados} color="#4CAF50" icon="✅" cargando={cargando} />
+        <MetricCard label="Consejeros registrados" value={participantes.length} color="#0E2954" icon="👥" cargando={cargando} />
+        <MetricCard label="Confirmados para el evento" value={confirmados} color="#4CAF50" icon="✅" cargando={cargando} />
+        <MetricCard
+          label="Asistencia promedio"
+          value={`${promedio}%`}
+          color="#E8863A"
+          icon="📈"
+          cargando={cargando}
+          sub={porCap.filter((c) => c.registros > 0).length ? undefined : 'Aún sin capacitaciones marcadas'}
+        />
+        {relevante && statsRelevante ? (
+          <MetricCard
+            label={relevante.enCurso ? 'Asistencia de hoy' : 'Última capacitación'}
+            value={`${statsRelevante.presentes}/${participantes.length}`}
+            color={relevante.enCurso ? '#C62828' : '#9C27B0'}
+            icon={relevante.enCurso ? '🔴' : '📋'}
+            cargando={cargando}
+            badge={relevante.enCurso ? 'EN VIVO' : undefined}
+            sub={`${relevante.cap.label} · ${statsRelevante.pct}%`}
+          />
+        ) : (
+          <MetricCard
+            label="Última capacitación"
+            value="—"
+            color="#9C27B0"
+            icon="📋"
+            cargando={cargando}
+            sub="Ninguna ha ocurrido todavía"
+          />
+        )}
       </div>
 
       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
@@ -120,24 +169,3 @@ export default function HomeScreen({
   );
 }
 
-function Metric({
-  label,
-  value,
-  color,
-  icon,
-  cargando,
-}: {
-  label: string;
-  value: number;
-  color: string;
-  icon: string;
-  cargando: boolean;
-}) {
-  return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border-t-[3px]" style={{ borderTopColor: color }}>
-      <div className="text-xl mb-1">{icon}</div>
-      <div className="text-2xl font-extrabold" style={{ color }}>{cargando ? '—' : value}</div>
-      <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{label}</div>
-    </div>
-  );
-}
