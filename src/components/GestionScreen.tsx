@@ -548,12 +548,44 @@ function RolesTab({ user, participantes }: { user: SessionUser; participantes: P
 }
 
 // ── Capacitaciones (admin) ──────────────────────────────────────────────────
+// Confirmación de eliminar en 2 pasos: tocar "Eliminar" la arma (cambia de
+// ícono a un aviso explícito) por unos segundos; solo si se toca DE NUEVO en
+// esa ventana se ejecuta el borrado. Sin modal nuevo, sin input de texto —
+// evita el borrado accidental (el caso real que motivó esto) sin la fricción
+// de escribir una palabra de confirmación para una acción que un admin hace
+// seguido. Si no se confirma a tiempo, vuelve solo al estado normal.
+const CONFIRM_WINDOW_MS = 4000;
+
 function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capacitaciones: Capacitacion[] }) {
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('09:00');
   const [lugar, setLugar] = useState('');
+  const [armedId, setArmedId] = useState<string | null>(null);
+
+  // Próximas primero — antes se mostraban en el orden en que Firestore las
+  // devuelve (no garantizado, en la práctica se veía como alfabético por
+  // label), lo que no ayuda a ubicar rápido "la de este sábado".
+  const ordenadas = useMemo(
+    () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
+    [capacitaciones]
+  );
+
+  useEffect(() => {
+    if (!armedId) return;
+    const t = setTimeout(() => setArmedId(null), CONFIRM_WINDOW_MS);
+    return () => clearTimeout(t);
+  }, [armedId]);
+
+  function handleDeleteClick(c: Capacitacion) {
+    if (armedId === c.id) {
+      setArmedId(null);
+      deleteCapacitacion(c.id, user.correo);
+    } else {
+      setArmedId(c.id);
+    }
+  }
 
   async function submit() {
     if (!fecha) return;
@@ -596,18 +628,38 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
         </div>
       )}
 
-      {capacitaciones.map((c) => (
-        <div key={c.id} className="bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">📅</div>
-          <div className="flex-1">
-            <div className="text-sm font-bold">{c.label}</div>
-            <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora} · {c.lugar}</div>
+      {ordenadas.map((c) => {
+        const armed = armedId === c.id;
+        return (
+          <div
+            key={c.id}
+            className={`bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 border ${armed ? 'border-red-200' : 'border-transparent'}`}
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">📅</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold truncate">{c.label}</div>
+              <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora} · {c.lugar}</div>
+            </div>
+            {user.canEditAll && (
+              armed ? (
+                <button
+                  onClick={() => handleDeleteClick(c)}
+                  className="shrink-0 text-red-700 text-[11px] font-bold bg-red-100 rounded-lg px-2.5 py-1.5 max-w-[130px] text-right leading-tight"
+                >
+                  ¿Eliminar y perder su asistencia registrada?
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleDeleteClick(c)}
+                  className="shrink-0 text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1.5"
+                >
+                  ✕
+                </button>
+              )
+            )}
           </div>
-          {user.canEditAll && (
-            <button onClick={() => deleteCapacitacion(c.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1.5">✕</button>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

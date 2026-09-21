@@ -3,6 +3,7 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
+import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
@@ -22,10 +23,13 @@ export default function ReportesScreen({
   const [sub, setSub] = useState<SubTab>('general');
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
+  const [soloAudiovisual, setSoloAudiovisual] = useState(false);
 
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
 
-  const segmento = filterEstaca ? participantes.filter((p) => estacaEnFiltro(p.estaca, filterEstaca)) : participantes;
+  const segmento = participantes
+    .filter((p) => !filterEstaca || estacaEnFiltro(p.estaca, filterEstaca))
+    .filter((p) => !soloAudiovisual || tieneExperienciaAudiovisual(p.audiovisualHabilidades));
   const confirmados = segmento.filter((p) => p.disponibilidad === 'si').length;
 
   const capsOrdenadas = useMemo(
@@ -91,6 +95,15 @@ export default function ReportesScreen({
           <option value={FILTRO_OTRAS}>Otras</option>
         </select>
         <button
+          onClick={() => setSoloAudiovisual((v) => !v)}
+          title="Solo consejeros con experiencia en audiovisuales"
+          className={`shrink-0 text-xs font-bold rounded-xl px-3 whitespace-nowrap border-[1.5px] ${
+            soloAudiovisual ? 'bg-accent border-accent text-primary' : 'bg-white border-slate-200 text-slate-600'
+          }`}
+        >
+          🎬 AV
+        </button>
+        <button
           onClick={() => downloadCsv(buildAsistenciaCsv(participantes, capsOrdenadas, asistencia), `asistencia-fsy-2027-${new Date().toISOString().slice(0, 10)}.csv`)}
           className="shrink-0 bg-primary text-white font-bold text-xs rounded-xl px-3 flex items-center gap-1.5"
           title="Descargar CSV con todos los participantes y su asistencia a cada capacitación"
@@ -98,6 +111,12 @@ export default function ReportesScreen({
           📥 CSV
         </button>
       </div>
+      {soloAudiovisual && (
+        <div className="text-[11px] text-slate-500 px-1 -mt-2">
+          Mostrando solo consejeros con experiencia audiovisual real ({segmento.length} de{' '}
+          {filterEstaca ? participantes.filter((p) => estacaEnFiltro(p.estaca, filterEstaca)).length : participantes.length}).
+        </div>
+      )}
 
       {sub === 'general' && (
         <>
