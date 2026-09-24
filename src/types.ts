@@ -144,7 +144,17 @@ export interface SessionUser {
   canEditAll: boolean;
   canViewReports: boolean;
   canChangeRoles: boolean;
+  canRepartirFamilias: boolean; // exclusivo de Coordinador General, mismo criterio que canChangeRoles pero como flag propio — ver authService.ts
   isAuxiliar: boolean;
+}
+
+/** Snapshot de un reparto automático de compañías — permite deshacerlo en un solo paso (ver repartoFamiliasService.ts). Vive en Firestore como documento fijo `repartosFamilias/activo`: solo puede haber uno activo a la vez. */
+export interface RepartoFamiliasActivo {
+  timestamp: string;
+  capacitacionId: string;
+  adminCorreo: string;
+  anterior: { participanteId: string; familiaIdAnterior: string }[]; // para deshacer
+  asignados: { participanteId: string; familiaId: string }[]; // el reparto que se aplicó
 }
 
 export interface AuditLog {

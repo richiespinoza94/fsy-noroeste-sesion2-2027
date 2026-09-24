@@ -22,6 +22,7 @@ service cloud.firestore {
     match /familias/{id}      { allow read, write: if true; }
     match /companerismo/{id}  { allow read, write: if true; }
     match /nochesHogar/{id}   { allow read, write: if true; }
+    match /repartosFamilias/{id} { allow read, write: if true; } // snapshot de rollback del reparto automático de compañías — ver repartoFamiliasService.ts
     match /auditoria/{id}     { allow create, read: if true; allow update: if false; }
 
     match /{document=**} { allow read, write: if false; }

@@ -94,7 +94,11 @@ async function buildSession(email: string, usuario: Usuario): Promise<SessionUse
   // total a familias/capacitaciones/usuarios, pero cambiar el rol de un
   // participante (ej. volverlo Coordinador General) queda reservado
   // exclusivamente a quien tiene ese rol exacto — decisión explícita.
-  const canChangeRoles = (usuario.rol || '').toLowerCase().trim() === 'coordinador general';
+  // El reparto automático de compañías sigue la misma regla (mismo criterio,
+  // flag propio para no sobrecargar el significado de canChangeRoles).
+  const esCoordinadorGeneral = (usuario.rol || '').toLowerCase().trim() === 'coordinador general';
+  const canChangeRoles = esCoordinadorGeneral;
+  const canRepartirFamilias = esCoordinadorGeneral;
   let participantId: string | undefined;
   let familiaId: string | undefined;
   if (isAux) {
@@ -111,6 +115,7 @@ async function buildSession(email: string, usuario: Usuario): Promise<SessionUse
     canEditAll: isFull,
     canViewReports: isFull,
     canChangeRoles,
+    canRepartirFamilias,
     isAuxiliar: isAux,
   };
 }

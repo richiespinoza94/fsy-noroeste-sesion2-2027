@@ -14,15 +14,28 @@ import {
   subscribeFamilias,
   updateFamiliaMeta,
 } from '../services/familiasService';
+import { deshacerReparto, ejecutarReparto, subscribeRepartoActivo } from '../services/repartoFamiliasService';
+import {
+  calcularCandidatosPorRol,
+  calcularEdad,
+  calcularEstadisticas,
+  repartoCompleto,
+  type CandidatoReparto,
+  type FuenteReparto,
+} from '../utils/repartoFamilias';
+import { downloadBlob, generarRepartoPdf } from '../utils/repartoPdf';
+import { generarPresentacionHtml } from '../utils/repartoPresentacion';
+import { subscribeAllAsistencia } from '../services/asistenciaService';
+import { EVENTO_NOMBRE } from '../data/evento';
 import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion } from '../services/capacitacionesService';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, type Asignacion, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type SessionUser, type Usuario } from '../types';
+import { ASIGNACIONES, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasActivo, type SessionUser, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
-type SubTab = 'familias' | 'roles' | 'capacitaciones' | 'usuarios';
+type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios';
 
 export default function GestionScreen({
   user,
@@ -39,22 +52,26 @@ export default function GestionScreen({
   const [sub, setSub] = useState<SubTab>('familias');
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
+  const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
 
   useEffect(() => {
     const u1 = subscribeFamilias(setFamilias);
     const u2 = subscribeCompanerismo(setCompanerismo);
+    const u3 = subscribeAllAsistencia(setAsistencia);
     return () => {
       u1();
       u2();
+      u3();
     };
   }, []);
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex bg-white border-b border-slate-200 shrink-0">
+      <div className="flex bg-white border-b border-slate-200 shrink-0 overflow-x-auto">
         {(
           [
             ['familias', '👥 Familias'],
+            ...(user.canRepartirFamilias ? [['reparto', '🔀 Reparto'] as const] : []),
             ['roles', '🎭 Roles'],
             ['capacitaciones', '📅 Capacitaciones'],
             ...(user.canEditAll ? [['usuarios', '🔑 Usuarios'] as const] : []),
@@ -63,7 +80,7 @@ export default function GestionScreen({
           <button
             key={id}
             onClick={() => setSub(id)}
-            className={`flex-1 py-2.5 text-xs font-bold border-b-2 ${sub === id ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
+            className={`flex-1 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap px-2 ${sub === id ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
           >
             {label}
           </button>
@@ -72,6 +89,16 @@ export default function GestionScreen({
       <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24" onScroll={handleScroll}>
         {sub === 'familias' && (
           <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} />
+        )}
+        {sub === 'reparto' && user.canRepartirFamilias && (
+          <RepartoTab
+            user={user}
+            participantes={participantes}
+            capacitaciones={capacitaciones}
+            familias={familias}
+            companerismo={companerismo}
+            asistencia={asistencia}
+          />
         )}
         {sub === 'roles' && <RolesTab user={user} participantes={participantes} />}
         {sub === 'capacitaciones' && <CapacitacionesTab user={user} capacitaciones={capacitaciones} />}
@@ -290,6 +317,284 @@ function FamiliasTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Reparto automático de Compañías ─────────────────────────────────────────
+// Ver src/utils/repartoFamilias.ts para el algoritmo (puro, sin Firestore) y
+// src/services/repartoFamiliasService.ts para la persistencia + deshacer.
+function RepartoTab({
+  user,
+  participantes,
+  capacitaciones,
+  familias,
+  companerismo,
+  asistencia,
+}: {
+  user: SessionUser;
+  participantes: Participante[];
+  capacitaciones: Capacitacion[];
+  familias: Familia[];
+  companerismo: Companerismo[];
+  asistencia: Asistencia[];
+}) {
+  const [modoFuente, setModoFuente] = useState<'capacitacion' | 'todos'>('capacitacion');
+  const [capacitacionId, setCapacitacionId] = useState('');
+  const [preview, setPreview] = useState<Record<string, CandidatoReparto[]> | null>(null);
+  const [activo, setActivo] = useState<RepartoFamiliasActivo | null | undefined>(undefined); // undefined = todavía cargando
+  const [busy, setBusy] = useState(false);
+  const [descargando, setDescargando] = useState<'pdf' | 'presentacion' | null>(null);
+
+  useEffect(() => subscribeRepartoActivo(setActivo), []);
+
+  const capsOrdenadas = useMemo(
+    () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
+    [capacitaciones]
+  );
+  const capacitacion = capsOrdenadas.find((c) => c.id === capacitacionId) || null;
+  const fuenteLista: boolean = modoFuente === 'todos' || !!capacitacion;
+
+  function calcular() {
+    if (!familias.length || !fuenteLista) return;
+    const fuente: FuenteReparto = modoFuente === 'todos' ? { modo: 'todos' } : { modo: 'capacitacion', capacitacionId: capacitacion!.id };
+    const referencia = modoFuente === 'todos' ? new Date() : new Date(`${capacitacion!.fecha}T00:00:00`);
+    const familiaIds = familias.map((f) => f.id);
+    const consejeros = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Consejero', referencia);
+    const logisticos = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Logístico', referencia);
+    setPreview(repartoCompleto(consejeros, logisticos, familiaIds));
+  }
+
+  async function confirmar() {
+    if (!preview) return;
+    setBusy(true);
+    try {
+      const porParticipante: Record<string, Participante[]> = {};
+      Object.entries(preview).forEach(([famId, cands]) => (porParticipante[famId] = cands.map((c) => c.participante)));
+      const fuenteId = modoFuente === 'todos' ? 'todos-los-registrados' : capacitacion!.id;
+      await ejecutarReparto(porParticipante, familias, fuenteId, user.correo);
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deshacer() {
+    setBusy(true);
+    try {
+      await deshacerReparto(familias, user.correo);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function datosPorFamilia() {
+    return familias.map((familia) => ({
+      familia,
+      companerismo: companerismo.filter((c) => c.familiaId === familia.id),
+      participantes: participantes.filter((p) => familia.consejeros.includes(p.id)),
+    }));
+  }
+
+  async function descargarPdf() {
+    setDescargando('pdf');
+    try {
+      const datos = datosPorFamilia().map((d) => {
+        const cands: CandidatoReparto[] = d.participantes.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
+        return { ...d, stats: calcularEstadisticas(cands) };
+      });
+      const blob = await generarRepartoPdf(datos, participantes, EVENTO_NOMBRE, 'Regocíjate en Cristo');
+      downloadBlob(blob, `companias-fsy-2027-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  function verPresentacion() {
+    setDescargando('presentacion');
+    try {
+      const html = generarPresentacionHtml(datosPorFamilia(), participantes, EVENTO_NOMBRE, 'Regocíjate en Cristo');
+      const blob = new Blob([html], { type: 'text/html' });
+      downloadBlob(blob, `presentacion-companias-fsy-2027-${new Date().toISOString().slice(0, 10)}.html`);
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  // Vista previa: lo ya asignado a mano en cada familia + lo que el
+  // algoritmo propone añadir — así el admin ve el balance REAL resultante,
+  // no solo la porción nueva.
+  function statsCombinadas(familiaId: string): { stats: ReturnType<typeof calcularEstadisticas>; nuevos: number } {
+    const familia = familias.find((f) => f.id === familiaId);
+    const actuales: CandidatoReparto[] = (familia ? participantes.filter((p) => familia.consejeros.includes(p.id)) : []).map((p) => ({
+      participante: p,
+      edad: calcularEdad(p.fechaNacimiento, new Date()),
+    }));
+    const nuevos = preview?.[familiaId] || [];
+    return { stats: calcularEstadisticas([...actuales, ...nuevos]), nuevos: nuevos.length };
+  }
+
+  if (activo === undefined) {
+    return <div className="text-center text-sm text-slate-500 py-8">Cargando…</div>;
+  }
+
+  if (activo) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3.5">
+          <div className="text-sm font-bold text-primary">✅ Reparto activo</div>
+          <div className="text-xs text-slate-600 mt-1">
+            {activo.asignados.length} personas repartidas el {new Date(activo.timestamp).toLocaleString('es-PE')}. Para volver a
+            calcularlo con otra fuente, primero deshazlo.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {familias.map((f) => (
+            <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} />
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={deshacer}
+            disabled={busy}
+            className="flex-1 border-2 border-red-200 text-red-600 font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
+          >
+            {busy ? 'Deshaciendo…' : '↩️ Deshacer reparto'}
+          </button>
+          <button
+            onClick={descargarPdf}
+            disabled={!!descargando}
+            className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
+          >
+            {descargando === 'pdf' ? 'Generando…' : '📄 PDF'}
+          </button>
+          <button
+            onClick={verPresentacion}
+            disabled={!!descargando}
+            className="flex-1 bg-blue-500 text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
+            title="Descarga un HTML autocontenido — ábrelo en el navegador del proyector, sin internet ni login"
+          >
+            {descargando === 'presentacion' ? 'Generando…' : '🎬 Presentación'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+        <div className="text-sm font-bold">Reparto automático de Compañías</div>
+        <div className="text-xs text-slate-500">
+          Reparte a los Consejeros (prioridad: sexo parejo → estaca no concentrada → edad distribuida) y luego a los
+          Logísticos como relleno, sobre las mismas 4 compañías. Quien ya tenga una compañía asignada a mano queda
+          fuera — no se le mueve.
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setModoFuente('capacitacion'); setPreview(null); }}
+            className={`flex-1 text-xs font-bold rounded-xl py-2 border-[1.5px] ${modoFuente === 'capacitacion' ? 'bg-primary/10 border-primary text-primary' : 'bg-white border-slate-200 text-slate-500'}`}
+          >
+            Por capacitación
+          </button>
+          <button
+            onClick={() => { setModoFuente('todos'); setPreview(null); }}
+            className={`flex-1 text-xs font-bold rounded-xl py-2 border-[1.5px] ${modoFuente === 'todos' ? 'bg-primary/10 border-primary text-primary' : 'bg-white border-slate-200 text-slate-500'}`}
+          >
+            Todos los registrados
+          </button>
+        </div>
+
+        {modoFuente === 'capacitacion' ? (
+          <select className="input" value={capacitacionId} onChange={(e) => { setCapacitacionId(e.target.value); setPreview(null); }}>
+            <option value="">— Elige la capacitación —</option>
+            {capsOrdenadas.map((c) => (
+              <option key={c.id} value={c.id}>{c.label} — {c.fecha}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+            Sin filtrar por asistencia — entran todos los Consejeros y Logísticos registrados que todavía no tienen compañía.
+          </div>
+        )}
+
+        <button
+          onClick={calcular}
+          disabled={!fuenteLista || !familias.length}
+          className="bg-primary text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-40"
+        >
+          Calcular reparto
+        </button>
+        {!familias.length && <div className="text-xs text-amber-700">Crea al menos una compañía en la pestaña Familias primero.</div>}
+      </div>
+
+      {preview && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {familias.map((f) => {
+              const { stats, nuevos } = statsCombinadas(f.id);
+              return <FamiliaStatsCard key={f.id} familia={f} stats={stats} nuevos={nuevos} />;
+            })}
+          </div>
+          <button
+            onClick={confirmar}
+            disabled={busy}
+            className="bg-primary text-white font-bold rounded-xl py-3 text-sm disabled:opacity-50"
+          >
+            {busy ? 'Guardando…' : '✅ Confirmar reparto'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function statColorHex(familia: Familia): string {
+  return FAMILY_COLORS.find((c) => c.id === familia.colorId)?.hex || '#94A3B8';
+}
+
+function FamiliaStatsCard({
+  familia,
+  stats,
+  nuevos,
+}: {
+  familia: Familia;
+  stats: ReturnType<typeof calcularEstadisticas>;
+  nuevos: number;
+}) {
+  return (
+    <div className="bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px]" style={{ borderTopColor: statColorHex(familia) }}>
+      <div className="font-extrabold text-sm mb-1">{familia.customName || familia.nombre}</div>
+      <div className="text-[11px] text-emerald-600 font-bold mb-2">+{nuevos} nuevo(s) propuesto(s)</div>
+      <div className="text-xs text-slate-600 space-y-0.5">
+        <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
+        <div>Edad — prom: {stats.edadPromedio} · mediana: {stats.edadMediana} · moda: {stats.edadModa ?? '—'}</div>
+        <div className="pt-1 text-[10px] text-slate-500">
+          Ventanilla {stats.porEstaca.Ventanilla} · P. Piedra {stats.porEstaca['Puente Piedra']} · Pro Lima{' '}
+          {stats.porEstaca['Pro Lima']} · Otros {stats.porEstaca.Otros}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FamiliaBalanceCard({ familia, participantes }: { familia: Familia; participantes: Participante[] }) {
+  const miembros = participantes.filter((p) => familia.consejeros.includes(p.id));
+  const cands: CandidatoReparto[] = miembros.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
+  const stats = calcularEstadisticas(cands);
+  return (
+    <div className="bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px]" style={{ borderTopColor: statColorHex(familia) }}>
+      <div className="font-extrabold text-sm mb-2">{familia.customName || familia.nombre}</div>
+      <div className="text-xs text-slate-600 space-y-0.5">
+        <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
+        <div className="pt-1 text-[10px] text-slate-500">
+          Ventanilla {stats.porEstaca.Ventanilla} · P. Piedra {stats.porEstaca['Puente Piedra']} · Pro Lima{' '}
+          {stats.porEstaca['Pro Lima']} · Otros {stats.porEstaca.Otros}
+        </div>
+      </div>
     </div>
   );
 }

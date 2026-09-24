@@ -12,7 +12,18 @@ import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionPar
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../src/utils/asistenciaStats';
-import { nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
+import {
+  calcularCandidatosPorRol,
+  calcularEdad,
+  calcularEstadisticas,
+  esElegibleReparto,
+  grupoEstacaReparto,
+  repartirEnFamilias,
+  repartoCompleto,
+  type CandidatoReparto,
+  type FuenteReparto,
+} from '../src/utils/repartoFamilias';
+import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import type { Asistencia, Capacitacion, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
@@ -605,6 +616,217 @@ test('78. getCapacitacionParaHome — ninguna en curso → la más reciente que 
   const r = getCapacitacionParaHome(caps, new Date('2027-01-15T00:00:00'));
   assert.strictEqual(r?.cap.id, 'c2'); // la del 10, no la del 5
   assert.strictEqual(r?.enCurso, false);
+});
+
+// ── repartoFamilias — reparto automático de Compañías ──────────────────────
+
+function personaReparto(
+  id: string,
+  opts: { estaca?: string; genero?: 'H' | 'M'; fechaNacimiento?: string; asignacion?: string; familiaId?: string } = {}
+): Participante {
+  return {
+    id, timestamp: '', nombres: 'Test', apellidos: id,
+    fechaNacimiento: opts.fechaNacimiento || '2005-06-15', telefono: '987654321', correo: `${id}@correo.com`,
+    estaca: opts.estaca || 'Ventanilla', barrio: 'Ventanilla', genero: opts.genero || 'H',
+    experienciaPrevia: 'ninguna', asignacionAnterior: '', disponibilidad: 'si',
+    asignacion: (opts.asignacion ?? 'Consejero') as Participante['asignacion'], familiaId: opts.familiaId ?? '',
+  } as Participante;
+}
+
+test('79. esElegibleReparto — Consejero y Logístico sí, cualquier otra asignación no', () => {
+  assert.strictEqual(esElegibleReparto(personaReparto('a', { asignacion: 'Consejero' })), true);
+  assert.strictEqual(esElegibleReparto(personaReparto('b', { asignacion: 'Logístico' })), true);
+  assert.strictEqual(esElegibleReparto(personaReparto('c', { asignacion: 'Coordinador Auxiliar' })), false);
+  assert.strictEqual(esElegibleReparto(personaReparto('d', { asignacion: 'Audiovisuales' })), false);
+});
+
+test('80. grupoEstacaReparto — las 3 estacas foco pasan tal cual, cualquier otra cae en "Otros"', () => {
+  assert.strictEqual(grupoEstacaReparto('Ventanilla'), 'Ventanilla');
+  assert.strictEqual(grupoEstacaReparto('Puente Piedra'), 'Puente Piedra');
+  assert.strictEqual(grupoEstacaReparto('Pro Lima'), 'Pro Lima');
+  assert.strictEqual(grupoEstacaReparto('Huaral'), 'Otros');
+  assert.strictEqual(grupoEstacaReparto('Miramar'), 'Otros');
+});
+
+test('81. calcularEdad — antes y después del cumpleaños en el año de referencia', () => {
+  assert.strictEqual(calcularEdad('2005-06-15', new Date('2027-06-14')), 21); // un día antes de cumplir
+  assert.strictEqual(calcularEdad('2005-06-15', new Date('2027-06-15')), 22); // el mismo día
+  assert.strictEqual(calcularEdad('2005-06-15', new Date('2027-06-16')), 22); // un día después
+});
+
+test('82. calcularCandidatosPorRol — modo "capacitacion": excluye a quien no asistió, a quien es del otro rol, y a quien ya tiene familia asignada', () => {
+  const participantes = [
+    personaReparto('consejero-presente', { asignacion: 'Consejero' }),
+    personaReparto('logistico-presente', { asignacion: 'Logístico' }),
+    personaReparto('consejero-ausente', { asignacion: 'Consejero' }),
+    personaReparto('coord-aux-presente', { asignacion: 'Coordinador Auxiliar' }),
+    personaReparto('consejero-ya-asignado', { asignacion: 'Consejero', familiaId: 'fam-1' }),
+  ];
+  const asistencia: Asistencia[] = [
+    { capacitacionId: 'c1', participanteId: 'consejero-presente', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'c1', participanteId: 'logistico-presente', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'c1', participanteId: 'consejero-ausente', estado: 'ausente', timestamp: '' },
+    { capacitacionId: 'c1', participanteId: 'coord-aux-presente', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'c1', participanteId: 'consejero-ya-asignado', estado: 'presente', timestamp: '' },
+  ];
+  const fuente: FuenteReparto = { modo: 'capacitacion', capacitacionId: 'c1' };
+  const consejeros = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Consejero', new Date('2027-01-01'));
+  const logisticos = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Logístico', new Date('2027-01-01'));
+  assert.deepStrictEqual(consejeros.map((c) => c.participante.id), ['consejero-presente']);
+  assert.deepStrictEqual(logisticos.map((c) => c.participante.id), ['logistico-presente']);
+});
+
+test('83. calcularCandidatosPorRol — modo "todos": no filtra por asistencia, entra cualquier elegible del rol sin familia', () => {
+  const participantes = [
+    personaReparto('a', { asignacion: 'Consejero' }),
+    personaReparto('b', { asignacion: 'Consejero', familiaId: 'fam-1' }), // ya asignado, queda fuera igual
+    personaReparto('c', { asignacion: 'Logístico' }),
+  ];
+  const consejeros = calcularCandidatosPorRol(participantes, [], { modo: 'todos' }, 'Consejero', new Date('2027-01-01'));
+  assert.deepStrictEqual(consejeros.map((c) => c.participante.id), ['a']);
+});
+
+test('84. repartirEnFamilias — el conteo total nunca difiere en más de 1 entre familias', () => {
+  const candidatos: CandidatoReparto[] = Array.from({ length: 23 }, (_, i) => ({
+    participante: personaReparto(`p${i}`, { genero: i % 2 ? 'H' : 'M', estaca: ['Ventanilla', 'Puente Piedra', 'Pro Lima', 'Huaral'][i % 4] }),
+    edad: 18 + (i % 10),
+  }));
+  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  const counts = Object.values(porFamilia).map((arr) => arr.length);
+  assert.strictEqual(counts.reduce((a, b) => a + b, 0), 23);
+  assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `counts muy desparejos: ${counts}`);
+});
+
+test('85. repartirEnFamilias — reparte en serpentina (0,1,2,3,3,2,1,0,…) sin reiniciar entre grupos', () => {
+  // 8 personas, todas del mismo grupo (mismo sexo+estaca) para aislar el patrón puro de serpentina.
+  const candidatos: CandidatoReparto[] = Array.from({ length: 8 }, (_, i) => ({
+    participante: personaReparto(`p${i}`, { estaca: 'Ventanilla', genero: 'H' }),
+    edad: 18 + i, // ya vienen ordenados por edad ascendente
+  }));
+  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  const familiaDe = (id: string) => Object.entries(porFamilia).find(([, arr]) => arr.some((c) => c.participante.id === id))?.[0];
+  assert.deepStrictEqual(
+    ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'].map(familiaDe),
+    ['f1', 'f2', 'f3', 'f4', 'f4', 'f3', 'f2', 'f1']
+  );
+});
+
+test('86. repartirEnFamilias — sin familias creadas, no revienta y devuelve objeto vacío', () => {
+  const candidatos: CandidatoReparto[] = [{ participante: personaReparto('p1'), edad: 20 }];
+  assert.deepStrictEqual(repartirEnFamilias(candidatos, []).porFamilia, {});
+});
+
+test('87. repartirEnFamilias — prioridad más alta (sexo) queda parejo: 20 hombres y 20 mujeres se reparten ~10/10 en cada familia', () => {
+  const candidatos: CandidatoReparto[] = [
+    ...Array.from({ length: 20 }, (_, i) => ({ participante: personaReparto(`h${i}`, { genero: 'H' as const, estaca: 'Ventanilla' }), edad: 18 + i })),
+    ...Array.from({ length: 20 }, (_, i) => ({ participante: personaReparto(`m${i}`, { genero: 'M' as const, estaca: 'Ventanilla' }), edad: 18 + i })),
+  ];
+  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  Object.values(porFamilia).forEach((miembros) => {
+    const h = miembros.filter((m) => m.participante.genero === 'H').length;
+    const m = miembros.filter((m) => m.participante.genero === 'M').length;
+    assert.ok(Math.abs(h - m) <= 1, `sexo desbalanceado en una familia: H=${h} M=${m}`);
+  });
+});
+
+test('88. repartirEnFamilias — cada estaca queda representada proporcionalmente en las 4 familias (no toda en una sola)', () => {
+  // 16 de Ventanilla, 16 de Puente Piedra — con la serpentina agrupada por
+  // sexo→estaca, cada familia debe recibir ~8 de cada una, no todo en 1 o 2.
+  const candidatos: CandidatoReparto[] = [
+    ...Array.from({ length: 16 }, (_, i) => ({ participante: personaReparto(`v${i}`, { estaca: 'Ventanilla', genero: i % 2 ? 'H' : 'M' }), edad: 18 + i })),
+    ...Array.from({ length: 16 }, (_, i) => ({ participante: personaReparto(`pp${i}`, { estaca: 'Puente Piedra', genero: i % 2 ? 'H' : 'M' }), edad: 18 + i })),
+  ] as CandidatoReparto[];
+  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  Object.values(porFamilia).forEach((miembros) => {
+    const deVentanilla = miembros.filter((m) => m.participante.estaca === 'Ventanilla').length;
+    const dePuentePiedra = miembros.filter((m) => m.participante.estaca === 'Puente Piedra').length;
+    assert.ok(deVentanilla >= 2 && deVentanilla <= 6, `Ventanilla desbalanceada en una familia: ${deVentanilla}`);
+    assert.ok(dePuentePiedra >= 2 && dePuentePiedra <= 6, `Puente Piedra desbalanceada en una familia: ${dePuentePiedra}`);
+  });
+});
+
+test('89. repartoCompleto — Consejeros primero, Logísticos como relleno después, y el TOTAL combinado queda parejo (encadena el cursor)', () => {
+  const consejeros: CandidatoReparto[] = Array.from({ length: 9 }, (_, i) => ({
+    participante: personaReparto(`c${i}`, { genero: i % 2 ? 'H' : 'M', estaca: 'Ventanilla' }),
+    edad: 18 + i,
+  }));
+  const logisticos: CandidatoReparto[] = Array.from({ length: 7 }, (_, i) => ({
+    participante: personaReparto(`l${i}`, { genero: i % 2 ? 'H' : 'M', estaca: 'Pro Lima', asignacion: 'Logístico' }),
+    edad: 20 + i,
+  }));
+  const combinado = repartoCompleto(consejeros, logisticos, ['f1', 'f2', 'f3', 'f4']);
+  const counts = Object.values(combinado).map((arr) => arr.length);
+  assert.strictEqual(counts.reduce((a, b) => a + b, 0), 16);
+  // Si cada pasada partiera siempre desde 0, el remanente (9%4=1, 7%4=3) se
+  // acumularía en las MISMAS familias las 2 veces — encadenar el cursor
+  // evita eso; el total combinado no debería diferir en más de 2.
+  assert.ok(Math.max(...counts) - Math.min(...counts) <= 2, `totales combinados muy desparejos: ${counts}`);
+  // Todos los logísticos deben estar repartidos (no todos concentrados en 1 familia).
+  const familiasConLogistico = Object.values(combinado).filter((arr) => arr.some((c) => c.participante.asignacion === 'Logístico')).length;
+  assert.ok(familiasConLogistico >= 3, `logísticos poco distribuidos: solo en ${familiasConLogistico} familias`);
+});
+
+test('90. calcularEstadisticas — promedio y mediana correctos (par e impar)', () => {
+  const miembros: CandidatoReparto[] = [18, 20, 22].map((edad, i) => ({ participante: personaReparto(`p${i}`), edad }));
+  const stats = calcularEstadisticas(miembros);
+  assert.strictEqual(stats.edadPromedio, 20);
+  assert.strictEqual(stats.edadMediana, 20);
+
+  const miembrosPar: CandidatoReparto[] = [18, 20, 22, 24].map((edad, i) => ({ participante: personaReparto(`q${i}`), edad }));
+  assert.strictEqual(calcularEstadisticas(miembrosPar).edadMediana, 21); // (20+22)/2
+});
+
+test('91. calcularEstadisticas — moda clara cuando un valor se repite más que los demás', () => {
+  const miembros: CandidatoReparto[] = [18, 18, 18, 20, 22].map((edad, i) => ({ participante: personaReparto(`p${i}`), edad }));
+  assert.strictEqual(calcularEstadisticas(miembros).edadModa, 18);
+});
+
+test('92. calcularEstadisticas — sin moda clara (empate o todas distintas) devuelve null, no un valor inventado', () => {
+  const todasDistintas: CandidatoReparto[] = [18, 19, 20, 21].map((edad, i) => ({ participante: personaReparto(`p${i}`), edad }));
+  assert.strictEqual(calcularEstadisticas(todasDistintas).edadModa, null);
+
+  const empate: CandidatoReparto[] = [18, 18, 20, 20].map((edad, i) => ({ participante: personaReparto(`q${i}`), edad }));
+  assert.strictEqual(calcularEstadisticas(empate).edadModa, null);
+});
+
+test('93. calcularEstadisticas — desglose por estaca y sexo, y el caso de lista vacía', () => {
+  const miembros: CandidatoReparto[] = [
+    { participante: personaReparto('a', { estaca: 'Ventanilla', genero: 'H' }), edad: 20 },
+    { participante: personaReparto('b', { estaca: 'Pro Lima', genero: 'M' }), edad: 21 },
+    { participante: personaReparto('c', { estaca: 'Huaral', genero: 'H' }), edad: 22 }, // cae en "Otros"
+  ];
+  const stats = calcularEstadisticas(miembros);
+  assert.strictEqual(stats.hombres, 2);
+  assert.strictEqual(stats.mujeres, 1);
+  assert.strictEqual(stats.porEstaca.Ventanilla, 1);
+  assert.strictEqual(stats.porEstaca['Pro Lima'], 1);
+  assert.strictEqual(stats.porEstaca.Otros, 1);
+
+  const vacio = calcularEstadisticas([]);
+  assert.strictEqual(vacio.total, 0);
+  assert.strictEqual(vacio.edadModa, null);
+});
+
+// ── nombreConInicialMaterna — evita confundir a 2 personas con mismo nombre+apellido paterno en el reparto ──
+
+test('94. nombreConInicialMaterna — nombre + apellido paterno + inicial del materno', () => {
+  assert.strictEqual(nombreConInicialMaterna('Ana', 'Flores Ramírez'), 'Ana Flores R.');
+});
+
+test('95. nombreConInicialMaterna — apellido paterno con partícula, la inicial es de la palabra que sigue', () => {
+  assert.strictEqual(nombreConInicialMaterna('Juan', 'De La Cruz Rodríguez'), 'Juan De La Cruz R.');
+});
+
+test('96. nombreConInicialMaterna — sin apellido materno (un solo apellido), no agrega inicial ni punto de más', () => {
+  assert.strictEqual(nombreConInicialMaterna('Pedro', 'Gómez'), 'Pedro Gómez');
+});
+
+test('97. nombreConInicialMaterna — distingue a 2 personas con el mismo primer nombre y apellido paterno (el caso real que motivó esto)', () => {
+  const a = nombreConInicialMaterna('Ana', 'Flores Ramírez');
+  const b = nombreConInicialMaterna('Ana', 'Flores Delgado');
+  assert.notStrictEqual(a, b);
+  assert.strictEqual(a, 'Ana Flores R.');
+  assert.strictEqual(b, 'Ana Flores D.');
 });
 
 console.log(`\n${passed} pruebas pasaron.`);
