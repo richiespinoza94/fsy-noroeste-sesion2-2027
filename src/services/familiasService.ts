@@ -63,6 +63,9 @@ async function saveFamilia(f: Familia) {
 export function isConsejero(p: Participante): boolean {
   return p.asignacion === 'Consejero';
 }
+export function isLogistico(p: Participante): boolean {
+  return p.asignacion === 'Logístico';
+}
 export function isCoordAux(p: Participante): boolean {
   return p.asignacion === 'Coordinador Auxiliar';
 }
@@ -103,9 +106,18 @@ export async function deleteFamilia(familia: Familia, adminCorreo: string) {
   await logAction(adminCorreo, 'ELIMINAR_FAMILIA', '', { familiaId: familia.id, nombre: familia.nombre });
 }
 
-/** Añade un Consejero a una familia — rechaza si el participante no tiene esa asignación exacta. */
+/**
+ * Añade un Consejero o Logístico a una familia — rechaza cualquier otra
+ * asignación. Antes solo aceptaba Consejero exacto; se amplió a Logístico
+ * porque el reparto automático (repartoFamilias.ts) ya los incluye como
+ * relleno, así que la asignación manual (para quien llega después del
+ * corte) debía poder hacer lo mismo — si no, un Logístico tardío se
+ * quedaba sin forma de asignarlo a mano desde acá.
+ */
 export async function addConsejeroToFamilia(familia: Familia, p: Participante, adminCorreo: string) {
-  if (!isConsejero(p)) throw new Error('Solo participantes con asignación exacta Consejero pueden integrar una familia.');
+  if (!isConsejero(p) && !isLogistico(p)) {
+    throw new Error('Solo Consejeros o Logísticos pueden integrar una familia.');
+  }
   const updated = { ...familia, consejeros: [...familia.consejeros, p.id] };
   await saveFamilia(updated);
   await updateParticipante(p.id, { familiaId: familia.id }, adminCorreo);
