@@ -158,7 +158,7 @@ function FamiliasTab({
 
   async function handleDelete() {
     if (!fam) return;
-    if (!confirm(`¿Eliminar ${fam.customName || fam.nombre}? Se desvincularán ${fam.consejeros.length} consejero(s).`)) return;
+    if (!confirm(`¿Eliminar ${fam.customName || fam.nombre}? Se desvincularán ${fam.consejeros.length} integrante(s).`)) return;
     await deleteFamilia(fam, user.correo);
     setSelId('');
   }
@@ -249,17 +249,24 @@ function FamiliasTab({
           <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
 
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Consejeros ({famMembers.length})</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Integrantes ({famMembers.length})</div>
             {famMembers.map((p) => (
               <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 mb-1.5">
-                <button onClick={() => setDetail(p)} className="flex-1 text-left text-sm font-semibold">{p.nombres} {p.apellidos}</button>
+                <button onClick={() => setDetail(p)} className="flex-1 text-left text-sm font-semibold">
+                  {p.nombres} {p.apellidos}
+                  {p.asignacion !== 'Consejero' && (
+                    <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
+                      {p.asignacion || 'Sin rol'}
+                    </span>
+                  )}
+                </button>
                 <span className="text-[10px] text-slate-500">{p.estaca}</span>
                 <button onClick={() => removeConsejeroFromFamilia(fam, p.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">
                   ✕
                 </button>
               </div>
             ))}
-            {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin consejeros asignados</div>}
+            {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes asignados</div>}
 
             <div className="mt-3 pt-3 border-t border-slate-100">
               <div className="text-[11px] text-slate-500 mb-1.5">Solo participantes con asignación exacta <strong>Consejero</strong> son elegibles.</div>
@@ -365,15 +372,26 @@ function RepartoTab({
     setPreview(repartoCompleto(consejeros, logisticos, familiaIds));
   }
 
+  const [errorConfirmar, setErrorConfirmar] = useState('');
+
   async function confirmar() {
     if (!preview) return;
     setBusy(true);
+    setErrorConfirmar('');
     try {
+      // Usa el familiaId MÁS ACTUAL de cada persona (no el que tenía guardado
+      // el preview, que pudo quedar desactualizado si alguien la movió a
+      // mano entre "Calcular" y "Confirmar") — así el snapshot para deshacer
+      // siempre refleja el estado real justo antes de escribir.
       const porParticipante: Record<string, Participante[]> = {};
-      Object.entries(preview).forEach(([famId, cands]) => (porParticipante[famId] = cands.map((c) => c.participante)));
+      Object.entries(preview).forEach(([famId, cands]) => {
+        porParticipante[famId] = cands.map((c) => participantes.find((p) => p.id === c.participante.id) || c.participante);
+      });
       const fuenteId = modoFuente === 'todos' ? 'todos-los-registrados' : capacitacion!.id;
       await ejecutarReparto(porParticipante, familias, fuenteId, user.correo);
       setPreview(null);
+    } catch (e) {
+      setErrorConfirmar((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -490,7 +508,9 @@ function RepartoTab({
         <div className="text-xs text-slate-500">
           Reparte a los Consejeros (prioridad: sexo parejo → estaca no concentrada → edad distribuida) y luego a los
           Logísticos como relleno, sobre las mismas 4 compañías. Quien ya tenga una compañía asignada a mano queda
-          fuera — no se le mueve.
+          fuera — no se le mueve. <strong>No incluye</strong> Coordinador General, Coordinador Auxiliar, Coordinador
+          Logístico, Matrimonio Logístico, Audiovisuales ni Comité de Bienvenida — esos roles no entran al reparto
+          automático aunque el nombre se parezca.
         </div>
 
         <div className="flex gap-2">
@@ -546,6 +566,7 @@ function RepartoTab({
           >
             {busy ? 'Guardando…' : '✅ Confirmar reparto'}
           </button>
+          {errorConfirmar && <div className="text-xs text-red-600 font-semibold bg-red-50 rounded-xl px-3 py-2.5">❌ {errorConfirmar}</div>}
         </>
       )}
     </div>

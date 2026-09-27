@@ -18,10 +18,28 @@ const notifyCp = () => cpListeners.forEach((fn) => fn([...localCompanerismo]));
 export function subscribeFamilias(cb: (items: Familia[]) => void): () => void {
   if (!db) {
     famListeners.add(cb);
-    cb([...localFamilias]);
+    cb(ordenarFamilias([...localFamilias]));
     return () => famListeners.delete(cb);
   }
-  return onSnapshot(collection(db, FAM_COL), (snap) => cb(snap.docs.map((d) => d.data() as Familia)));
+  return onSnapshot(collection(db, FAM_COL), (snap) => cb(ordenarFamilias(snap.docs.map((d) => d.data() as Familia))));
+}
+
+/**
+ * Firestore no garantiza ningún orden sin un `orderBy` explícito — el id de
+ * cada familia es un UUID al azar (ver addFamilia), así que sin esto las 4
+ * compañías podían aparecer en cualquier orden (ej. "1, 2, 4, 3") en TODOS
+ * lados a la vez: el selector acá, la grilla de Reparto, el PDF y la
+ * presentación de burbujas — los 4 leen `familias` desde este mismo punto.
+ * Se ordena por el número al final de `nombre` ("Familia 1"→1), el mismo
+ * patrón que ya usa addFamilia para calcular el siguiente número.
+ */
+export function ordenarFamilias(familias: Familia[]): Familia[] {
+  const num = (f: Familia) => parseInt(f.nombre.replace(/^Familia\s*/i, ''), 10);
+  return [...familias].sort((a, b) => {
+    const na = num(a), nb = num(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.nombre.localeCompare(b.nombre);
+  });
 }
 
 export function subscribeCompanerismo(cb: (items: Companerismo[]) => void): () => void {

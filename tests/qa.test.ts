@@ -9,6 +9,7 @@ import {
   validatePhone,
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { ordenarFamilias } from '../src/services/familiasService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../src/utils/asistenciaStats';
@@ -25,9 +26,8 @@ import {
 } from '../src/utils/repartoFamilias';
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
-import type { Asistencia, Capacitacion, Participante } from '../src/types';
+import type { Asistencia, Capacitacion, Familia, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
-import type { Asistencia, Capacitacion, Participante } from '../src/types';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -827,6 +827,24 @@ test('97. nombreConInicialMaterna — distingue a 2 personas con el mismo primer
   assert.notStrictEqual(a, b);
   assert.strictEqual(a, 'Ana Flores R.');
   assert.strictEqual(b, 'Ana Flores D.');
+});
+
+// ── ordenarFamilias — Firestore no garantiza orden sin orderBy; el id de cada familia es un UUID al azar, así que sin esto podían salir como "1, 2, 4, 3" en Reparto/PDF/presentación ──
+
+function familiaFake(nombre: string): Familia {
+  return { id: crypto.randomUUID(), nombre, customName: '', colorId: 'rojo', consejeros: [] };
+}
+
+test('98. ordenarFamilias — reordena "Familia 1..4" aunque lleguen en cualquier orden de Firestore', () => {
+  const desordenadas = [familiaFake('Familia 3'), familiaFake('Familia 1'), familiaFake('Familia 4'), familiaFake('Familia 2')];
+  const ordenadas = ordenarFamilias(desordenadas);
+  assert.deepStrictEqual(ordenadas.map((f) => f.nombre), ['Familia 1', 'Familia 2', 'Familia 3', 'Familia 4']);
+});
+
+test('99. ordenarFamilias — numérico de verdad, no alfabético ("Familia 10" no debe quedar antes que "Familia 2")', () => {
+  const desordenadas = [familiaFake('Familia 10'), familiaFake('Familia 2')];
+  const ordenadas = ordenarFamilias(desordenadas);
+  assert.deepStrictEqual(ordenadas.map((f) => f.nombre), ['Familia 2', 'Familia 10']);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

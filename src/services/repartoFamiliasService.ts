@@ -31,6 +31,14 @@ export async function ejecutarReparto(
   capacitacionId: string,
   adminCorreo: string
 ): Promise<void> {
+  // Guard contra doble-ejecución: un doble-click, o 2 dispositivos abiertos
+  // con la misma cuenta de Coordinador General, podrían correr esto 2 veces
+  // seguidas y mezclar el resultado a medio camino. Si ya hay un reparto
+  // sin deshacer, no se pisa — hay que deshacerlo primero.
+  if (await getRepartoActivo()) {
+    throw new Error('Ya hay un reparto activo sin deshacer — deshazlo primero antes de calcular uno nuevo.');
+  }
+
   const anterior: RepartoFamiliasActivo['anterior'] = [];
   const asignados: RepartoFamiliasActivo['asignados'] = [];
 

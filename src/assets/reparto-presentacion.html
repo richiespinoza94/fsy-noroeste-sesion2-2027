@@ -222,14 +222,18 @@ function renderIntro() {
 
 function renderCoords(i) {
   const c = COMPANIAS[i];
-  const cards = c.coords.map(([n, a], k) => {
+  const cards = c.coords.length ? c.coords.map(([n, a], k) => {
     const { first, last } = nombrePartes(n, a);
     return `<div class="coord-card" style="animation-delay:${0.15 + k * 0.16}s">
       <div class="coord-avatar" style="background: linear-gradient(160deg, ${c.color}, ${c.dark})">${n.charAt(0)}</div>
       <div class="tag">Coord. Auxiliar</div>
       <div class="name">${first} ${last}</div>
     </div>`;
-  }).join('');
+  }).join('') : `<div class="coord-card rise" style="animation-delay:.15s">
+      <div class="coord-avatar" style="background: linear-gradient(160deg, ${c.color}, ${c.dark})">—</div>
+      <div class="tag">Coord. Auxiliar</div>
+      <div class="name" style="opacity:.6">Sin asignar todavía</div>
+    </div>`;
   return `<div class="scene" data-type="coords">
     <div class="scene-kicker rise">Compañía ${i + 1} de ${COMPANIAS.length}</div>
     <div class="company-label rise" style="color:${c.dark}">${c.nombre}</div>
@@ -262,10 +266,9 @@ function renderMembers(i) {
 
 function renderOverview() {
   const cards = COMPANIAS.map((c, i) => {
-    const coordsHtml = c.coords.map(([n, a]) => {
-      const { first, last } = nombrePartes(n, a);
-      return `<div class="coord-name">${first} ${last}</div>`;
-    }).join('');
+    const coordsHtml = c.coords.length
+      ? c.coords.map(([n, a]) => { const { first, last } = nombrePartes(n, a); return `<div class="coord-name">${first} ${last}</div>`; }).join('')
+      : `<div class="coord-name" style="opacity:.7">Sin asignar todavía</div>`;
     return `<div class="ov-card rise" style="animation-delay:${i * 0.12}s; background: linear-gradient(155deg, ${c.color}, ${c.dark})">
       <div class="ov-count">${c.integrantes.length + c.coords.length}</div>
       <div class="ov-count-label">Personas</div>

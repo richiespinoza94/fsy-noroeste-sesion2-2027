@@ -86,7 +86,7 @@ export interface Familia {
   nombre: string; // "Familia 1" — autogenerado, nunca editable
   customName: string; // alias visible, editable
   colorId: string;
-  consejeros: string[]; // IDs de Participante con asignacion === 'Consejero'
+  consejeros: string[]; // IDs de Participante — históricamente solo 'Consejero' (ver isConsejero en familiasService.ts), pero desde el reparto automático (repartoFamiliasService.ts) también puede incluir 'Logístico'; el nombre del campo quedó igual para no migrar datos existentes
 }
 
 export interface Companerismo {
