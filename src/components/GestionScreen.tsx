@@ -188,19 +188,33 @@ function FamiliasTab({
           </div>
         )
       ) : (
-        <div className="flex gap-2">
-          <select className="input flex-1" value={selId} onChange={(e) => setSelId(e.target.value)}>
-            <option value="">— Elige una familia —</option>
-            {familias.map((f) => (
-              <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
-            ))}
-          </select>
-          {user.canEditAll && (
-            <button onClick={() => setCreating(true)} className="bg-primary text-white text-sm font-bold rounded-xl px-4">
-              + Nueva
-            </button>
+        <>
+          {/* Balance de las 4 compañías — visible siempre, no solo dentro de
+              Reparto, porque hace falta EXACTAMENTE acá: cuando alguien llega
+              después del corte automático (o se registra tarde) y hay que
+              asignarlo a mano, esto es lo que permite elegir bien a cuál
+              compañía mandarlo, no adivinar. */}
+          {familias.length > 0 && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              {familias.map((f) => (
+                <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} />
+              ))}
+            </div>
           )}
-        </div>
+          <div className="flex gap-2">
+            <select className="input flex-1" value={selId} onChange={(e) => setSelId(e.target.value)}>
+              <option value="">— Elige una familia —</option>
+              {familias.map((f) => (
+                <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
+              ))}
+            </select>
+            {user.canEditAll && (
+              <button onClick={() => setCreating(true)} className="bg-primary text-white text-sm font-bold rounded-xl px-4">
+                + Nueva
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {creating && (
