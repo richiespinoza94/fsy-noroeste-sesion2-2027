@@ -847,4 +847,28 @@ test('99. ordenarFamilias — numérico de verdad, no alfabético ("Familia 10" 
   assert.deepStrictEqual(ordenadas.map((f) => f.nombre), ['Familia 2', 'Familia 10']);
 });
 
+// ── estadoVentanaCheckIn respeta horaFin cuando está cargada ────────────────
+// Antes SIEMPRE usaba 3h fijas sin importar lo que el admin hubiera puesto
+// en horaFin al crear la capacitación — alguien llegando después de esas 3h
+// pero antes de la hora de cierre real se encontraba la ventana "cerrada"
+// sin poder auto-registrarse.
+
+test('100. estadoVentanaCheckIn — con horaFin cargada, el cierre real es horaFin, no 3h fijas', () => {
+  const cap: Capacitacion = { ...CAP_REF, horaFin: '22:00' }; // empieza 18:00, cierre real 22:00 (4h, no 3h)
+  const dentroDeLas3hFijasPeroFueraDeLaVieja = new Date('2027-01-25T21:30:00'); // dentro de horaFin, fuera de las 3h fijas (21:00)
+  assert.strictEqual(estadoVentanaCheckIn(cap, dentroDeLas3hFijasPeroFueraDeLaVieja), 'abierta');
+  const pasadoElCierreReal = new Date('2027-01-25T22:01:00');
+  assert.strictEqual(estadoVentanaCheckIn(cap, pasadoElCierreReal), 'cerrada');
+});
+
+test('101. estadoVentanaCheckIn — sin horaFin, sigue usando las 3h por defecto (compatibilidad con capacitaciones viejas)', () => {
+  assert.strictEqual(estadoVentanaCheckIn(CAP_REF, new Date('2027-01-25T21:00:00')), 'abierta');
+  assert.strictEqual(estadoVentanaCheckIn(CAP_REF, new Date('2027-01-25T21:00:01')), 'cerrada');
+});
+
+test('102. estadoVentanaCheckIn — horaFin inválida (antes que hora) cae al valor por defecto en vez de invertir el rango', () => {
+  const cap: Capacitacion = { ...CAP_REF, horaFin: '10:00' }; // antes de las 18:00 de inicio — dato mal cargado
+  assert.strictEqual(estadoVentanaCheckIn(cap, new Date('2027-01-25T20:00:00')), 'abierta'); // sigue dentro de las 3h por defecto
+});
+
 console.log(`\n${passed} pruebas pasaron.`);

@@ -52,7 +52,14 @@ const VENTANA_DESPUES_MS = 3 * 60 * 60 * 1000; // 3 horas después del inicio
 
 /**
  * Ventana de check-in automático (público, sin login) para una capacitación:
- * abre 1h antes de la hora programada, cierra 3h después de que empieza.
+ * abre 1h antes de la hora programada. Cierra en `cap.horaFin` si está
+ * cargada (ej. la hora de cierre para la repartición de compañías); si no,
+ * 3h después de que empieza — mismo valor por defecto que ya usa
+ * getCapacitacionParaHome, por consistencia. Antes esta ventana ignoraba
+ * `horaFin` por completo y SIEMPRE usaba 3h fijas, aunque el admin hubiera
+ * cargado una hora de cierre distinta al crear la capacitación — alguien
+ * llegando después de esas 3h fijas pero antes de la hora de cierre real se
+ * encontraba con "la ventana ya se cerró" sin poder auto-registrarse.
  * Usa datetime completo (fecha+hora), no solo comparar el string de fecha —
  * así una capacitación que arranca a las 23:30 y se extiende pasada la
  * medianoche se evalúa bien, sin depender de en qué día calendario cae "ahora".
@@ -61,9 +68,13 @@ export function estadoVentanaCheckIn(cap: Capacitacion | null, ahora: Date = new
   if (!cap || !cap.fecha) return 'sin_fecha';
   const inicio = new Date(`${cap.fecha}T${cap.hora || '00:00'}`);
   if (isNaN(inicio.getTime())) return 'sin_fecha';
+  let fin = cap.horaFin ? new Date(`${cap.fecha}T${cap.horaFin}`) : null;
+  if (!fin || isNaN(fin.getTime()) || fin.getTime() <= inicio.getTime()) {
+    fin = new Date(inicio.getTime() + VENTANA_DESPUES_MS);
+  }
   const nowMs = ahora.getTime();
   if (nowMs < inicio.getTime() - VENTANA_ANTES_MS) return 'muy_temprano';
-  if (nowMs > inicio.getTime() + VENTANA_DESPUES_MS) return 'cerrada';
+  if (nowMs > fin.getTime()) return 'cerrada';
   return 'abierta';
 }
 
