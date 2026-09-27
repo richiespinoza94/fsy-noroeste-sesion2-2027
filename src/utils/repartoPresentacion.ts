@@ -1,56 +1,83 @@
 import plantillaHtml from '../assets/reparto-presentacion.html?raw';
+import audioUrl from '../assets/reparto-fondo.mp3';
 import type { Companerismo, Familia, Participante } from '../types';
 
 /**
- * La presentación de burbujas para proyectar en el cierre de la
- * capacitación — mismo diseño ya validado contra la guía de marca FSY 2027
- * (ver src/assets/reparto-presentacion.html), acá solo se inyectan los
- * datos reales en los 2 puntos marcados con comentarios placeholder.
+ * Presentación oficial "Reparto de Compañías" — sigue al detalle
+ * ESPECIFICACION-PRESENTACION-FSY.md (entregada aparte). Regla de oro del
+ * spec: "no tocar CSS, funciones, textos fijos, paleta ni animaciones" —
+ * `reparto-presentacion.html` es una copia byte a byte de la plantilla de
+ * referencia, con UN solo cambio deliberado: el `src` del audio es un
+ * placeholder (`__AUDIO_SRC__`) en vez de `audio/fondo.mp3`, porque esta
+ * app entrega un único archivo .html descargable (no una carpeta con
+ * `audio/` al lado) — así que el mp3 va embebido como base64, no aparte.
+ * Todo lo demás del HTML (CSS, animaciones, paleta, textos) es intocado.
  *
- * Colores de identidad: 4 tonos FIJOS de la paleta secundaria oficial
- * (Blue20→Blue25, Green20, Yellow20, Yellow30) — evitan Rojo/Rosa por
- * completo a propósito, para que nunca puedan chocar con el Verde (la
- * combinación que la guía de marca prohíbe). Es una excepción documentada
- * y aprobada al límite de "máximo 3 colores por pieza": son 4 identidades
- * de marca permanentes, no colores decorativos sueltos. Si algún día hay
- * más de 4 compañías, las que sobren repiten el último color — caso raro,
- * no vale la pena una 5ta identidad de marca para eso.
+ * El bloque de datos se reemplaza tal como indica el spec: TODO lo que
+ * está entre "const EVENTO = {" y el "};" de "const COMPANIAS = [...]",
+ * dentro de los comentarios DATOS:INICIO / DATOS:FIN que ya trae la
+ * plantilla.
+ *
+ * No se pasa `color` por compañía a propósito — el spec dice "OPCIONAL;
+ * si falta se asigna por orden" vía `PALETA_COMPANIAS` (ya en el HTML,
+ * cálida: Yellow 10/20, Red 10, Yellow 30). Como las familias ya llegan
+ * ordenadas (ver ordenarFamilias en familiasService.ts), la asignación
+ * automática por orden coincide con "Compañía 1, 2, 3, 4" tal cual.
  */
-const COLORES_OFICIALES: { color: string; dark: string }[] = [
-  { color: '#01B6D1', dark: '#007DA5' }, // Blue 20 → Blue 25 (ambos oficiales)
-  { color: '#6DB344', dark: '#4E8030' }, // Green 20 oficial + oscuro calculado
-  { color: '#F68D2E', dark: '#B16521' }, // Yellow 20 oficial + oscuro calculado
-  { color: '#D45311', dark: '#983B0C' }, // Yellow 30 oficial + oscuro calculado
-];
+
+// EVENTO — valores fijos de ESTA sesión, tal como los da el spec (sección 2).
+// Si "Lima Noroeste" no es el nombre oficial de la zona, es el único lugar que hay que tocar.
+const EVENTO = {
+  anio: '2027',
+  zona: 'Lima Noroeste',
+  sesion: 'Sesión 2',
+  lema: 'Regocíjate en Cristo',
+  cita: 'Filipenses 4:4',
+};
 
 export interface FamiliaParaPresentacion {
   familia: Familia;
   companerismo: Companerismo[];
-  participantes: Participante[]; // miembros de esta familia, en el orden a mostrar
+  participantes: Participante[]; // integrantes de esta familia
 }
 
-export function generarPresentacionHtml(datos: FamiliaParaPresentacion[], todosParticipantes: Participante[], nombreEvento: string, lema: string): string {
-  const companias = datos.map(({ familia, companerismo, participantes }, i) => {
-    const colorPar = COLORES_OFICIALES[Math.min(i, COLORES_OFICIALES.length - 1)];
+function jsStringify(companias: { nombre: string; coords: [string, string][]; integrantes: [string, string][] }[]): string {
+  // JSON.stringify produce sintaxis JS válida (comillas dobles escapadas
+  // incluidas) — el spec pide "O'Neil válido tal cual" y JSON.stringify
+  // ya escapa cualquier comilla doble interna sin romper el string.
+  return JSON.stringify(companias, null, 2);
+}
+
+async function audioComoBase64(): Promise<string> {
+  const res = await fetch(audioUrl);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string); // ya viene como "data:audio/mpeg;base64,...."
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function generarPresentacionHtml(datos: FamiliaParaPresentacion[], todosParticipantes: Participante[]): Promise<string> {
+  const companias = datos.map(({ familia, companerismo, participantes }) => {
     const coords = companerismo
       .flatMap((c) => [c.p1Id, c.p2Id])
       .filter(Boolean)
       .map((id) => todosParticipantes.find((p) => p.id === id))
       .filter((p): p is Participante => !!p)
-      .map((p) => [p.nombres, p.apellidos]);
+      .map((p): [string, string] => [p.nombres, p.apellidos]);
     return {
       nombre: familia.customName || familia.nombre,
-      color: colorPar.color,
-      dark: colorPar.dark,
       coords,
-      integrantes: participantes.map((p) => [p.nombres, p.apellidos]),
+      integrantes: participantes.map((p): [string, string] => [p.nombres, p.apellidos]),
     };
   });
 
-  const eventoJson = JSON.stringify({ nombre: nombreEvento, sesion: '', lema });
-  const companiasJson = JSON.stringify(companias);
+  const datosJs = `const EVENTO = ${JSON.stringify(EVENTO, null, 2)};\nconst COMPANIAS = ${jsStringify(companias)};`;
+  const audioBase64 = await audioComoBase64();
 
   return plantillaHtml
-    .replace(/\/\*__EVENTO_JSON__\*\/.*?\/\*__FIN_EVENTO__\*\//s, eventoJson)
-    .replace(/\/\*__COMPANIAS_JSON__\*\/.*?\/\*__FIN_COMPANIAS__\*\//s, companiasJson);
+    .replace(/const EVENTO = \{[\s\S]*?\};\s*const COMPANIAS = \[[\s\S]*?\];/, datosJs)
+    .replace('__AUDIO_SRC__', audioBase64);
 }

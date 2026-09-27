@@ -453,10 +453,10 @@ function RepartoTab({
     }
   }
 
-  function verPresentacion() {
+  async function verPresentacion() {
     setDescargando('presentacion');
     try {
-      const html = generarPresentacionHtml(datosPorFamilia(), participantes, EVENTO_NOMBRE, 'Regocíjate en Cristo');
+      const html = await generarPresentacionHtml(datosPorFamilia(), participantes);
       const blob = new Blob([html], { type: 'text/html' });
       downloadBlob(blob, `presentacion-companias-fsy-2027-${new Date().toISOString().slice(0, 10)}.html`);
     } finally {
