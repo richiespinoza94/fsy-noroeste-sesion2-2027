@@ -204,6 +204,51 @@ export function repartoCompleto(
   return combinado;
 }
 
+/**
+ * Plan de asignación EN VIVO durante check-in (ver AsistenciaScreen.tsx) —
+ * distinto del reparto en lote de Gestión → Reparto: acá la gente va
+ * llegando de a poco y cada clic en un botón de fila puede o no disparar
+ * el algoritmo, según esta regla:
+ *
+ * - Si la persona clickeada YA tiene un resultado calculado (de una
+ *   corrida anterior en esta misma sesión), NO se recalcula nada — el
+ *   plan vuelve intacto, solo se usa lo que ya había.
+ * - Si NO lo tiene, se dispara una corrida nueva, pero para TODOS los que
+ *   estén pendientes (presentes, sin compañía) y TODAVÍA no tengan
+ *   resultado — no solo para quien se clickeó. Así, el resto de ese mismo
+ *   grupo recién llegado no vuelve a disparar el algoritmo al tocar su
+ *   propio botón más tarde: su resultado ya quedó fijo en esta corrida.
+ *
+ * `estadosActuales` debe reflejar SOLO lo que de verdad está escrito en
+ * Firestore (nunca lo que el plan ya decidió pero todavía no se confirmó
+ * con un clic) — así, un resultado calculado pero no confirmado todavía
+ * de una persona no distorsiona el cálculo de alguien nuevo que llega
+ * mientras tanto.
+ */
+export function calcularOActualizarPlanEnVivo(
+  planPrevio: Record<string, string>, // participanteId → familiaId ya resuelto
+  participanteClickeadoId: string,
+  pendientesActuales: CandidatoReparto[], // TODOS los presentes sin compañía ahora mismo
+  estadosActuales: EstadoFamilia[]
+): { plan: Record<string, string>; recalculo: boolean } {
+  if (participanteClickeadoId in planPrevio) {
+    return { plan: planPrevio, recalculo: false };
+  }
+
+  const sinPlanTodavia = pendientesActuales.filter((c) => !(c.participante.id in planPrevio));
+  const consejeros = sinPlanTodavia.filter((c) => c.participante.asignacion === 'Consejero');
+  const logisticos = sinPlanTodavia.filter((c) => c.participante.asignacion === 'Logístico');
+  const resultado = repartoCompleto(consejeros, logisticos, estadosActuales);
+
+  const plan = { ...planPrevio };
+  Object.entries(resultado).forEach(([familiaId, cands]) => {
+    cands.forEach((c) => {
+      plan[c.participante.id] = familiaId;
+    });
+  });
+  return { plan, recalculo: true };
+}
+
 export interface EstadisticasFamilia {
   total: number;
   hombres: number;

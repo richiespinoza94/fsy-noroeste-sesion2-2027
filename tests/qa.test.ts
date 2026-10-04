@@ -22,6 +22,7 @@ import {
   grupoEstacaReparto,
   repartirConBalance,
   repartoCompleto,
+  calcularOActualizarPlanEnVivo,
   type CandidatoReparto,
   type EstadoFamilia,
   type FuenteReparto,
@@ -914,6 +915,164 @@ test('104. repartirConBalance — 2 corridas sucesivas (simulando que llega gent
   const totalFinal = ['f1', 'f2', 'f3', 'f4'].map((id) => paso1.porFamilia[id].length + paso2.porFamilia[id].length);
   assert.strictEqual(totalFinal.reduce((a, b) => a + b, 0), 20);
   assert.ok(Math.max(...totalFinal) - Math.min(...totalFinal) <= 1, `total tras 2 corridas muy desparejo: ${totalFinal}`);
+});
+
+// ── calcularOActualizarPlanEnVivo — asignación en vivo durante check-in ────
+// Escenario base de los 15 casos: una capacitación donde varios YA tienen
+// compañía (no entran a esto) y un grupo de 5 que no — más gente que puede
+// seguir llegando mientras el staff va procesando al grupo original.
+
+function candidato(id: string, opts: Parameters<typeof personaReparto>[1] = {}): CandidatoReparto {
+  return { participante: personaReparto(id, opts), edad: 20 };
+}
+
+test('105. calcularOActualizarPlanEnVivo — primer clic en un grupo de 5 dispara el cálculo (recalculo=true) y resuelve a los 5 de una vez', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  const { plan, recalculo } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  assert.strictEqual(recalculo, true);
+  assert.strictEqual(Object.keys(plan).length, 5, 'las 5 personas deberían quedar resueltas en el plan, no solo p1');
+  ['p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => assert.ok(plan[id], `${id} debería tener compañía asignada en el plan`));
+});
+
+test('106. calcularOActualizarPlanEnVivo — clic en el 2do del mismo grupo NO recalcula, solo revela lo ya calculado', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  const paso1 = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const paso2 = calcularOActualizarPlanEnVivo(paso1.plan, 'p2', grupo5, ESTADOS_VACIOS_4);
+  assert.strictEqual(paso2.recalculo, false);
+  assert.deepStrictEqual(paso2.plan, paso1.plan, 'el plan no debería cambiar — p2 ya tenía resultado del primer cálculo');
+});
+
+test('107. calcularOActualizarPlanEnVivo — clic en el 3ro, 4to y 5to del mismo grupo: ninguno recalcula', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  let { plan } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  for (const id of ['p3', 'p4', 'p5']) {
+    const paso = calcularOActualizarPlanEnVivo(plan, id, grupo5, ESTADOS_VACIOS_4);
+    assert.strictEqual(paso.recalculo, false, `${id} no debería disparar un recálculo`);
+    plan = paso.plan;
+  }
+});
+
+test('108. calcularOActualizarPlanEnVivo — llega una 6ta persona DESPUÉS del cálculo original: su id no está en el plan todavía', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  const { plan } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  assert.strictEqual('p6' in plan, false);
+});
+
+test('109. calcularOActualizarPlanEnVivo — clic en la 6ta (nueva, no contemplada) SÍ dispara un cálculo nuevo', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const pendientesConSexta = [...grupo5, candidato('p6', { genero: 'H' })];
+  const paso = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p6', pendientesConSexta, ESTADOS_VACIOS_4);
+  assert.strictEqual(paso.recalculo, true);
+  assert.ok(paso.plan['p6'], 'p6 debería quedar resuelta tras su propio clic');
+});
+
+test('110. calcularOActualizarPlanEnVivo — el recálculo de la 6ta NO toca ni cambia los resultados ya fijados del grupo original', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const pendientesConSexta = [...grupo5, candidato('p6', { genero: 'H' })];
+  const { plan: planFinal } = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p6', pendientesConSexta, ESTADOS_VACIOS_4);
+  ['p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => {
+    assert.strictEqual(planFinal[id], planTrasGrupo5[id], `${id} no debería haber cambiado de compañía al calcular p6`);
+  });
+});
+
+test('111. calcularOActualizarPlanEnVivo — el cálculo de la 6ta usa el estado REAL (lo escrito), no lo que el plan ya decidió pero no se confirmó', () => {
+  // Simula: p1..p5 tienen un resultado CALCULADO (plan), pero solo p1 se
+  // confirmó de verdad (escribió a Firestore) — estadosActuales solo debe
+  // reflejar a p1, no a p2..p5 aunque ya tengan destino en el plan.
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: 'H', estaca: 'Ventanilla' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const familiaDeP1 = planTrasGrupo5['p1'];
+
+  // Estado real: solo p1 escrito (los otros 4 siguen "pendientes de confirmar").
+  const estadosConSoloP1Escrito = ESTADOS_VACIOS_4.map((e) =>
+    e.id === familiaDeP1 ? { ...e, total: 1, hombres: 1, porEstaca: { ...e.porEstaca, Ventanilla: 1 } } : e
+  );
+  const pendientesConSexta = [...grupo5, candidato('p6', { genero: 'H', estaca: 'Ventanilla' })];
+  const paso = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p6', pendientesConSexta, estadosConSoloP1Escrito);
+  // p6 no debería ir a la misma familia que p1 si esa ya quedó con 1 más que las demás.
+  assert.notStrictEqual(paso.plan['p6'], familiaDeP1, 'p6 debería evitar la familia de p1, que ya está más cargada según lo realmente escrito');
+});
+
+test('112. calcularOActualizarPlanEnVivo — si llegan 2 nuevas a la vez (7ma y 8va), el clic en la 7ma calcula para AMBAS juntas', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => candidato(id, { genero: 'H' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const pendientesCon2Nuevas = [...grupo5, candidato('p7', { genero: 'M' }), candidato('p8', { genero: 'M' })];
+  const paso = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p7', pendientesCon2Nuevas, ESTADOS_VACIOS_4);
+  assert.strictEqual(paso.recalculo, true);
+  assert.ok(paso.plan['p7'] && paso.plan['p8'], 'tanto p7 como p8 deberían quedar resueltas en la misma corrida, aunque solo se haya clickeado p7');
+});
+
+test('113. calcularOActualizarPlanEnVivo — clic posterior en la 8va (ya resuelta por el paso anterior) no recalcula', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => candidato(id, { genero: 'H' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const pendientesCon2Nuevas = [...grupo5, candidato('p7', { genero: 'M' }), candidato('p8', { genero: 'M' })];
+  const { plan: planTras7 } = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p7', pendientesCon2Nuevas, ESTADOS_VACIOS_4);
+  const paso = calcularOActualizarPlanEnVivo(planTras7, 'p8', pendientesCon2Nuevas, ESTADOS_VACIOS_4);
+  assert.strictEqual(paso.recalculo, false);
+});
+
+test('114. calcularOActualizarPlanEnVivo — el plan nunca pierde entradas previas al mezclar con un cálculo nuevo', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => candidato(id, { genero: 'H' }));
+  const { plan: planTrasGrupo5 } = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const pendientesConSexta = [...grupo5, candidato('p6', { genero: 'M' })];
+  const { plan: planFinal } = calcularOActualizarPlanEnVivo(planTrasGrupo5, 'p6', pendientesConSexta, ESTADOS_VACIOS_4);
+  assert.strictEqual(Object.keys(planFinal).length, 6);
+  ['p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => assert.ok(id in planFinal));
+});
+
+test('115. calcularOActualizarPlanEnVivo — grupo de 1 sola persona: el clic calcula solo para ella', () => {
+  const soloUno = [candidato('p1', { genero: 'H' })];
+  const { plan, recalculo } = calcularOActualizarPlanEnVivo({}, 'p1', soloUno, ESTADOS_VACIOS_4);
+  assert.strictEqual(recalculo, true);
+  assert.strictEqual(Object.keys(plan).length, 1);
+  assert.ok(plan['p1']);
+});
+
+test('116. calcularOActualizarPlanEnVivo — sin pendientes (lista vacía) no revienta, no resuelve nada', () => {
+  const { plan, recalculo } = calcularOActualizarPlanEnVivo({}, 'p1', [], ESTADOS_VACIOS_4);
+  assert.strictEqual(recalculo, true); // intenta calcular porque p1 no estaba en planPrevio — pero no hay candidatos
+  assert.deepStrictEqual(plan, {});
+});
+
+test('117. calcularOActualizarPlanEnVivo — respeta la prioridad sexo→estaca ya probada en repartoCompleto (no es una fórmula distinta)', () => {
+  const grupo8 = [
+    ...Array.from({ length: 4 }, (_, i) => candidato(`h${i}`, { genero: 'H', estaca: 'Ventanilla' })),
+    ...Array.from({ length: 4 }, (_, i) => candidato(`m${i}`, { genero: 'M', estaca: 'Ventanilla' })),
+  ];
+  const { plan } = calcularOActualizarPlanEnVivo({}, 'h0', grupo8, ESTADOS_VACIOS_4);
+  const porFamilia = new Map<string, { h: number; m: number }>();
+  Object.entries(plan).forEach(([id, famId]) => {
+    const actual = porFamilia.get(famId) || { h: 0, m: 0 };
+    if (id.startsWith('h')) actual.h++; else actual.m++;
+    porFamilia.set(famId, actual);
+  });
+  porFamilia.forEach(({ h, m }) => assert.ok(Math.abs(h - m) <= 1, `sexo desbalanceado: H=${h} M=${m}`));
+});
+
+test('118. calcularOActualizarPlanEnVivo — 2 corridas separadas en el tiempo: la 2da ve el efecto de lo que la 1ra ya escribió de verdad', () => {
+  const grupoA = ['a1', 'a2', 'a3'].map((id) => candidato(id, { genero: 'H', estaca: 'Ventanilla' }));
+  const { plan: planA } = calcularOActualizarPlanEnVivo({}, 'a1', grupoA, ESTADOS_VACIOS_4);
+  // Se "confirman" (escriben) los 3 de verdad — el estado real ahora los refleja.
+  const estadosTrasConfirmarA = ESTADOS_VACIOS_4.map((e) => {
+    const asignadosAqui = Object.entries(planA).filter(([, fid]) => fid === e.id).length;
+    return asignadosAqui ? { ...e, total: asignadosAqui, hombres: asignadosAqui, porEstaca: { ...e.porEstaca, Ventanilla: asignadosAqui } } : e;
+  });
+  // Nuevo plan (nueva sesión/página, planPrevio vacío) para un grupo B que llega después.
+  const grupoB = ['b1', 'b2', 'b3'].map((id) => candidato(id, { genero: 'H', estaca: 'Ventanilla' }));
+  const { plan: planB } = calcularOActualizarPlanEnVivo({}, 'b1', grupoB, estadosTrasConfirmarA);
+  // La familia que recibió gente del grupo A no debería llevarse TODO el grupo B también.
+  const familiaMasCargadaDeA = [...new Set(Object.values(planA))][0];
+  const todosEnB_fueronAhi = Object.values(planB).every((fid) => fid === familiaMasCargadaDeA);
+  assert.strictEqual(todosEnB_fueronAhi, false, 'el grupo B debería repartirse evitando la familia ya cargada por el grupo A');
+});
+
+test('119. calcularOActualizarPlanEnVivo — llamar 2 veces con los mismos argumentos exactos da el mismo resultado (determinismo, sin azar)', () => {
+  const grupo5 = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id, i) => candidato(id, { genero: i % 2 ? 'H' : 'M', estaca: i % 2 ? 'Ventanilla' : 'Pro Lima' }));
+  const resultado1 = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  const resultado2 = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
+  assert.deepStrictEqual(resultado1.plan, resultado2.plan);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);
