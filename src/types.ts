@@ -149,9 +149,17 @@ export interface SessionUser {
 }
 
 /** Snapshot de un reparto automático de compañías — permite deshacerlo en un solo paso (ver repartoFamiliasService.ts). Vive en Firestore como documento fijo `repartosFamilias/activo`: solo puede haber uno activo a la vez. */
-export interface RepartoFamiliasActivo {
+/**
+ * Un registro en el HISTORIAL de corridas del reparto — ya no "el único
+ * activo" (antes solo podía existir uno sin deshacer a la vez); ahora cada
+ * corrida queda guardada como su propio documento, porque el reparto se
+ * corre varias veces a lo largo de las semanas según va llegando gente.
+ * "Deshacer" siempre actúa sobre la más reciente (ver repartoFamiliasService.ts).
+ */
+export interface RepartoFamiliasRegistro {
+  id: string; // id del documento en Firestore — hace falta para poder borrar justo ESTE registro al deshacer
   timestamp: string;
-  capacitacionId: string;
+  capacitacionId: string; // o 'todos-los-registrados'
   adminCorreo: string;
   anterior: { participanteId: string; familiaIdAnterior: string }[]; // para deshacer
   asignados: { participanteId: string; familiaId: string }[]; // el reparto que se aplicó

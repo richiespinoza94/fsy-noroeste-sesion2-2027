@@ -15,13 +15,15 @@ import {
   subscribeFamilias,
   updateFamiliaMeta,
 } from '../services/familiasService';
-import { deshacerReparto, ejecutarReparto, subscribeRepartoActivo } from '../services/repartoFamiliasService';
+import { deshacerReparto, ejecutarReparto, subscribeHistorialReparto } from '../services/repartoFamiliasService';
 import {
   calcularCandidatosPorRol,
   calcularEdad,
   calcularEstadisticas,
+  calcularEstadoFamilia,
   repartoCompleto,
   type CandidatoReparto,
+  type EstadoFamilia,
   type FuenteReparto,
 } from '../utils/repartoFamilias';
 import { downloadBlob, generarRepartoPdf } from '../utils/repartoPdf';
@@ -33,7 +35,7 @@ import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion } from '../services/capacitacionesService';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasActivo, type SessionUser, type Usuario } from '../types';
+import { ASIGNACIONES, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
 type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios';
@@ -374,11 +376,17 @@ function RepartoTab({
   const [modoFuente, setModoFuente] = useState<'capacitacion' | 'todos'>('capacitacion');
   const [capacitacionId, setCapacitacionId] = useState('');
   const [preview, setPreview] = useState<Record<string, CandidatoReparto[]> | null>(null);
-  const [activo, setActivo] = useState<RepartoFamiliasActivo | null | undefined>(undefined); // undefined = todavía cargando
+  // Historial de TODAS las corridas (más reciente primero) — ya no "un
+  // único activo que bloquea volver a calcular". El reparto se corre
+  // varias veces a lo largo de las semanas según va llegando gente nueva;
+  // cada corrida solo toca a quien todavía no tiene compañía, así que
+  // nunca se pisan entre sí. "Deshacer" siempre actúa sobre historial[0].
+  const [historial, setHistorial] = useState<RepartoFamiliasRegistro[] | undefined>(undefined); // undefined = todavía cargando
   const [busy, setBusy] = useState(false);
   const [descargando, setDescargando] = useState<'pdf' | 'presentacion' | null>(null);
+  const [errorConfirmar, setErrorConfirmar] = useState('');
 
-  useEffect(() => subscribeRepartoActivo(setActivo), []);
+  useEffect(() => subscribeHistorialReparto(setHistorial), []);
 
   const capsOrdenadas = useMemo(
     () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
@@ -387,17 +395,21 @@ function RepartoTab({
   const capacitacion = capsOrdenadas.find((c) => c.id === capacitacionId) || null;
   const fuenteLista: boolean = modoFuente === 'todos' || !!capacitacion;
 
+  // El estado REAL de cada compañía ahora mismo — de repartos anteriores,
+  // asignaciones a mano, o ambos mezclados — es lo que alimenta al
+  // algoritmo para que la corrida nueva siga pareja con lo que ya existe.
+  function estadosActuales(): EstadoFamilia[] {
+    return familias.map((f) => calcularEstadoFamilia(f.id, participantes.filter((p) => f.consejeros.includes(p.id))));
+  }
+
   function calcular() {
     if (!familias.length || !fuenteLista) return;
     const fuente: FuenteReparto = modoFuente === 'todos' ? { modo: 'todos' } : { modo: 'capacitacion', capacitacionId: capacitacion!.id };
     const referencia = modoFuente === 'todos' ? new Date() : new Date(`${capacitacion!.fecha}T00:00:00`);
-    const familiaIds = familias.map((f) => f.id);
     const consejeros = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Consejero', referencia);
     const logisticos = calcularCandidatosPorRol(participantes, asistencia, fuente, 'Logístico', referencia);
-    setPreview(repartoCompleto(consejeros, logisticos, familiaIds));
+    setPreview(repartoCompleto(consejeros, logisticos, estadosActuales()));
   }
-
-  const [errorConfirmar, setErrorConfirmar] = useState('');
 
   async function confirmar() {
     if (!preview) return;
@@ -423,9 +435,11 @@ function RepartoTab({
   }
 
   async function deshacer() {
+    const ultimo = historial?.[0];
+    if (!ultimo) return;
     setBusy(true);
     try {
-      await deshacerReparto(familias, user.correo);
+      await deshacerReparto(ultimo, familias, user.correo);
     } finally {
       setBusy(false);
     }
@@ -477,62 +491,42 @@ function RepartoTab({
     return { stats: calcularEstadisticas([...actuales, ...nuevos]), nuevos: nuevos.length };
   }
 
-  if (activo === undefined) {
+  if (historial === undefined) {
     return <div className="text-center text-sm text-slate-500 py-8">Cargando…</div>;
   }
 
-  if (activo) {
-    return (
-      <div className="flex flex-col gap-3">
-        <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3.5">
-          <div className="text-sm font-bold text-primary">✅ Reparto activo</div>
-          <div className="text-xs text-slate-600 mt-1">
-            {activo.asignados.length} personas repartidas el {new Date(activo.timestamp).toLocaleString('es-PE')}. Para volver a
-            calcularlo con otra fuente, primero deshazlo.
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {familias.map((f) => (
-            <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} />
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={deshacer}
-            disabled={busy}
-            className="flex-1 border-2 border-red-200 text-red-600 font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
-          >
-            {busy ? 'Deshaciendo…' : '↩️ Deshacer reparto'}
-          </button>
-          <button
-            onClick={descargarPdf}
-            disabled={!!descargando}
-            className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
-          >
-            {descargando === 'pdf' ? 'Generando…' : '📄 PDF'}
-          </button>
-          <button
-            onClick={verPresentacion}
-            disabled={!!descargando}
-            className="flex-1 bg-blue-500 text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
-            title="Descarga un HTML autocontenido — ábrelo en el navegador del proyector, sin internet ni login"
-          >
-            {descargando === 'presentacion' ? 'Generando…' : '🎬 Presentación'}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const ultimo = historial[0] || null;
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Historial — ya no bloquea volver a calcular, solo informa y permite
+          deshacer la corrida más reciente. El reparto se corre varias veces
+          a lo largo de las semanas según va llegando gente nueva. */}
+      {ultimo && (
+        <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-bold text-primary">Última corrida</div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              {ultimo.asignados.length} persona(s) repartidas el {new Date(ultimo.timestamp).toLocaleString('es-PE')}
+              {historial.length > 1 && ` · ${historial.length} corridas en el historial`}
+            </div>
+          </div>
+          <button
+            onClick={deshacer}
+            disabled={busy}
+            className="shrink-0 border-2 border-red-200 text-red-600 font-bold rounded-xl px-3 py-2 text-xs disabled:opacity-50"
+          >
+            {busy ? 'Deshaciendo…' : '↩️ Deshacer'}
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
         <div className="text-sm font-bold">Reparto automático de Compañías</div>
         <div className="text-xs text-slate-500">
           Reparte a los Consejeros (prioridad: sexo parejo → estaca no concentrada → edad distribuida) y luego a los
-          Logísticos como relleno, sobre las mismas 4 compañías. Quien ya tenga una compañía asignada a mano queda
+          Logísticos como relleno, sobre las mismas 4 compañías — siempre tomando en cuenta lo que cada compañía YA
+          tiene (de corridas anteriores o asignado a mano), no desde cero. Quien ya tenga una compañía asignada queda
           fuera — no se le mueve. <strong>No incluye</strong> Coordinador General, Coordinador Auxiliar, Coordinador
           Logístico, Matrimonio Logístico, Audiovisuales ni Comité de Bienvenida — esos roles no entran al reparto
           automático aunque el nombre se parezca.
@@ -576,7 +570,7 @@ function RepartoTab({
         {!familias.length && <div className="text-xs text-amber-700">Crea al menos una compañía en la pestaña Familias primero.</div>}
       </div>
 
-      {preview && (
+      {preview ? (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             {familias.map((f) => {
@@ -593,7 +587,34 @@ function RepartoTab({
           </button>
           {errorConfirmar && <div className="text-xs text-red-600 font-semibold bg-red-50 rounded-xl px-3 py-2.5">❌ {errorConfirmar}</div>}
         </>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {familias.map((f) => (
+            <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} />
+          ))}
+        </div>
       )}
+
+      {/* PDF y Presentación — siempre disponibles, no solo justo después de
+          correr el reparto, porque la idea es que se use cuando haya que
+          imprimir/proyectar, en cualquier momento. */}
+      <div className="flex gap-2">
+        <button
+          onClick={descargarPdf}
+          disabled={!!descargando}
+          className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
+        >
+          {descargando === 'pdf' ? 'Generando…' : '📄 PDF'}
+        </button>
+        <button
+          onClick={verPresentacion}
+          disabled={!!descargando}
+          className="flex-1 bg-blue-500 text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50"
+          title="Descarga un HTML autocontenido — ábrelo en el navegador del proyector, sin internet ni login"
+        >
+          {descargando === 'presentacion' ? 'Generando…' : '🎬 Presentación'}
+        </button>
+      </div>
     </div>
   );
 }

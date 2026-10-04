@@ -17,11 +17,13 @@ import {
   calcularCandidatosPorRol,
   calcularEdad,
   calcularEstadisticas,
+  calcularEstadoFamilia,
   esElegibleReparto,
   grupoEstacaReparto,
-  repartirEnFamilias,
+  repartirConBalance,
   repartoCompleto,
   type CandidatoReparto,
+  type EstadoFamilia,
   type FuenteReparto,
 } from '../src/utils/repartoFamilias';
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
@@ -686,42 +688,52 @@ test('83. calcularCandidatosPorRol — modo "todos": no filtra por asistencia, e
   assert.deepStrictEqual(consejeros.map((c) => c.participante.id), ['a']);
 });
 
-test('84. repartirEnFamilias — el conteo total nunca difiere en más de 1 entre familias', () => {
+function estadoVacio(id: string): EstadoFamilia {
+  return { id, total: 0, hombres: 0, mujeres: 0, porEstaca: { Ventanilla: 0, 'Puente Piedra': 0, 'Pro Lima': 0, Otros: 0 } };
+}
+const ESTADOS_VACIOS_4 = ['f1', 'f2', 'f3', 'f4'].map(estadoVacio);
+
+test('84. repartirConBalance — el conteo total nunca difiere en más de 1 entre familias (partiendo de vacío)', () => {
   const candidatos: CandidatoReparto[] = Array.from({ length: 23 }, (_, i) => ({
     participante: personaReparto(`p${i}`, { genero: i % 2 ? 'H' : 'M', estaca: ['Ventanilla', 'Puente Piedra', 'Pro Lima', 'Huaral'][i % 4] }),
     edad: 18 + (i % 10),
   }));
-  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  const { porFamilia } = repartirConBalance(candidatos, ESTADOS_VACIOS_4);
   const counts = Object.values(porFamilia).map((arr) => arr.length);
   assert.strictEqual(counts.reduce((a, b) => a + b, 0), 23);
   assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `counts muy desparejos: ${counts}`);
 });
 
-test('85. repartirEnFamilias — reparte en serpentina (0,1,2,3,3,2,1,0,…) sin reiniciar entre grupos', () => {
-  // 8 personas, todas del mismo grupo (mismo sexo+estaca) para aislar el patrón puro de serpentina.
+test('85. repartirConBalance — SÍ toma en cuenta compañías que ya tienen gente (el caso real: reparto corrido varias veces)', () => {
+  // Familia 1 ya tiene 5 hombres de Ventanilla (de una corrida anterior o
+  // asignados a mano) — el reparto nuevo debe evitar seguir mandándole
+  // hombres de Ventanilla mientras las otras 3 están vacías.
+  const estados: EstadoFamilia[] = [
+    { id: 'f1', total: 5, hombres: 5, mujeres: 0, porEstaca: { Ventanilla: 5, 'Puente Piedra': 0, 'Pro Lima': 0, Otros: 0 } },
+    estadoVacio('f2'),
+    estadoVacio('f3'),
+    estadoVacio('f4'),
+  ];
   const candidatos: CandidatoReparto[] = Array.from({ length: 8 }, (_, i) => ({
-    participante: personaReparto(`p${i}`, { estaca: 'Ventanilla', genero: 'H' }),
-    edad: 18 + i, // ya vienen ordenados por edad ascendente
+    participante: personaReparto(`h${i}`, { genero: 'H', estaca: 'Ventanilla' }),
+    edad: 18 + i,
   }));
-  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
-  const familiaDe = (id: string) => Object.entries(porFamilia).find(([, arr]) => arr.some((c) => c.participante.id === id))?.[0];
-  assert.deepStrictEqual(
-    ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'].map(familiaDe),
-    ['f1', 'f2', 'f3', 'f4', 'f4', 'f3', 'f2', 'f1']
-  );
+  const { porFamilia } = repartirConBalance(candidatos, estados);
+  assert.strictEqual(porFamilia['f1'].length, 0, 'Familia 1 ya estaba cargada de hombres de Ventanilla, no debería recibir más mientras las otras están en 0');
+  assert.ok(porFamilia['f2'].length > 0 && porFamilia['f3'].length > 0 && porFamilia['f4'].length > 0, 'las 3 vacías deberían repartirse la mayoría');
 });
 
-test('86. repartirEnFamilias — sin familias creadas, no revienta y devuelve objeto vacío', () => {
+test('86. repartirConBalance — sin familias, no revienta y devuelve objeto vacío', () => {
   const candidatos: CandidatoReparto[] = [{ participante: personaReparto('p1'), edad: 20 }];
-  assert.deepStrictEqual(repartirEnFamilias(candidatos, []).porFamilia, {});
+  assert.deepStrictEqual(repartirConBalance(candidatos, []).porFamilia, {});
 });
 
-test('87. repartirEnFamilias — prioridad más alta (sexo) queda parejo: 20 hombres y 20 mujeres se reparten ~10/10 en cada familia', () => {
+test('87. repartirConBalance — prioridad más alta (sexo) queda parejo: 20 hombres y 20 mujeres se reparten ~10/10 en cada familia', () => {
   const candidatos: CandidatoReparto[] = [
     ...Array.from({ length: 20 }, (_, i) => ({ participante: personaReparto(`h${i}`, { genero: 'H' as const, estaca: 'Ventanilla' }), edad: 18 + i })),
     ...Array.from({ length: 20 }, (_, i) => ({ participante: personaReparto(`m${i}`, { genero: 'M' as const, estaca: 'Ventanilla' }), edad: 18 + i })),
   ];
-  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  const { porFamilia } = repartirConBalance(candidatos, ESTADOS_VACIOS_4);
   Object.values(porFamilia).forEach((miembros) => {
     const h = miembros.filter((m) => m.participante.genero === 'H').length;
     const m = miembros.filter((m) => m.participante.genero === 'M').length;
@@ -729,14 +741,12 @@ test('87. repartirEnFamilias — prioridad más alta (sexo) queda parejo: 20 hom
   });
 });
 
-test('88. repartirEnFamilias — cada estaca queda representada proporcionalmente en las 4 familias (no toda en una sola)', () => {
-  // 16 de Ventanilla, 16 de Puente Piedra — con la serpentina agrupada por
-  // sexo→estaca, cada familia debe recibir ~8 de cada una, no todo en 1 o 2.
+test('88. repartirConBalance — cada estaca queda representada proporcionalmente en las 4 familias (no toda en una sola)', () => {
   const candidatos: CandidatoReparto[] = [
     ...Array.from({ length: 16 }, (_, i) => ({ participante: personaReparto(`v${i}`, { estaca: 'Ventanilla', genero: i % 2 ? 'H' : 'M' }), edad: 18 + i })),
     ...Array.from({ length: 16 }, (_, i) => ({ participante: personaReparto(`pp${i}`, { estaca: 'Puente Piedra', genero: i % 2 ? 'H' : 'M' }), edad: 18 + i })),
   ] as CandidatoReparto[];
-  const { porFamilia } = repartirEnFamilias(candidatos, ['f1', 'f2', 'f3', 'f4']);
+  const { porFamilia } = repartirConBalance(candidatos, ESTADOS_VACIOS_4);
   Object.values(porFamilia).forEach((miembros) => {
     const deVentanilla = miembros.filter((m) => m.participante.estaca === 'Ventanilla').length;
     const dePuentePiedra = miembros.filter((m) => m.participante.estaca === 'Puente Piedra').length;
@@ -745,7 +755,7 @@ test('88. repartirEnFamilias — cada estaca queda representada proporcionalment
   });
 });
 
-test('89. repartoCompleto — Consejeros primero, Logísticos como relleno después, y el TOTAL combinado queda parejo (encadena el cursor)', () => {
+test('89. repartoCompleto — Consejeros primero, Logísticos como relleno después, usando el estado que dejaron los Consejeros (no el inicial)', () => {
   const consejeros: CandidatoReparto[] = Array.from({ length: 9 }, (_, i) => ({
     participante: personaReparto(`c${i}`, { genero: i % 2 ? 'H' : 'M', estaca: 'Ventanilla' }),
     edad: 18 + i,
@@ -754,17 +764,14 @@ test('89. repartoCompleto — Consejeros primero, Logísticos como relleno despu
     participante: personaReparto(`l${i}`, { genero: i % 2 ? 'H' : 'M', estaca: 'Pro Lima', asignacion: 'Logístico' }),
     edad: 20 + i,
   }));
-  const combinado = repartoCompleto(consejeros, logisticos, ['f1', 'f2', 'f3', 'f4']);
+  const combinado = repartoCompleto(consejeros, logisticos, ESTADOS_VACIOS_4);
   const counts = Object.values(combinado).map((arr) => arr.length);
   assert.strictEqual(counts.reduce((a, b) => a + b, 0), 16);
-  // Si cada pasada partiera siempre desde 0, el remanente (9%4=1, 7%4=3) se
-  // acumularía en las MISMAS familias las 2 veces — encadenar el cursor
-  // evita eso; el total combinado no debería diferir en más de 2.
   assert.ok(Math.max(...counts) - Math.min(...counts) <= 2, `totales combinados muy desparejos: ${counts}`);
-  // Todos los logísticos deben estar repartidos (no todos concentrados en 1 familia).
   const familiasConLogistico = Object.values(combinado).filter((arr) => arr.some((c) => c.participante.asignacion === 'Logístico')).length;
   assert.ok(familiasConLogistico >= 3, `logísticos poco distribuidos: solo en ${familiasConLogistico} familias`);
 });
+
 
 test('90. calcularEstadisticas — promedio y mediana correctos (par e impar)', () => {
   const miembros: CandidatoReparto[] = [18, 20, 22].map((edad, i) => ({ participante: personaReparto(`p${i}`), edad }));
@@ -869,6 +876,44 @@ test('101. estadoVentanaCheckIn — sin horaFin, sigue usando las 3h por defecto
 test('102. estadoVentanaCheckIn — horaFin inválida (antes que hora) cae al valor por defecto en vez de invertir el rango', () => {
   const cap: Capacitacion = { ...CAP_REF, horaFin: '10:00' }; // antes de las 18:00 de inicio — dato mal cargado
   assert.strictEqual(estadoVentanaCheckIn(cap, new Date('2027-01-25T20:00:00')), 'abierta'); // sigue dentro de las 3h por defecto
+});
+
+test('103. calcularEstadoFamilia — cuenta total/hombres/mujeres/porEstaca a partir de los participantes reales de la familia', () => {
+  const miembros = [
+    personaReparto('a', { genero: 'H', estaca: 'Ventanilla' }),
+    personaReparto('b', { genero: 'M', estaca: 'Pro Lima' }),
+    personaReparto('c', { genero: 'H', estaca: 'Huaral' }), // cae en "Otros"
+  ];
+  const estado = calcularEstadoFamilia('f1', miembros);
+  assert.strictEqual(estado.total, 3);
+  assert.strictEqual(estado.hombres, 2);
+  assert.strictEqual(estado.mujeres, 1);
+  assert.strictEqual(estado.porEstaca.Ventanilla, 1);
+  assert.strictEqual(estado.porEstaca['Pro Lima'], 1);
+  assert.strictEqual(estado.porEstaca.Otros, 1);
+});
+
+test('104. repartirConBalance — 2 corridas sucesivas (simulando que llega gente en 2 tandas) terminan parejas en total, aunque la 2da no empiece de cero', () => {
+  // Tanda 1: 12 personas a familias vacías.
+  const tanda1: CandidatoReparto[] = Array.from({ length: 12 }, (_, i) => ({
+    participante: personaReparto(`t1-${i}`, { genero: i % 2 ? 'H' : 'M', estaca: i % 2 ? 'Ventanilla' : 'Pro Lima' }),
+    edad: 18 + i,
+  }));
+  const paso1 = repartirConBalance(tanda1, ESTADOS_VACIOS_4);
+  const estadosTrasT1 = ['f1', 'f2', 'f3', 'f4'].map((id) => calcularEstadoFamilia(id, paso1.porFamilia[id].map((c) => c.participante)));
+
+  // Tanda 2 (días después, simulando una 2da corrida): 8 personas más, SOBRE el estado que dejó la tanda 1.
+  const tanda2: CandidatoReparto[] = Array.from({ length: 8 }, (_, i) => ({
+    participante: personaReparto(`t2-${i}`, { genero: i % 2 ? 'H' : 'M', estaca: i % 2 ? 'Ventanilla' : 'Pro Lima' }),
+    edad: 18 + i,
+  }));
+  const paso2 = repartirConBalance(tanda2, estadosTrasT1);
+
+  // Total final (tanda1 + tanda2) por familia debe seguir parejo — la 2da
+  // tanda tuvo que "leer" el desbalance que dejó la 1ra y compensarlo.
+  const totalFinal = ['f1', 'f2', 'f3', 'f4'].map((id) => paso1.porFamilia[id].length + paso2.porFamilia[id].length);
+  assert.strictEqual(totalFinal.reduce((a, b) => a + b, 0), 20);
+  assert.ok(Math.max(...totalFinal) - Math.min(...totalFinal) <= 1, `total tras 2 corridas muy desparejo: ${totalFinal}`);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

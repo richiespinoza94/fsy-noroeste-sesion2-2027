@@ -78,41 +78,77 @@ export function calcularCandidatosPorRol(
     .map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, referenciaEdad) }));
 }
 
-export interface CursorSnake {
-  idx: number;
-  direction: 1 | -1;
+/**
+ * El estado ACTUAL de una compañía — de dónde viene no importa (reparto
+ * automático anterior, asignación manual, o ambos mezclados): lo único que
+ * le importa al algoritmo es cuánta gente/sexo/estaca tiene AHORA MISMO.
+ * Se recalcula siempre desde los datos reales (familia.consejeros →
+ * participantes), nunca se guarda — así cada corrida del reparto ve el
+ * estado verdadero del momento, venga de donde venga.
+ */
+export interface EstadoFamilia {
+  id: string;
+  total: number;
+  hombres: number;
+  mujeres: number;
+  porEstaca: Record<GrupoEstacaReparto, number>;
+}
+
+export function calcularEstadoFamilia(familiaId: string, miembrosActuales: Participante[]): EstadoFamilia {
+  const porEstaca: Record<GrupoEstacaReparto, number> = { Ventanilla: 0, 'Puente Piedra': 0, 'Pro Lima': 0, Otros: 0 };
+  miembrosActuales.forEach((p) => {
+    porEstaca[grupoEstacaReparto(p.estaca)] += 1;
+  });
+  return {
+    id: familiaId,
+    total: miembrosActuales.length,
+    hombres: miembrosActuales.filter((p) => p.genero === 'H').length,
+    mujeres: miembrosActuales.filter((p) => p.genero === 'M').length,
+    porEstaca,
+  };
+}
+
+function conteoDeSexo(e: EstadoFamilia, genero: 'H' | 'M'): number {
+  return genero === 'H' ? e.hombres : e.mujeres;
 }
 
 /**
- * El algoritmo base: ordena por (sexo → grupo de estaca → edad, en ESE
- * orden de prioridad) y reparte en "serpentina" (0,1,2,3,3,2,1,0,…) sin
- * reiniciar el contador entre grupos. El conteo total nunca queda
- * desbalanceado en más de 1 persona, y como la lista está agrupada por
- * sexo primero y estaca segundo antes de serpentear, cada compañía recibe
- * una porción proporcional de cada sexo (la prioridad más alta) y de cada
- * estaca. Ordenar por edad dentro de cada grupo antes de serpentear
- * entrelaza las edades (evita que una compañía se lleve "a todos los
- * mayores").
+ * El algoritmo: a diferencia de un reparto "desde cero" (serpentina ciega,
+ * como funcionaba antes), este SÍ mira el estado actual de cada compañía
+ * para decidir — imprescindible porque el reparto se corre varias veces a
+ * lo largo de las semanas según va llegando gente, y cada corrida nueva
+ * tiene que seguir pareja con lo que YA existe (de corridas anteriores o
+ * de asignaciones a mano), no ignorarlo.
  *
- * Recibe un cursor opcional para poder ENCADENAR una segunda pasada (ver
- * repartoCompleto) sin reiniciar el conteo — así el total combinado
- * (Consejeros + Logísticos) también queda parejo, no solo cada pasada por
- * separado.
+ * Los candidatos se ordenan primero por (sexo → grupo de estaca → edad) —
+ * el mismo orden de prioridad de siempre — y se reparten uno por uno: cada
+ * persona va a la compañía que, en ESE momento, más la necesita, en este
+ * orden exacto:
+ * 1) la que tenga MENOS personas de su mismo sexo
+ * 2) empate → la que tenga MENOS personas de su misma estaca
+ * 3) empate → la más chica en total
+ * El estado se actualiza en memoria a medida que se asigna cada persona,
+ * así la decisión de la persona #2 ya ve el efecto de haber ubicado a la
+ * persona #1.
+ *
+ * La edad no entra en la fórmula de desempate (no tiene un "conteo" simple
+ * como sexo/estaca) — se maneja ordenando a los candidatos por edad ANTES
+ * de repartir, dentro de cada grupo sexo+estaca, para que se entrelacen.
  *
  * Nota honesta sobre la MODA de edad: con grupos chicos y edades reales,
  * forzar que la moda quede idéntica en las 4 compañías no es una meta
  * alcanzable de forma confiable (es una estadística frágil en muestras
- * pequeñas). Este algoritmo optimiza promedio/mediana parejos — la moda se
+ * pequeñas). Este algoritmo prioriza sexo y estaca parejos — la moda se
  * reporta junto a las demás para que el admin la revise, no se fuerza.
  */
-export function repartirEnFamilias(
+export function repartirConBalance(
   candidatos: CandidatoReparto[],
-  familiaIds: string[],
-  cursorInicial: CursorSnake = { idx: 0, direction: 1 }
-): { porFamilia: Record<string, CandidatoReparto[]>; cursorFinal: CursorSnake } {
-  const resultado: Record<string, CandidatoReparto[]> = {};
-  familiaIds.forEach((id) => (resultado[id] = []));
-  if (!familiaIds.length) return { porFamilia: resultado, cursorFinal: cursorInicial };
+  estadosIniciales: EstadoFamilia[]
+): { porFamilia: Record<string, CandidatoReparto[]>; estadosFinales: EstadoFamilia[] } {
+  const estados = estadosIniciales.map((e) => ({ ...e, porEstaca: { ...e.porEstaca } }));
+  const porFamilia: Record<string, CandidatoReparto[]> = {};
+  estados.forEach((e) => (porFamilia[e.id] = []));
+  if (!estados.length) return { porFamilia, estadosFinales: estados };
 
   const ordenados = [...candidatos].sort((a, b) => {
     if (a.participante.genero !== b.participante.genero) return a.participante.genero.localeCompare(b.participante.genero);
@@ -122,41 +158,48 @@ export function repartirEnFamilias(
     return a.edad - b.edad;
   });
 
-  let { idx, direction } = cursorInicial;
   for (const c of ordenados) {
-    resultado[familiaIds[idx]].push(c);
-    idx += direction;
-    if (idx === familiaIds.length) {
-      idx = familiaIds.length - 1;
-      direction = -1;
-    } else if (idx === -1) {
-      idx = 0;
-      direction = 1;
+    const genero = c.participante.genero;
+    const grupo = grupoEstacaReparto(c.participante.estaca);
+    let mejor = estados[0];
+    for (const e of estados) {
+      const gana =
+        conteoDeSexo(e, genero) < conteoDeSexo(mejor, genero) ||
+        (conteoDeSexo(e, genero) === conteoDeSexo(mejor, genero) &&
+          (e.porEstaca[grupo] < mejor.porEstaca[grupo] ||
+            (e.porEstaca[grupo] === mejor.porEstaca[grupo] && e.total < mejor.total)));
+      if (gana) mejor = e;
     }
+    porFamilia[mejor.id].push(c);
+    mejor.total += 1;
+    if (genero === 'H') mejor.hombres += 1;
+    else mejor.mujeres += 1;
+    mejor.porEstaca[grupo] += 1;
   }
-  return { porFamilia: resultado, cursorFinal: { idx, direction } };
+
+  return { porFamilia, estadosFinales: estados };
 }
 
 /**
- * La orquestación completa: Consejeros primero (su propia pasada,
- * prioridad sexo→estaca→edad), Logísticos después como relleno,
- * CONTINUANDO el mismo cursor de la serpentina — así quedan distribuidos
- * en las 4 compañías y, de paso, el total combinado por compañía también
- * queda parejo.
+ * La orquestación completa: Consejeros primero (su propia pasada), y los
+ * Logísticos después como relleno — usando los `estadosFinales` que dejó
+ * la pasada de Consejeros (no los iniciales), para que los Logísticos
+ * también sepan dónde quedaron los Consejeros recién ubicados en esta
+ * misma corrida, no solo lo que había antes de empezar.
  */
 export function repartoCompleto(
   consejeros: CandidatoReparto[],
   logisticos: CandidatoReparto[],
-  familiaIds: string[]
+  estadosIniciales: EstadoFamilia[]
 ): Record<string, CandidatoReparto[]> {
   const combinado: Record<string, CandidatoReparto[]> = {};
-  familiaIds.forEach((id) => (combinado[id] = []));
-  if (!familiaIds.length) return combinado;
+  estadosIniciales.forEach((e) => (combinado[e.id] = []));
+  if (!estadosIniciales.length) return combinado;
 
-  const paso1 = repartirEnFamilias(consejeros, familiaIds);
-  const paso2 = repartirEnFamilias(logisticos, familiaIds, paso1.cursorFinal);
-  familiaIds.forEach((id) => {
-    combinado[id] = [...paso1.porFamilia[id], ...paso2.porFamilia[id]];
+  const pasoConsejeros = repartirConBalance(consejeros, estadosIniciales);
+  const pasoLogisticos = repartirConBalance(logisticos, pasoConsejeros.estadosFinales);
+  estadosIniciales.forEach((e) => {
+    combinado[e.id] = [...pasoConsejeros.porFamilia[e.id], ...(pasoLogisticos.porFamilia[e.id] || [])];
   });
   return combinado;
 }

@@ -1,29 +1,37 @@
-import { deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Familia, Participante, RepartoFamiliasActivo } from '../types';
+import type { Familia, Participante, RepartoFamiliasRegistro } from '../types';
 import { logAction } from './auditService';
 import { updateParticipante } from './participantsService';
 
 const COL = 'repartosFamilias';
-const DOC_ID = 'activo'; // solo puede existir UN reparto sin deshacer a la vez — ver repartoFamilias.ts
 
-let localActivo: RepartoFamiliasActivo | null = null;
-const listeners = new Set<(r: RepartoFamiliasActivo | null) => void>();
-const notify = () => listeners.forEach((fn) => fn(localActivo));
+let localHistorial: RepartoFamiliasRegistro[] = [];
+const listeners = new Set<(items: RepartoFamiliasRegistro[]) => void>();
+const notify = () => listeners.forEach((fn) => fn([...localHistorial]));
 
-export function subscribeRepartoActivo(cb: (r: RepartoFamiliasActivo | null) => void): () => void {
+/** Todo el historial de corridas, más reciente primero — para el log visible y para saber cuál es "la última" a deshacer. */
+export function subscribeHistorialReparto(cb: (items: RepartoFamiliasRegistro[]) => void): () => void {
   if (!db) {
     listeners.add(cb);
-    cb(localActivo);
+    cb([...localHistorial]);
     return () => listeners.delete(cb);
   }
-  return onSnapshot(doc(db, COL, DOC_ID), (snap) => cb(snap.exists() ? (snap.data() as RepartoFamiliasActivo) : null));
+  const q = query(collection(db, COL), orderBy('timestamp', 'desc'), limit(20));
+  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RepartoFamiliasRegistro)));
 }
 
 /**
  * Persiste un reparto ya calculado (el algoritmo puro corre antes, en la UI,
  * sin escribir nada — esto es lo que se llama recién al tocar "Confirmar").
- * Guarda de dónde venía cada persona (`anterior`) para poder deshacer.
+ * Guarda de dónde venía cada persona (`anterior`) para poder deshacer esta
+ * corrida puntual más adelante.
+ *
+ * A diferencia de antes, NO bloquea si ya hay corridas previas sin deshacer
+ * — correr el reparto varias veces a lo largo de las semanas, a medida que
+ * llega gente nueva, es el uso normal esperado. Cada corrida solo puede
+ * tocar a quien todavía no tiene compañía (ver calcularCandidatosPorRol),
+ * así que corridas distintas nunca se pisan entre sí.
  */
 export async function ejecutarReparto(
   porFamilia: Record<string, Participante[]>,
@@ -31,16 +39,8 @@ export async function ejecutarReparto(
   capacitacionId: string,
   adminCorreo: string
 ): Promise<void> {
-  // Guard contra doble-ejecución: un doble-click, o 2 dispositivos abiertos
-  // con la misma cuenta de Coordinador General, podrían correr esto 2 veces
-  // seguidas y mezclar el resultado a medio camino. Si ya hay un reparto
-  // sin deshacer, no se pisa — hay que deshacerlo primero.
-  if (await getRepartoActivo()) {
-    throw new Error('Ya hay un reparto activo sin deshacer — deshazlo primero antes de calcular uno nuevo.');
-  }
-
-  const anterior: RepartoFamiliasActivo['anterior'] = [];
-  const asignados: RepartoFamiliasActivo['asignados'] = [];
+  const anterior: RepartoFamiliasRegistro['anterior'] = [];
+  const asignados: RepartoFamiliasRegistro['asignados'] = [];
 
   for (const [familiaId, miembros] of Object.entries(porFamilia)) {
     for (const p of miembros) {
@@ -48,6 +48,7 @@ export async function ejecutarReparto(
       asignados.push({ participanteId: p.id, familiaId });
     }
   }
+  if (!asignados.length) return; // nada que repartir — no vale la pena dejar un registro vacío en el historial
 
   // Actualiza cada participante — ponytail: secuencial, no batch; el
   // volumen de este proyecto (decenas de personas, no miles) no lo
@@ -64,26 +65,30 @@ export async function ejecutarReparto(
     await saveFamilia({ ...familia, consejeros: [...familia.consejeros, ...nuevosIds] });
   }
 
-  const activo: RepartoFamiliasActivo = { timestamp: new Date().toISOString(), capacitacionId, adminCorreo, anterior, asignados };
+  const registro: Omit<RepartoFamiliasRegistro, 'id'> = {
+    timestamp: new Date().toISOString(),
+    capacitacionId,
+    adminCorreo,
+    anterior,
+    asignados,
+  };
   if (!db) {
-    localActivo = activo;
+    localHistorial = [{ id: crypto.randomUUID(), ...registro }, ...localHistorial];
     notify();
   } else {
-    await setDoc(doc(db, COL, DOC_ID), activo);
+    await addDoc(collection(db, COL), registro);
   }
   await logAction(adminCorreo, 'REPARTO_FAMILIAS_EJECUTADO', '', { capacitacionId, personas: asignados.length });
 }
 
-export async function deshacerReparto(familias: Familia[], adminCorreo: string): Promise<void> {
-  const activo = await getRepartoActivo();
-  if (!activo) return;
-
-  for (const { participanteId, familiaIdAnterior } of activo.anterior) {
+/** Deshace SOLO la corrida que se le pasa (normalmente la más reciente) — las demás del historial quedan intactas. */
+export async function deshacerReparto(registro: RepartoFamiliasRegistro, familias: Familia[], adminCorreo: string): Promise<void> {
+  for (const { participanteId, familiaIdAnterior } of registro.anterior) {
     await updateParticipante(participanteId, { familiaId: familiaIdAnterior }, adminCorreo);
   }
 
   const porFamilia = new Map<string, string[]>();
-  activo.asignados.forEach(({ familiaId, participanteId }) => {
+  registro.asignados.forEach(({ familiaId, participanteId }) => {
     porFamilia.set(familiaId, [...(porFamilia.get(familiaId) || []), participanteId]);
   });
   for (const [familiaId, ids] of porFamilia) {
@@ -93,18 +98,12 @@ export async function deshacerReparto(familias: Familia[], adminCorreo: string):
   }
 
   if (!db) {
-    localActivo = null;
+    localHistorial = localHistorial.filter((r) => r.id !== registro.id);
     notify();
   } else {
-    await deleteDoc(doc(db, COL, DOC_ID));
+    await deleteDoc(doc(db, COL, registro.id));
   }
-  await logAction(adminCorreo, 'REPARTO_FAMILIAS_DESHECHO', '', { personas: activo.anterior.length });
-}
-
-async function getRepartoActivo(): Promise<RepartoFamiliasActivo | null> {
-  if (!db) return localActivo;
-  const snap = await getDoc(doc(db, COL, DOC_ID));
-  return snap.exists() ? (snap.data() as RepartoFamiliasActivo) : null;
+  await logAction(adminCorreo, 'REPARTO_FAMILIAS_DESHECHO', '', { personas: registro.anterior.length });
 }
 
 async function saveFamilia(f: Familia) {
