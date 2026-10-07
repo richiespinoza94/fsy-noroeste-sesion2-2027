@@ -6,6 +6,7 @@ import {
   addConsejeroToFamilia,
   addFamilia,
   deleteFamilia,
+  familiasDeAuxiliar,
   isConsejero,
   isLogistico,
   isCoordAux,
@@ -76,7 +77,8 @@ export default function GestionScreen({
             ['familias', '👥 Familias'],
             ...(user.canRepartirFamilias ? [['reparto', '🔀 Reparto'] as const] : []),
             ['roles', '🎭 Roles'],
-            ['capacitaciones', '📅 Capacitaciones'],
+            // El Coordinador Auxiliar solo ve Familias (la suya) y Roles.
+            ...(!user.isAuxiliar ? [['capacitaciones', '📅 Capacitaciones'] as const] : []),
             ...(user.canEditAll ? [['usuarios', '🔑 Usuarios'] as const] : []),
           ] as const
         ).map(([id, label]) => (
@@ -104,8 +106,8 @@ export default function GestionScreen({
           />
         )}
         {sub === 'roles' && <RolesTab user={user} participantes={participantes} />}
-        {sub === 'capacitaciones' && <CapacitacionesTab user={user} capacitaciones={capacitaciones} />}
-        {sub === 'usuarios' && user.canEditAll && <UsuariosTab user={user} />}
+        {sub === 'capacitaciones' && !user.isAuxiliar && <CapacitacionesTab user={user} capacitaciones={capacitaciones} />}
+        {sub === 'usuarios' && user.canEditAll && <UsuariosTab user={user} participantes={participantes} />}
       </div>
     </div>
   );
@@ -130,7 +132,15 @@ function FamiliasTab({
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
 
-  const fam = familias.find((f) => f.id === selId) || null;
+  // Un Coordinador Auxiliar solo ve las familias donde está en un compañerismo
+  // (ver familiasDeAuxiliar). Para él, `visibles` reemplaza a `familias` en
+  // todo lo que se MUESTRA; `familias` completo sigue usándose solo para
+  // calcular quién está sin compañía (assignedIds).
+  const visibles = useMemo(
+    () => (user.isAuxiliar ? familiasDeAuxiliar(user.participantId, companerismo, familias) : familias),
+    [user.isAuxiliar, user.participantId, companerismo, familias]
+  );
+  const fam = visibles.find((f) => f.id === selId) || null;
   const usedColorIds = familias.map((f) => f.colorId).filter(Boolean);
   const assignedIds = new Set(familias.flatMap((f) => f.consejeros));
   const eligibles = participantes.filter((p) => (isConsejero(p) || isLogistico(p)) && !assignedIds.has(p.id));
@@ -143,13 +153,11 @@ function FamiliasTab({
   const coordAux = participantes.filter(isCoordAux);
   const [detail, setDetail] = useState<Participante | null>(null);
 
-  // Un Coordinador Auxiliar solo administra SU propia familia — nunca ve el
-  // selector ni puede navegar a otras. Se fuerza apenas se conoce su
-  // familiaId (viene de la sesión, resuelto en el login).
-  const forcedFamilyId = user.isAuxiliar ? user.familiaId || '' : '';
+  // Si el auxiliar tiene una sola familia, queda seleccionada sola.
+  const soloUnaId = user.isAuxiliar && visibles.length === 1 ? visibles[0].id : '';
   useEffect(() => {
-    if (forcedFamilyId) setSelId(forcedFamilyId);
-  }, [forcedFamilyId]);
+    if (soloUnaId) setSelId(soloUnaId);
+  }, [soloUnaId]);
 
   async function handleCreate() {
     const f = await addFamilia(newName.trim(), newColor, familias, user.correo);
@@ -180,15 +188,23 @@ function FamiliasTab({
   return (
     <div className="flex flex-col gap-3">
       {user.isAuxiliar ? (
-        forcedFamilyId ? (
+        visibles.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 text-sm text-amber-800">
+            {user.participantId
+              ? 'Todavía no estás asignado a ninguna familia. Pide a un Coordinador General que te añada en el compañerismo de la familia que vas a apoyar.'
+              : 'Tu correo no coincide con ningún participante registrado, así que no podemos ubicar tu familia. Pide a un Coordinador General que revise tu cuenta.'}
+          </div>
+        ) : visibles.length === 1 ? (
           <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3 text-sm font-bold text-primary">
-            🔒 Administrando: {fam?.customName || fam?.nombre || 'tu familia'}
+            🔒 Administrando: {fam?.customName || fam?.nombre}
           </div>
         ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 text-sm text-amber-800">
-            Todavía no estás asignado a ninguna familia. Pide a un Coordinador General que te añada como consejero de
-            la familia que vas a apoyar.
-          </div>
+          <select className="input" value={selId} onChange={(e) => setSelId(e.target.value)}>
+            <option value="">— Elige una de tus familias —</option>
+            {visibles.map((f) => (
+              <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
+            ))}
+          </select>
         )
       ) : (
         <>
@@ -261,7 +277,7 @@ function FamiliasTab({
             )}
           </div>
 
-          <CompanerismoCard fam={fam} cps={famCp} participantes={participantes} coordAux={coordAux} user={user} />
+          <CompanerismoCard fam={fam} cps={famCp} participantes={participantes} coordAux={coordAux} user={user} readOnly={user.isAuxiliar} />
 
           <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
 
@@ -316,7 +332,7 @@ function FamiliasTab({
         </>
       )}
 
-      {familias.length === 0 && !creating && (
+      {familias.length === 0 && !creating && !user.isAuxiliar && (
         <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
           <div className="text-3xl mb-2">👥</div>
           <div className="text-sm font-bold mb-1">No hay familias creadas</div>
@@ -740,12 +756,16 @@ function CompanerismoCard({
   participantes,
   coordAux,
   user,
+  readOnly = false,
 }: {
   fam: Familia;
   cps: Companerismo[];
   participantes: Participante[];
   coordAux: Participante[];
   user: SessionUser;
+  // El auxiliar ve el compañerismo pero no lo edita: si pudiera, podría
+  // añadirse a otra familia (y ganar acceso a ella) o quitarse de la suya.
+  readOnly?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [q1, setQ1] = useState('');
@@ -770,9 +790,11 @@ function CompanerismoCard({
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center mb-2">
         <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex-1">Compañerismos — Coord. Auxiliares</div>
-        <button onClick={() => setAdding((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2 py-1">
-          {adding ? 'Cancelar' : '+ Añadir'}
-        </button>
+        {!readOnly && (
+          <button onClick={() => setAdding((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2 py-1">
+            {adding ? 'Cancelar' : '+ Añadir'}
+          </button>
+        )}
       </div>
       {cps.map((cp) => {
         const p1 = participantes.find((p) => p.id === cp.p1Id);
@@ -783,7 +805,9 @@ function CompanerismoCard({
               <div>🤝 P1: {p1 ? `${p1.nombres} ${p1.apellidos}` : 'Sin asignar'}</div>
               <div>🤝 P2: {p2 ? `${p2.nombres} ${p2.apellidos}` : 'Sin asignar'}</div>
             </div>
-            <button onClick={() => removeCompanerismo(cp.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">✕</button>
+            {!readOnly && (
+              <button onClick={() => removeCompanerismo(cp.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">✕</button>
+            )}
           </div>
         );
       })}
@@ -1065,7 +1089,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
 // ── Usuarios (staff) ─────────────────────────────────────────────────────────
 const ROLES_STAFF = ['Coordinador General', 'Logística', 'Coordinador Auxiliar'] as const;
 
-function UsuariosTab({ user }: { user: SessionUser }) {
+function UsuariosTab({ user, participantes }: { user: SessionUser; participantes: Participante[] }) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [creando, setCreando] = useState(false);
   const [correo, setCorreo] = useState('');
@@ -1075,6 +1099,10 @@ function UsuariosTab({ user }: { user: SessionUser }) {
   const [error, setError] = useState('');
 
   useEffect(() => subscribeUsuarios(setUsuarios), []);
+
+  // Para un Coordinador Auxiliar el correo de la cuenta TIENE que ser el
+  // mismo con el que se registró: así la app lo reconoce y ubica su familia.
+  const participanteConEseCorreo = participantes.find((p) => p.correo.toLowerCase().trim() === correo.toLowerCase().trim());
 
   const yaExiste = usuarios.some((u) => u.correo.toLowerCase().trim() === correo.toLowerCase().trim());
 
@@ -1120,6 +1148,13 @@ function UsuariosTab({ user }: { user: SessionUser }) {
               ))}
             </select>
           </div>
+          {rol === 'Coordinador Auxiliar' && validateEmail(correo) && (
+            <div className={`text-[11px] font-semibold rounded-xl px-3 py-2 ${participanteConEseCorreo ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
+              {participanteConEseCorreo
+                ? `✅ Coincide con ${participanteConEseCorreo.nombres} ${participanteConEseCorreo.apellidos} (${participanteConEseCorreo.asignacion || 'sin rol'}). Recuerda añadirlo en el compañerismo de su familia.`
+                : '⚠️ Ningún participante se registró con este correo: no podrá ver su familia hasta que coincida.'}
+            </div>
+          )}
           {rol === 'Coordinador Auxiliar' && (
             <div>
               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Estaca</div>

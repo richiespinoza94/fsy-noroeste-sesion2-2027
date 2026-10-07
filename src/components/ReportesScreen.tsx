@@ -7,16 +7,19 @@ import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
-import { ASIGNACIONES, type Asistencia, type Capacitacion, type Participante } from '../types';
+import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
+import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser } from '../types';
 import MetricCard from './MetricCard';
 
 type SubTab = 'general' | 'compromiso';
 
 export default function ReportesScreen({
-  participantes,
+  user,
+  participantes: todos,
   capacitaciones,
   onNavHiddenChange,
 }: {
+  user: SessionUser;
   participantes: Participante[];
   capacitaciones: Capacitacion[];
   onNavHiddenChange: (hidden: boolean) => void;
@@ -28,6 +31,26 @@ export default function ReportesScreen({
   const [soloAudiovisual, setSoloAudiovisual] = useState(false);
 
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
+
+  // Un Coordinador Auxiliar ve los reportes SOLO de los integrantes de sus
+  // familias: todo lo de abajo (métricas, estacas, compromiso, CSV) se
+  // calcula sobre `participantes`, así que basta con acotarlo acá.
+  const [familias, setFamilias] = useState<Familia[]>([]);
+  const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
+  useEffect(() => {
+    if (!user.isAuxiliar) return;
+    const u1 = subscribeFamilias(setFamilias);
+    const u2 = subscribeCompanerismo(setCompanerismo);
+    return () => {
+      u1();
+      u2();
+    };
+  }, [user.isAuxiliar]);
+  const participantes = useMemo(() => {
+    if (!user.isAuxiliar) return todos;
+    const ids = new Set(familiasDeAuxiliar(user.participantId, companerismo, familias).flatMap((f) => f.consejeros));
+    return todos.filter((p) => ids.has(p.id));
+  }, [todos, user.isAuxiliar, user.participantId, companerismo, familias]);
 
   const segmento = participantes
     .filter((p) => !filterEstaca || estacaEnFiltro(p.estaca, filterEstaca))

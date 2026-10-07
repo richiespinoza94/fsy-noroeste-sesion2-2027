@@ -9,7 +9,7 @@ import {
   validatePhone,
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
-import { ordenarFamilias } from '../src/services/familiasService';
+import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../src/utils/asistenciaStats';
@@ -30,7 +30,7 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
-import type { Asistencia, Capacitacion, Familia, Participante } from '../src/types';
+import type { Asistencia, Capacitacion, Companerismo, Familia, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
 let passed = 0;
@@ -1148,6 +1148,50 @@ test('129. calcularCumpleanosProximos — edadQueCumple es la edad que tendrá e
 
 test('130. calcularCumpleanosProximos — lista vacía de participantes no revienta', () => {
   assert.deepStrictEqual(calcularCumpleanosProximos([], new Date('2027-03-15T00:00:00'), 7), []);
+});
+
+// ── familiasDeAuxiliar — a qué familias puede entrar un Coordinador Auxiliar ─
+
+function famAux(n: number): Familia {
+  return { id: `f${n}`, nombre: `Familia ${n}`, customName: '', colorId: '', consejeros: [] };
+}
+function cpAux(id: string, familiaId: string, p1Id: string, p2Id: string): Companerismo {
+  return { id, familiaId, p1Id, p2Id };
+}
+const FAMS_AUX = [famAux(1), famAux(2), famAux(3), famAux(10)];
+
+test('131. familiasDeAuxiliar — devuelve solo la familia donde está en un compañerismo (como P1)', () => {
+  const r = familiasDeAuxiliar('aux1', [cpAux('c1', 'f2', 'aux1', 'otro'), cpAux('c2', 'f3', 'x', 'y')], FAMS_AUX);
+  assert.deepStrictEqual(r.map((f) => f.id), ['f2']);
+});
+
+test('132. familiasDeAuxiliar — también lo encuentra si está en el slot P2', () => {
+  const r = familiasDeAuxiliar('aux1', [cpAux('c1', 'f3', 'otro', 'aux1')], FAMS_AUX);
+  assert.deepStrictEqual(r.map((f) => f.id), ['f3']);
+});
+
+test('133. familiasDeAuxiliar — en varios compañerismos: devuelve todas sus familias, orden numérico (2 antes que 10)', () => {
+  const r = familiasDeAuxiliar('aux1', [cpAux('c1', 'f10', 'aux1', ''), cpAux('c2', 'f2', '', 'aux1')], FAMS_AUX);
+  assert.deepStrictEqual(r.map((f) => f.id), ['f2', 'f10']);
+});
+
+test('134. familiasDeAuxiliar — sin compañerismo no ve ninguna familia (no cae a "todas")', () => {
+  assert.deepStrictEqual(familiasDeAuxiliar('aux1', [cpAux('c1', 'f1', 'otro', 'otro2')], FAMS_AUX), []);
+  assert.deepStrictEqual(familiasDeAuxiliar('aux1', [], FAMS_AUX), []);
+});
+
+test('135. familiasDeAuxiliar — participanteId desconocido (correo sin registro) no ve nada', () => {
+  assert.deepStrictEqual(familiasDeAuxiliar(undefined, [cpAux('c1', 'f1', '', '')], FAMS_AUX), []);
+  assert.deepStrictEqual(familiasDeAuxiliar('', [cpAux('c1', 'f1', '', '')], FAMS_AUX), []);
+});
+
+test('136. familiasDeAuxiliar — ignora compañerismos huérfanos (familia ya eliminada)', () => {
+  assert.deepStrictEqual(familiasDeAuxiliar('aux1', [cpAux('c1', 'f99', 'aux1', '')], FAMS_AUX), []);
+});
+
+test('137. familiasDeAuxiliar — dos compañerismos de la misma familia no la duplican', () => {
+  const r = familiasDeAuxiliar('aux1', [cpAux('c1', 'f1', 'aux1', 'a'), cpAux('c2', 'f1', 'b', 'aux1')], FAMS_AUX);
+  assert.deepStrictEqual(r.map((f) => f.id), ['f1']);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

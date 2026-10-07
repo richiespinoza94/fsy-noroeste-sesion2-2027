@@ -42,6 +42,26 @@ export function ordenarFamilias(familias: Familia[]): Familia[] {
   });
 }
 
+/**
+ * Familias que un Coordinador Auxiliar puede ver y editar: aquellas donde
+ * figura en algún compañerismo (como P1 o P2). Un auxiliar NO es "integrante"
+ * de la familia (`Familia.consejeros` solo admite Consejero/Logístico), así
+ * que `participante.familiaId` nunca se llena para él — el vínculo real es
+ * el compañerismo. Pueden ser varias. Se ignoran compañerismos huérfanos
+ * (familia ya eliminada). Devuelve [] si no se conoce al participante.
+ */
+export function familiasDeAuxiliar(
+  participanteId: string | undefined,
+  companerismo: Companerismo[],
+  familias: Familia[]
+): Familia[] {
+  if (!participanteId) return [];
+  const ids = new Set(
+    companerismo.filter((c) => c.p1Id === participanteId || c.p2Id === participanteId).map((c) => c.familiaId)
+  );
+  return ordenarFamilias(familias.filter((f) => ids.has(f.id)));
+}
+
 export function subscribeCompanerismo(cb: (items: Companerismo[]) => void): () => void {
   if (!db) {
     cpListeners.add(cb);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Asistencia, Capacitacion, Participante, SessionUser } from '../types';
+import type { Asistencia, Capacitacion, Companerismo, Familia, Participante, SessionUser } from '../types';
+import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
 import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
@@ -32,6 +33,21 @@ export default function HomeScreen({
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
 
+  // Solo el Coordinador Auxiliar necesita saber cuáles son sus familias en
+  // Home (para limitar los cumpleaños a su gente) — al resto no se le abren
+  // estas dos suscripciones de más.
+  const [familias, setFamilias] = useState<Familia[]>([]);
+  const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
+  useEffect(() => {
+    if (!user.isAuxiliar) return;
+    const u1 = subscribeFamilias(setFamilias);
+    const u2 = subscribeCompanerismo(setCompanerismo);
+    return () => {
+      u1();
+      u2();
+    };
+  }, [user.isAuxiliar]);
+
   // Derivados memoizados — misma lección que ya está documentada en
   // CONFEJAS (CONTEXTO.md, "cálculos sin memoizar" sobre 500 personas):
   // mejor aplicarla desde ahora que es gratis, que esperar a redescubrirla
@@ -56,10 +72,17 @@ export default function HomeScreen({
 
   // Recalcular contra "ahora" en cada apertura de Home alcanza — no es un
   // dato que necesite estar vivo segundo a segundo como la asistencia.
-  const cumpleanos = useMemo(
-    () => calcularCumpleanosProximos(participantes, new Date(), VENTANA_CUMPLEANOS_DIAS),
-    [participantes]
-  );
+  // Al Coordinador Auxiliar solo le salen los cumpleaños de los integrantes
+  // de SUS familias (y con ellos sus teléfonos para saludar) — no los de
+  // toda la conferencia.
+  const cumpleanos = useMemo(() => {
+    let base = participantes;
+    if (user.isAuxiliar) {
+      const ids = new Set(familiasDeAuxiliar(user.participantId, companerismo, familias).flatMap((f) => f.consejeros));
+      base = participantes.filter((p) => ids.has(p.id));
+    }
+    return calcularCumpleanosProximos(base, new Date(), VENTANA_CUMPLEANOS_DIAS);
+  }, [participantes, user.isAuxiliar, user.participantId, companerismo, familias]);
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
@@ -121,6 +144,7 @@ export default function HomeScreen({
       {!cargando && <CumpleanosCard items={cumpleanos} />}
 
       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
+      {!user.isAuxiliar && (
       <a
         href="/?page=registro"
         target="_blank"
@@ -134,6 +158,8 @@ export default function HomeScreen({
         </div>
         <span className="text-slate-300">↗</span>
       </a>
+      )}
+      {!user.isAuxiliar && (
       <button
         onClick={() => onNavigate('busqueda')}
         className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
@@ -145,6 +171,8 @@ export default function HomeScreen({
         </div>
         <span className="text-slate-300">›</span>
       </button>
+      )}
+      {!user.isAuxiliar && (
       <button
         onClick={() => onNavigate('asistencia')}
         className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
@@ -156,26 +184,27 @@ export default function HomeScreen({
         </div>
         <span className="text-slate-300">›</span>
       </button>
+      )}
       <button
         onClick={() => onNavigate('gestion')}
         className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
       >
         <span className="text-2xl">⚙️</span>
         <div className="flex-1">
-          <div className="text-sm font-bold">Familias, roles y capacitaciones</div>
-          <div className="text-xs text-slate-500">Gestión de la preparación</div>
+          <div className="text-sm font-bold">{user.isAuxiliar ? 'Mi familia y roles' : 'Familias, roles y capacitaciones'}</div>
+          <div className="text-xs text-slate-500">{user.isAuxiliar ? 'Gestiona a tus integrantes' : 'Gestión de la preparación'}</div>
         </div>
         <span className="text-slate-300">›</span>
       </button>
-      {user.canViewReports && (
+      {(user.canViewReports || user.isAuxiliar) && (
         <button
           onClick={() => onNavigate('reportes')}
           className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
         >
           <span className="text-2xl">📊</span>
           <div className="flex-1">
-            <div className="text-sm font-bold">Reportes</div>
-            <div className="text-xs text-slate-500">Asistencia, estacas y roles</div>
+            <div className="text-sm font-bold">{user.isAuxiliar ? 'Reportes de mi familia' : 'Reportes'}</div>
+            <div className="text-xs text-slate-500">{user.isAuxiliar ? 'Asistencia y compromiso de tus integrantes' : 'Asistencia, estacas y roles'}</div>
           </div>
           <span className="text-slate-300">›</span>
         </button>

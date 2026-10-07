@@ -161,15 +161,15 @@ function StaffApp() {
         )}
         {tab !== 'home' && (
           <Suspense fallback={<PantallaCargando />}>
-            {tab === 'asistencia' && (
+            {tab === 'asistencia' && !user.isAuxiliar && (
               <AsistenciaScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
-            {tab === 'busqueda' && <BusquedaScreen user={user} participantes={participantes} {...navProps} />}
+            {tab === 'busqueda' && !user.isAuxiliar && <BusquedaScreen user={user} participantes={participantes} {...navProps} />}
             {tab === 'gestion' && (
               <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
-            {tab === 'reportes' && user.canViewReports && (
-              <ReportesScreen participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
+            {tab === 'reportes' && (user.canViewReports || user.isAuxiliar) && (
+              <ReportesScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
           </Suspense>
         )}
@@ -183,10 +183,15 @@ function StaffApp() {
         {(
           [
             { id: 'home', icon: '🏠', label: 'Inicio' },
-            { id: 'busqueda', icon: '🔍', label: 'Búsqueda' },
-            { id: 'asistencia', icon: '✅', label: 'Asistencia' },
+            // El Coordinador Auxiliar solo tiene Inicio y Gestión (su familia).
+            ...(!user.isAuxiliar
+              ? [
+                  { id: 'busqueda', icon: '🔍', label: 'Búsqueda' } as const,
+                  { id: 'asistencia', icon: '✅', label: 'Asistencia' } as const,
+                ]
+              : []),
             { id: 'gestion', icon: '⚙️', label: 'Gestión' },
-            ...(user.canViewReports ? [{ id: 'reportes', icon: '📊', label: 'Reportes' } as const] : []),
+            ...(user.canViewReports || user.isAuxiliar ? [{ id: 'reportes', icon: '📊', label: 'Reportes' } as const] : []),
           ] as const
         ).map((t) => (
           <button
