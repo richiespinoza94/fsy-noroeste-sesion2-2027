@@ -3,8 +3,15 @@ import type { Asistencia, Capacitacion, Participante, SessionUser } from '../typ
 import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
+import { calcularCumpleanosProximos } from '../utils/cumpleanos';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import MetricCard from './MetricCard';
+import CumpleanosCard from './CumpleanosCard';
+
+// Ventana de "próximos cumpleaños" mostrada en Home — 7 días (hoy + 6) es
+// suficiente para que el staff se entere con tiempo de preparar un saludo,
+// sin que la lista se vuelva larga con un roster de cientos de personas.
+const VENTANA_CUMPLEANOS_DIAS = 7;
 
 export default function HomeScreen({
   user,
@@ -47,6 +54,13 @@ export default function HomeScreen({
   const relevante = useMemo(() => getCapacitacionParaHome(capacitaciones), [capacitaciones]);
   const statsRelevante = relevante ? porCap.find((s) => s.cap.id === relevante.cap.id) : null;
 
+  // Recalcular contra "ahora" en cada apertura de Home alcanza — no es un
+  // dato que necesite estar vivo segundo a segundo como la asistencia.
+  const cumpleanos = useMemo(
+    () => calcularCumpleanosProximos(participantes, new Date(), VENTANA_CUMPLEANOS_DIAS),
+    [participantes]
+  );
+
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20 min-h-[92px]">
@@ -69,7 +83,7 @@ export default function HomeScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard label="Consejeros registrados" value={participantes.length} color="#0E2954" icon="👥" cargando={cargando} />
+        <MetricCard label="Personas registradas" value={participantes.length} color="#0E2954" icon="👥" cargando={cargando} />
         <MetricCard label="Confirmados para el evento" value={confirmados} color="#4CAF50" icon="✅" cargando={cargando} />
         <MetricCard
           label="Asistencia promedio"
@@ -100,6 +114,11 @@ export default function HomeScreen({
           />
         )}
       </div>
+
+      {/* Después de las métricas operativas (asistencia en vivo, confirmados),
+          no antes — esto es seguimiento/cercanía, no es urgente como lo de
+          arriba, así que no debe competir por el primer vistazo. */}
+      {!cargando && <CumpleanosCard items={cumpleanos} />}
 
       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
       <a

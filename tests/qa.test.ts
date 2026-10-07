@@ -29,6 +29,7 @@ import {
 } from '../src/utils/repartoFamilias';
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
+import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
 import type { Asistencia, Capacitacion, Familia, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
@@ -1073,6 +1074,80 @@ test('119. calcularOActualizarPlanEnVivo — llamar 2 veces con los mismos argum
   const resultado1 = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
   const resultado2 = calcularOActualizarPlanEnVivo({}, 'p1', grupo5, ESTADOS_VACIOS_4);
   assert.deepStrictEqual(resultado1.plan, resultado2.plan);
+});
+
+// ── cumpleanos — Home: quién cumple hoy o esta semana ───────────────────────
+
+function personaConNacimiento(id: string, fechaNacimiento: string): Participante {
+  return { ...personaFake(id), fechaNacimiento } as Participante;
+}
+
+test('120. diasHastaProximoCumple — hoy mismo da 0', () => {
+  assert.strictEqual(diasHastaProximoCumple('2005-03-15', new Date('2027-03-15T12:00:00')), 0);
+});
+
+test('121. diasHastaProximoCumple — dentro de este año, cuenta los días que faltan', () => {
+  assert.strictEqual(diasHastaProximoCumple('2005-03-20', new Date('2027-03-15T00:00:00')), 5);
+});
+
+test('122. diasHastaProximoCumple — ya pasó este año, calcula contra el del año que viene', () => {
+  // cumple el 10-ene, hoy es 20-dic: faltan 21 días (11 de lo que queda de dic + 10 de ene)
+  assert.strictEqual(diasHastaProximoCumple('2005-01-10', new Date('2027-12-20T00:00:00')), 21);
+});
+
+test('123. diasHastaProximoCumple — 29 de febrero en año no bisiesto cae al 1 de marzo', () => {
+  assert.strictEqual(diasHastaProximoCumple('2004-02-29', new Date('2027-02-28T00:00:00')), 1);
+});
+
+test('124. diasHastaProximoCumple — fecha vacía o inválida da null, no revienta ni da "0 días" falso', () => {
+  assert.strictEqual(diasHastaProximoCumple('', new Date('2027-03-15T00:00:00')), null);
+  assert.strictEqual(diasHastaProximoCumple('no-es-fecha', new Date('2027-03-15T00:00:00')), null);
+});
+
+test('125. calcularCumpleanosProximos — incluye a quien cumple hoy y a quien cumple dentro de la ventana', () => {
+  const hoy = new Date('2027-03-15T00:00:00');
+  const personas = [
+    personaConNacimiento('hoy', '2005-03-15'),
+    personaConNacimiento('en3dias', '2005-03-18'),
+    personaConNacimiento('lejos', '2005-06-01'),
+  ];
+  const r = calcularCumpleanosProximos(personas, hoy, 7);
+  assert.deepStrictEqual(r.map((x) => x.participante.id), ['hoy', 'en3dias']);
+});
+
+test('126. calcularCumpleanosProximos — ordena del más próximo al más lejano, hoy primero', () => {
+  const hoy = new Date('2027-03-15T00:00:00');
+  const personas = [
+    personaConNacimiento('en6', '2005-03-21'),
+    personaConNacimiento('hoy', '2005-03-15'),
+    personaConNacimiento('en2', '2005-03-17'),
+  ];
+  const r = calcularCumpleanosProximos(personas, hoy, 7);
+  assert.deepStrictEqual(r.map((x) => x.diasFaltantes), [0, 2, 6]);
+});
+
+test('127. calcularCumpleanosProximos — ventana de 7 días es inclusiva (día 7 entra, día 8 no)', () => {
+  const hoy = new Date('2027-03-15T00:00:00');
+  const personas = [personaConNacimiento('dia7', '2005-03-22'), personaConNacimiento('dia8', '2005-03-23')];
+  const r = calcularCumpleanosProximos(personas, hoy, 7);
+  assert.deepStrictEqual(r.map((x) => x.participante.id), ['dia7']);
+});
+
+test('128. calcularCumpleanosProximos — fechaNacimiento vacía no rompe la lista, simplemente no entra', () => {
+  const hoy = new Date('2027-03-15T00:00:00');
+  const personas = [personaConNacimiento('sinfecha', ''), personaConNacimiento('hoy', '2005-03-15')];
+  const r = calcularCumpleanosProximos(personas, hoy, 7);
+  assert.deepStrictEqual(r.map((x) => x.participante.id), ['hoy']);
+});
+
+test('129. calcularCumpleanosProximos — edadQueCumple es la edad que tendrá ese día, no la edad actual', () => {
+  const hoy = new Date('2027-03-15T00:00:00');
+  const [r] = calcularCumpleanosProximos([personaConNacimiento('p', '2005-03-20')], hoy, 7);
+  assert.strictEqual(r.edadQueCumple, 22); // nace en 2005, cumple en 2027
+});
+
+test('130. calcularCumpleanosProximos — lista vacía de participantes no revienta', () => {
+  assert.deepStrictEqual(calcularCumpleanosProximos([], new Date('2027-03-15T00:00:00'), 7), []);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);
