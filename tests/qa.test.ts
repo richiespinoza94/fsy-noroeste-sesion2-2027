@@ -12,7 +12,8 @@ import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionPar
 import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
-import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../src/utils/asistenciaStats';
+import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
+import { contarPorTipo, filtrarPorTipo, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
 import {
   calcularCandidatosPorRol,
   calcularEdad,
@@ -1192,6 +1193,70 @@ test('136. familiasDeAuxiliar — ignora compañerismos huérfanos (familia ya e
 test('137. familiasDeAuxiliar — dos compañerismos de la misma familia no la duplican', () => {
   const r = familiasDeAuxiliar('aux1', [cpAux('c1', 'f1', 'aux1', 'a'), cpAux('c2', 'f1', 'b', 'aux1')], FAMS_AUX);
   assert.deepStrictEqual(r.map((f) => f.id), ['f1']);
+});
+
+// ── Tipos de evento (capacitación, baile, noche de hogar, otra) ─────────────
+
+function eventoTipado(id: string, fecha: string, tipo?: string): Capacitacion {
+  return { ...capFake(id, fecha), ...(tipo ? { tipo } : {}) } as Capacitacion;
+}
+
+test('138. tipoDe — un evento viejo sin tipo cuenta como capacitación', () => {
+  assert.strictEqual(tipoDe(eventoTipado('a', '2027-01-03')), 'capacitacion');
+});
+
+test('139. tipoDe — respeta un tipo válido, y uno desconocido o vacío cae a capacitación', () => {
+  assert.strictEqual(tipoDe(eventoTipado('a', '2027-01-03', 'baile')), 'baile');
+  assert.strictEqual(tipoDe(eventoTipado('b', '2027-01-03', 'noche_hogar')), 'noche_hogar');
+  assert.strictEqual(tipoDe(eventoTipado('c', '2027-01-03', 'inventado')), 'capacitacion');
+  assert.strictEqual(tipoDe(eventoTipado('d', '2027-01-03', '')), 'capacitacion');
+});
+
+test('140. filtrarPorTipo — "todos" deja pasar todo; un tipo deja solo ese (los sin tipo van con capacitación)', () => {
+  const caps = [eventoTipado('a', '2027-01-03'), eventoTipado('b', '2027-01-10', 'baile'), eventoTipado('c', '2027-01-17', 'capacitacion')];
+  assert.strictEqual(filtrarPorTipo(caps, 'todos').length, 3);
+  assert.deepStrictEqual(filtrarPorTipo(caps, 'capacitacion').map((c) => c.id), ['a', 'c']);
+  assert.deepStrictEqual(filtrarPorTipo(caps, 'baile').map((c) => c.id), ['b']);
+  assert.deepStrictEqual(filtrarPorTipo(caps, 'otro'), []);
+});
+
+test('141. contarPorTipo — cuenta por tipo y omite los tipos que no existen', () => {
+  const caps = [eventoTipado('a', '2027-01-03'), eventoTipado('b', '2027-01-10', 'baile'), eventoTipado('c', '2027-01-17', 'baile')];
+  assert.deepStrictEqual(contarPorTipo(caps), [{ tipo: 'capacitacion', n: 1 }, { tipo: 'baile', n: 2 }]);
+});
+
+test('142. el promedio por tipo no se contamina: un baile con poca asistencia no baja el de las capacitaciones', () => {
+  const gente = ['a', 'b', 'c', 'd'].map(personaFake);
+  const cap = eventoTipado('cap1', '2027-01-03');
+  const baile = eventoTipado('baile1', '2027-01-10', 'baile');
+  const asis: Asistencia[] = [
+    ...gente.map((p) => ({ capacitacionId: 'cap1', participanteId: p.id, estado: 'presente' as const, timestamp: '' })), // 100%
+    { capacitacionId: 'baile1', participanteId: 'a', estado: 'presente' as const, timestamp: '' }, // 25%
+  ];
+  const todos = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, [cap, baile], asis));
+  const soloCap = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipo([cap, baile], 'capacitacion'), asis));
+  const soloBaile = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipo([cap, baile], 'baile'), asis));
+  assert.strictEqual(todos, 63); // mezclado: (100+25)/2
+  assert.strictEqual(soloCap, 100);
+  assert.strictEqual(soloBaile, 25);
+});
+
+test('143. soloOcurridas — quita lo futuro sin marcas; deja hoy, lo pasado y lo futuro que ya tiene marcas', () => {
+  const gente = [personaFake('a')];
+  const caps = [
+    eventoTipado('pasada', '2027-01-03'),
+    eventoTipado('hoy', '2027-01-10'),
+    eventoTipado('futura', '2027-02-01'),
+    eventoTipado('futuraConMarca', '2027-02-08'),
+  ];
+  const asis: Asistencia[] = [{ capacitacionId: 'futuraConMarca', participanteId: 'a', estado: 'presente', timestamp: '' }];
+  const r = soloOcurridas(calcularAsistenciaPorCapacitacion(gente, caps, asis), '2027-01-10');
+  assert.deepStrictEqual(r.map((d) => d.cap.id), ['pasada', 'hoy', 'futuraConMarca']);
+});
+
+test('144. hoyLocalISO — usa la fecha local, no UTC (a las 11pm en Lima sigue siendo el mismo día)', () => {
+  assert.strictEqual(hoyLocalISO(new Date(2027, 0, 5, 23, 30)), '2027-01-05');
+  assert.strictEqual(hoyLocalISO(new Date(2027, 11, 1, 0, 5)), '2027-12-01');
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

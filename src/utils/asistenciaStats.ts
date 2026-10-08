@@ -31,6 +31,16 @@ export function calcularAsistenciaPorCapacitacion(
   });
 }
 
+/**
+ * Eventos que ya pasaron (fecha de hoy o anterior) o que ya tienen alguna
+ * marca. Deja fuera los programados a futuro sin marcas: no aportan datos y
+ * con muchos eventos creados por adelantado llenarían de ruido el detalle y
+ * el gráfico. `hoy` es "yyyy-MM-dd" local.
+ */
+export function soloOcurridas(porCap: AsistenciaPorCapacitacion[], hoy: string): AsistenciaPorCapacitacion[] {
+  return porCap.filter((d) => d.cap.fecha <= hoy || d.registros > 0);
+}
+
 /** Promedio de asistencia SOLO sobre capacitaciones que ya tienen algún registro — una capacitación sin marcar todavía no debe bajar el promedio a 0%. */
 export function promedioAsistencia(porCap: AsistenciaPorCapacitacion[]): number {
   const conRegistros = porCap.filter((c) => c.registros > 0);

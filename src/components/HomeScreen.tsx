@@ -4,6 +4,7 @@ import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '..
 import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
+import { tipoDe } from '../utils/tiposEvento';
 import { calcularCumpleanosProximos } from '../utils/cumpleanos';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import MetricCard from './MetricCard';
@@ -63,7 +64,12 @@ export default function HomeScreen({
     () => calcularAsistenciaPorCapacitacion(participantes, capsOrdenadas, asistencia),
     [participantes, capsOrdenadas, asistencia]
   );
-  const promedio = useMemo(() => promedioAsistencia(porCap), [porCap]);
+  // El promedio es solo de capacitaciones: un baile o una noche de hogar tienen
+  // otra asistencia esperada y lo bajarían (el detalle por tipo está en Reportes).
+  const promedio = useMemo(
+    () => promedioAsistencia(porCap.filter((s) => tipoDe(s.cap) === 'capacitacion')),
+    [porCap]
+  );
 
   // La capacitación que corresponde mostrar AHORA: en curso si hay una
   // sesión ocurriendo en este momento, si no la última que ya terminó.
@@ -114,7 +120,7 @@ export default function HomeScreen({
           color="#E8863A"
           icon="📈"
           cargando={cargando}
-          sub={porCap.filter((c) => c.registros > 0).length ? undefined : 'Aún sin capacitaciones marcadas'}
+          sub={porCap.filter((c) => c.registros > 0).length ? 'Solo capacitaciones' : 'Aún sin capacitaciones marcadas'}
         />
         {relevante && statsRelevante ? (
           <MetricCard

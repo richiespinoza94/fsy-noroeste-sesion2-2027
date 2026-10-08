@@ -1,6 +1,6 @@
-import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Capacitacion } from '../types';
+import type { Capacitacion, TipoEvento } from '../types';
 import { logAction } from './auditService';
 
 const COL = 'capacitaciones';
@@ -33,6 +33,17 @@ export async function addCapacitacion(input: Omit<Capacitacion, 'id'>, adminCorr
   }
   await logAction(adminCorreo, 'CREAR_CAPACITACION', '', item);
   return item;
+}
+
+/** Cambia el tipo de un evento ya creado (o de uno nuevo que quedó mal clasificado). */
+export async function setTipoCapacitacion(id: string, tipo: TipoEvento, adminCorreo: string) {
+  if (!db) {
+    localStore = localStore.map((c) => (c.id === id ? { ...c, tipo } : c));
+    notifyLocal();
+  } else {
+    await updateDoc(doc(db, COL, id), { tipo });
+  }
+  await logAction(adminCorreo, 'ACTUALIZAR_CAPACITACION', '', { capacitacionId: id, tipo });
 }
 
 export async function deleteCapacitacion(id: string, adminCorreo: string) {

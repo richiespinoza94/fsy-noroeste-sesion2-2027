@@ -33,10 +33,11 @@ import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { EVENTO_NOMBRE } from '../data/evento';
 import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
 import { updateParticipante } from '../services/participantsService';
-import { addCapacitacion, deleteCapacitacion } from '../services/capacitacionesService';
+import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
+import { infoTipo, tipoDe } from '../utils/tiposEvento';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type Usuario } from '../types';
+import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
 type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios';
@@ -959,6 +960,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
   const [hora, setHora] = useState('09:00');
   const [horaFin, setHoraFin] = useState('');
   const [lugar, setLugar] = useState('');
+  const [tipo, setTipo] = useState<TipoEvento>('capacitacion');
   const [armedId, setArmedId] = useState<string | null>(null);
 
   // Próximas primero — antes se mostraban en el orden en que Firestore las
@@ -993,7 +995,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
     // modelo (asignacionAnterior, familiaId) ya usa '' como "sin dato", se
     // sigue el mismo patrón acá en vez de portar ese helper para un solo campo.
     await addCapacitacion(
-      { label: label || `Capacitación — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar', oficial: true },
+      { label: label || `${infoTipo(tipo).label} — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar', oficial: true, tipo },
       user.correo
     );
     setAdding(false);
@@ -1001,6 +1003,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
     setFecha('');
     setHoraFin('');
     setLugar('');
+    setTipo('capacitacion');
   }
 
   return (
@@ -1015,6 +1018,11 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
       {adding && (
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-2">
           <input className="input" placeholder="Nombre (opcional)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as TipoEvento)} aria-label="Tipo de evento">
+            {TIPOS_EVENTO.map((t) => (
+              <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
+            ))}
+          </select>
           <input className="input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           <div className="flex gap-2">
             <div className="flex-1">
@@ -1057,10 +1065,27 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
             key={c.id}
             className={`bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 border ${armed ? 'border-red-200' : 'border-transparent'}`}
           >
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">📅</div>
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">{infoTipo(tipoDe(c)).icon}</div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold truncate">{c.label}</div>
               <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora}{c.horaFin ? `–${c.horaFin}` : ''} · {c.lugar}</div>
+              {/* Tipo editable en el lugar: select nativo (en celular abre el
+                  selector del sistema, sin armar un modal propio). Los eventos
+                  viejos sin tipo aparecen como Capacitación. */}
+              {user.canEditAll ? (
+                <select
+                  className="input !py-1.5 !px-2 mt-1.5 !w-auto font-semibold"
+                  value={tipoDe(c)}
+                  onChange={(e) => setTipoCapacitacion(c.id, e.target.value as TipoEvento, user.correo)}
+                  aria-label={`Tipo de ${c.label}`}
+                >
+                  {TIPOS_EVENTO.map((t) => (
+                    <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-[11px] font-semibold text-primary mt-0.5">{infoTipo(tipoDe(c)).label}</div>
+              )}
             </div>
             {user.canEditAll && (
               armed ? (

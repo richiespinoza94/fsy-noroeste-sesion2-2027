@@ -3,12 +3,13 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
-import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
+import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../utils/asistenciaStats';
+import { contarPorTipo, filtrarPorTipo, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
 import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
-import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser } from '../types';
+import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser, type TipoEvento } from '../types';
 import MetricCard from './MetricCard';
 
 type SubTab = 'general' | 'compromiso';
@@ -29,6 +30,13 @@ export default function ReportesScreen({
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
   const [soloAudiovisual, setSoloAudiovisual] = useState(false);
+  // Filtro por tipo de evento: cada tipo tiene una asistencia esperada
+  // distinta, así que mezclarlos en un solo promedio engaña.
+  const [filterTipo, setFilterTipo] = useState<TipoEvento | 'todos'>('todos');
+  // El detalle muestra solo los más recientes y se amplía bajo demanda — con
+  // muchos eventos la lista completa obligaba a bajar y bajar.
+  const DETALLE_PAGINA = 5;
+  const [detalleVisible, setDetalleVisible] = useState(DETALLE_PAGINA);
 
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
 
@@ -57,9 +65,14 @@ export default function ReportesScreen({
     .filter((p) => !soloAudiovisual || tieneExperienciaAudiovisual(p.audiovisualHabilidades));
   const confirmados = segmento.filter((p) => p.disponibilidad === 'si').length;
 
+  const tiposPresentes = useMemo(() => contarPorTipo(capacitaciones), [capacitaciones]);
+  // Si el tipo elegido ya no existe (se borró o reclasificó el último), vuelve a "todos".
+  const tipoActivo: TipoEvento | 'todos' = tiposPresentes.some((t) => t.tipo === filterTipo) ? filterTipo : 'todos';
+
   const capsOrdenadas = useMemo(
-    () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
-    [capacitaciones]
+    () =>
+      [...filtrarPorTipo(capacitaciones, tipoActivo)].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
+    [capacitaciones, tipoActivo]
   );
 
   // Extraído a utils/asistenciaStats.ts — lo usa también HomeScreen para la
@@ -70,6 +83,13 @@ export default function ReportesScreen({
     [segmento, capsOrdenadas, asistencia]
   );
   const avgAtt = useMemo(() => promedioAsistencia(attByCap), [attByCap]);
+  // Solo lo que ya ocurrió (o ya tiene marcas), del más reciente al más viejo.
+  const ocurridas = useMemo(() => soloOcurridas(attByCap, hoyLocalISO()), [attByCap]);
+  const detalle = useMemo(() => [...ocurridas].reverse(), [ocurridas]);
+  const proximasSinMarcas = attByCap.length - ocurridas.length;
+  // El gráfico muestra las últimas 10: con más barras se vuelve un scroll horizontal infinito.
+  const GRAFICO_MAX = 10;
+  const grafico = useMemo(() => ocurridas.slice(-GRAFICO_MAX), [ocurridas]);
 
   const byEstaca = [
     ...ESTACAS_PRINCIPALES.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })),
@@ -89,7 +109,7 @@ export default function ReportesScreen({
   );
 
   const BAR_W = 44, GAP = 16, H = 100;
-  const chartWidth = Math.max(attByCap.length * (BAR_W + GAP) + GAP, 280);
+  const chartWidth = Math.max(grafico.length * (BAR_W + GAP) + GAP, 280);
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
@@ -107,6 +127,31 @@ export default function ReportesScreen({
           🎯 Compromiso
         </button>
       </div>
+
+      {/* Solo aparece si hay 2+ tipos de evento: con uno solo sería un filtro inútil. */}
+      {tiposPresentes.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" role="tablist" aria-label="Filtrar por tipo de evento">
+          {[{ tipo: 'todos' as const, n: capacitaciones.length }, ...tiposPresentes].map(({ tipo, n }) => {
+            const activo = tipoActivo === tipo;
+            return (
+              <button
+                key={tipo}
+                role="tab"
+                aria-selected={activo}
+                onClick={() => {
+                  setFilterTipo(tipo);
+                  setDetalleVisible(DETALLE_PAGINA);
+                }}
+                className={`shrink-0 min-h-[40px] text-xs font-bold rounded-full px-3.5 whitespace-nowrap border-[1.5px] ${
+                  activo ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-600'
+                }`}
+              >
+                {tipo === 'todos' ? 'Todos' : `${infoTipo(tipo).icon} ${infoTipo(tipo).label}`} · {n}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <select className="input flex-1" value={filterEstaca} onChange={(e) => setFilterEstaca(e.target.value)}>
@@ -163,13 +208,26 @@ export default function ReportesScreen({
           <div className="grid grid-cols-2 gap-3">
             <MetricCard label="Consejeros del segmento" value={segmento.length} color="#0E2954" icon="👥" />
             <MetricCard label="Confirmados" value={confirmados} color="#4CAF50" icon="✅" />
-            <MetricCard label="Asistencia promedio" value={`${avgAtt}%`} color="#E8863A" icon="📈" />
-            <MetricCard label="Capacitaciones" value={capacitaciones.length} color="#9C27B0" icon="📅" />
+            <MetricCard
+              label="Asistencia promedio"
+              value={`${avgAtt}%`}
+              color="#E8863A"
+              icon="📈"
+              sub={tipoActivo === 'todos' ? 'Todos los eventos' : infoTipo(tipoActivo).plural}
+            />
+            <MetricCard
+              label={tipoActivo === 'todos' ? 'Eventos' : infoTipo(tipoActivo).plural}
+              value={capsOrdenadas.length}
+              color="#9C27B0"
+              icon={tipoActivo === 'todos' ? '📅' : infoTipo(tipoActivo).icon}
+            />
           </div>
 
-      {attByCap.length > 0 && (
+      {grafico.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">Tendencia de asistencia</div>
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">
+            Tendencia de asistencia{ocurridas.length > GRAFICO_MAX ? ` · últimas ${GRAFICO_MAX} de ${ocurridas.length}` : ''}
+          </div>
           <div className="overflow-x-auto">
             <svg width={chartWidth} height={H + 34}>
               {[0, 50, 100].map((v) => {
@@ -181,7 +239,7 @@ export default function ReportesScreen({
                   </g>
                 );
               })}
-              {attByCap.map((d, i) => {
+              {grafico.map((d, i) => {
                 const x = GAP + i * (BAR_W + GAP);
                 const barH = (d.pct / 100) * H;
                 const y = 10 + H - barH;
@@ -199,12 +257,12 @@ export default function ReportesScreen({
         </div>
       )}
 
-      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Detalle por capacitación</div>
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Detalle · más recientes primero</div>
       <div className="flex flex-col gap-2">
-        {attByCap.map((d) => (
+        {detalle.slice(0, detalleVisible).map((d) => (
           <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-bold">{d.cap.label}</div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold truncate">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</div>
               <div className="text-[11px] text-slate-500">{d.cap.fecha} · {d.registros} registros</div>
             </div>
             <div className="flex gap-1.5 text-[11px]">
@@ -215,7 +273,26 @@ export default function ReportesScreen({
             </div>
           </div>
         ))}
-        {attByCap.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin capacitaciones todavía.</div>}
+        {detalle.length > detalleVisible && (
+          <button
+            onClick={() => setDetalleVisible((n) => n + DETALLE_PAGINA * 2)}
+            className="bg-white border-[1.5px] border-slate-200 text-primary text-xs font-bold rounded-xl py-3 min-h-[44px]"
+          >
+            Ver {Math.min(DETALLE_PAGINA * 2, detalle.length - detalleVisible)} más · {detalle.length - detalleVisible} restantes
+          </button>
+        )}
+        {detalle.length > DETALLE_PAGINA && detalleVisible >= detalle.length && (
+          <button
+            onClick={() => setDetalleVisible(DETALLE_PAGINA)}
+            className="text-slate-500 text-xs font-bold py-2"
+          >
+            Ver menos
+          </button>
+        )}
+        {proximasSinMarcas > 0 && (
+          <div className="text-[11px] text-slate-500 text-center">+ {proximasSinMarcas} programada(s) sin marcas todavía</div>
+        )}
+        {attByCap.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin eventos todavía.</div>}
       </div>
 
       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Por estaca</div>

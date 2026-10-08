@@ -96,6 +96,20 @@ export interface Companerismo {
   p2Id: string;
 }
 
+/**
+ * Tipo de evento. Cada uno tiene una asistencia esperada distinta (un baile
+ * o una noche de hogar no se compara con la capacitación de los domingos), por
+ * eso los reportes se pueden filtrar por tipo. Los eventos creados antes de
+ * existir esto no tienen `tipo` y cuentan como 'capacitacion' (ver tipoDe).
+ */
+export const TIPOS_EVENTO = [
+  { id: 'capacitacion', label: 'Capacitación', plural: 'Capacitaciones', icon: '🎓' },
+  { id: 'baile', label: 'Baile', plural: 'Bailes', icon: '💃' },
+  { id: 'noche_hogar', label: 'Noche de Hogar', plural: 'Noches de Hogar', icon: '🏠' },
+  { id: 'otro', label: 'Otra actividad', plural: 'Otras actividades', icon: '✨' },
+] as const;
+export type TipoEvento = (typeof TIPOS_EVENTO)[number]['id'];
+
 export interface Capacitacion {
   id: string;
   label: string;
@@ -104,6 +118,7 @@ export interface Capacitacion {
   horaFin?: string; // HH:mm — opcional; sin esto, se asume una duración por defecto (ver capacitacionesService.ts). Sirve para distinguir "en curso" de "terminada" cuando hay 2 capacitaciones el mismo día.
   lugar: string;
   oficial: boolean;
+  tipo?: TipoEvento; // opcional: lo anterior a esta función no lo tiene → 'capacitacion'
 }
 
 export type EstadoAsistencia = 'presente' | 'ausente' | 'justificado';
