@@ -9,9 +9,9 @@ export function infoTipo(tipo: TipoEvento) {
   return TIPOS_EVENTO.find((t) => t.id === tipo) ?? TIPOS_EVENTO[0];
 }
 
-/** 'todos' deja pasar todo; si no, solo los eventos de ese tipo. */
-export function filtrarPorTipo(caps: Capacitacion[], tipo: TipoEvento | 'todos'): Capacitacion[] {
-  return tipo === 'todos' ? caps : caps.filter((c) => tipoDe(c) === tipo);
+/** Sin tipos seleccionados deja pasar todo; con uno o más, solo los eventos de esos tipos. */
+export function filtrarPorTipos(caps: Capacitacion[], tipos: TipoEvento[]): Capacitacion[] {
+  return tipos.length === 0 ? caps : caps.filter((c) => tipos.includes(tipoDe(c)));
 }
 
 /** Cuántos eventos hay de cada tipo (solo los tipos que existen) — para los chips del filtro. */

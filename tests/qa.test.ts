@@ -13,7 +13,8 @@ import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasSer
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
-import { contarPorTipo, filtrarPorTipo, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
+import { calcularSeguimiento } from '../src/utils/seguimiento';
+import { contarPorTipo, filtrarPorTipos, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
 import {
   calcularCandidatosPorRol,
   calcularEdad,
@@ -1212,12 +1213,13 @@ test('139. tipoDe — respeta un tipo válido, y uno desconocido o vacío cae a 
   assert.strictEqual(tipoDe(eventoTipado('d', '2027-01-03', '')), 'capacitacion');
 });
 
-test('140. filtrarPorTipo — "todos" deja pasar todo; un tipo deja solo ese (los sin tipo van con capacitación)', () => {
+test('140. filtrarPorTipos — lista vacía deja pasar todo; uno o varios tipos dejan solo esos (los sin tipo van con capacitación)', () => {
   const caps = [eventoTipado('a', '2027-01-03'), eventoTipado('b', '2027-01-10', 'baile'), eventoTipado('c', '2027-01-17', 'capacitacion')];
-  assert.strictEqual(filtrarPorTipo(caps, 'todos').length, 3);
-  assert.deepStrictEqual(filtrarPorTipo(caps, 'capacitacion').map((c) => c.id), ['a', 'c']);
-  assert.deepStrictEqual(filtrarPorTipo(caps, 'baile').map((c) => c.id), ['b']);
-  assert.deepStrictEqual(filtrarPorTipo(caps, 'otro'), []);
+  assert.strictEqual(filtrarPorTipos(caps, []).length, 3);
+  assert.deepStrictEqual(filtrarPorTipos(caps, ['capacitacion', 'baile']).map((c) => c.id), ['a', 'b', 'c']);
+  assert.deepStrictEqual(filtrarPorTipos(caps, ['capacitacion']).map((c) => c.id), ['a', 'c']);
+  assert.deepStrictEqual(filtrarPorTipos(caps, ['baile']).map((c) => c.id), ['b']);
+  assert.deepStrictEqual(filtrarPorTipos(caps, ['otro']), []);
 });
 
 test('141. contarPorTipo — cuenta por tipo y omite los tipos que no existen', () => {
@@ -1234,8 +1236,8 @@ test('142. el promedio por tipo no se contamina: un baile con poca asistencia no
     { capacitacionId: 'baile1', participanteId: 'a', estado: 'presente' as const, timestamp: '' }, // 25%
   ];
   const todos = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, [cap, baile], asis));
-  const soloCap = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipo([cap, baile], 'capacitacion'), asis));
-  const soloBaile = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipo([cap, baile], 'baile'), asis));
+  const soloCap = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipos([cap, baile], ['capacitacion']), asis));
+  const soloBaile = promedioAsistencia(calcularAsistenciaPorCapacitacion(gente, filtrarPorTipos([cap, baile], ['baile']), asis));
   assert.strictEqual(todos, 63); // mezclado: (100+25)/2
   assert.strictEqual(soloCap, 100);
   assert.strictEqual(soloBaile, 25);
@@ -1257,6 +1259,107 @@ test('143. soloOcurridas — quita lo futuro sin marcas; deja hoy, lo pasado y l
 test('144. hoyLocalISO — usa la fecha local, no UTC (a las 11pm en Lima sigue siendo el mismo día)', () => {
   assert.strictEqual(hoyLocalISO(new Date(2027, 0, 5, 23, 30)), '2027-01-05');
   assert.strictEqual(hoyLocalISO(new Date(2027, 11, 1, 0, 5)), '2027-12-01');
+});
+
+// ── Seguimiento (retención) ─────────────────────────────────────────────
+// Todos los eventos están en el pasado respecto a AHORA_SEG; la gente se registró el 2027-01-01.
+const AHORA_SEG = new Date('2027-03-01T12:00:00');
+function evSeg(n: number, tipo?: string): Capacitacion {
+  const dia = String(n + 1).padStart(2, '0'); // e1 → 2027-02-02 … ordenados por n
+  return { ...capFake(`e${n}`, `2027-02-${dia}`), hora: '10:00', horaFin: '12:00', ...(tipo ? { tipo } : {}) } as Capacitacion;
+}
+function marca(ev: number, who: string, estado: 'presente' | 'ausente' | 'justificado'): Asistencia {
+  return { capacitacionId: `e${ev}`, participanteId: who, estado, timestamp: '' } as Asistencia;
+}
+function seg(ids: string[], caps: Capacitacion[], asis: Asistencia[], ahora = AHORA_SEG) {
+  return calcularSeguimiento(ids.map(personaFake), caps, asis, ahora).map((i) => `${i.participante.id}:${i.categoria}`);
+}
+const E4 = [1, 2, 3, 4].map((n) => evSeg(n));
+
+test('145. seguimiento — sin eventos terminados no hay a quién seguir', () => {
+  assert.deepStrictEqual(seg(['a'], [], []), []);
+  assert.deepStrictEqual(seg(['a'], [evSeg(1)], [], new Date('2027-02-02T10:30:00')), []); // en curso
+});
+
+test('146. seguimiento — "siempre asiste" que faltó al último', () => {
+  const asis = [marca(1, 'a', 'presente'), marca(2, 'a', 'presente'), marca(3, 'a', 'presente'), marca(4, 'a', 'ausente')];
+  assert.deepStrictEqual(seg(['a'], E4, asis), ['a:siempre_asiste_falto']);
+});
+
+test('147. seguimiento — con asistencia previa bajo 75% no es "siempre asiste"', () => {
+  const asis = [marca(1, 'a', 'presente'), marca(2, 'a', 'ausente'), marca(3, 'a', 'presente')]; // 2/3 previos y falta el 4
+  assert.deepStrictEqual(seg(['a'], E4, asis), []);
+});
+
+test('148. seguimiento — vino por primera vez y faltó al siguiente (cualquier tipo de evento)', () => {
+  const caps = [evSeg(1), evSeg(2, 'baile')];
+  assert.deepStrictEqual(seg(['a'], caps, [marca(1, 'a', 'presente')]), ['a:primera_vez_falto']);
+});
+
+test('149. seguimiento — una falta justificada no dispara seguimiento', () => {
+  const asis = [marca(1, 'a', 'presente'), marca(2, 'a', 'presente'), marca(3, 'a', 'presente'), marca(4, 'a', 'justificado')];
+  assert.deepStrictEqual(seg(['a'], E4, asis), []);
+});
+
+test('150. seguimiento — dos faltas seguidas (sin marca cuenta como falta)', () => {
+  const asis = [marca(1, 'a', 'presente'), marca(2, 'a', 'presente'), marca(3, 'a', 'ausente')]; // e4 sin marca
+  assert.deepStrictEqual(seg(['a'], E4, asis), ['a:dos_faltas']);
+});
+
+test('151. seguimiento — vino una sola vez y no volvió en 2+ eventos: "solo una vez", no "dos faltas"', () => {
+  assert.deepStrictEqual(seg(['a'], E4, [marca(1, 'a', 'presente')]), ['a:solo_una_vez']);
+});
+
+test('152. seguimiento — "dos faltas" gana sobre "siempre asiste"', () => {
+  const asis = [marca(1, 'a', 'presente'), marca(2, 'a', 'presente'), marca(3, 'a', 'presente'), marca(4, 'a', 'presente')];
+  const caps = [...E4, evSeg(5), evSeg(6)];
+  const asis2 = [...asis, marca(5, 'a', 'ausente')]; // e5 ausente y e6 sin marca
+  assert.deepStrictEqual(seg(['a'], caps, asis2), ['a:dos_faltas']);
+});
+
+test('153. seguimiento — eventos futuros o en curso no cuentan como falta', () => {
+  const caps = [evSeg(1), evSeg(2)];
+  const asis = [marca(1, 'a', 'presente')];
+  assert.deepStrictEqual(seg(['a'], caps, asis, new Date('2027-02-03T10:30:00')), []); // e2 en curso
+  assert.deepStrictEqual(seg(['a'], caps, asis, new Date('2027-02-02T13:00:00')), []); // e2 aún futuro
+});
+
+test('154. seguimiento — quien se registró después del último evento no "faltó" a él', () => {
+  const tarde = { ...personaFake('t'), timestamp: new Date('2027-02-20T00:00:00').toISOString() } as Participante;
+  assert.deepStrictEqual(calcularSeguimiento([tarde], E4, [], AHORA_SEG), []);
+});
+
+test('155. seguimiento — un "presente" cuenta aunque sea anterior a su registro', () => {
+  const tarde = { ...personaFake('t'), timestamp: new Date('2027-02-03T11:00:00').toISOString() } as Participante;
+  const r = calcularSeguimiento([tarde], E4, [marca(1, 't', 'presente')], AHORA_SEG);
+  assert.deepStrictEqual(r.map((i) => i.categoria), ['solo_una_vez']);
+});
+
+test('156. seguimiento — filtrar por tipo antes de calcular cambia quién aparece', () => {
+  const caps = [evSeg(1), evSeg(2, 'baile'), evSeg(3)];
+  const asis = [marca(1, 'a', 'presente'), marca(3, 'a', 'presente'), marca(2, 'a', 'ausente')];
+  assert.deepStrictEqual(seg(['a'], caps, asis), []); // último (e3) sí vino
+  const soloCaps = filtrarPorTipos(caps, ['capacitacion']);
+  assert.deepStrictEqual(seg(['a'], soloCaps, asis), []);
+  const asis2 = [marca(1, 'a', 'presente'), marca(2, 'a', 'ausente'), marca(3, 'a', 'ausente')];
+  assert.deepStrictEqual(seg(['a'], filtrarPorTipos(caps, ['baile']), asis2), []); // un solo evento baile y no hay elegibilidad previa
+});
+
+test('157. seguimiento — quien nunca vino y faltó solo a uno no aparece; un grupo por persona', () => {
+  assert.deepStrictEqual(seg(['n'], [evSeg(1)], []), []);
+  const asis = [marca(1, 'a', 'presente')];
+  const r = calcularSeguimiento(['a', 'b'].map(personaFake), E4, asis, AHORA_SEG);
+  assert.strictEqual(new Set(r.map((i) => i.participante.id)).size, r.length);
+});
+
+test('158. seguimiento — orden: quien más asistió primero, luego por nombre', () => {
+  const caps = [...E4];
+  const asis = [
+    marca(1, 'x', 'presente'), marca(2, 'x', 'presente'), marca(3, 'x', 'presente'), marca(4, 'x', 'ausente'),
+    marca(1, 'y', 'presente'), marca(2, 'y', 'presente'), marca(3, 'y', 'presente'), marca(4, 'y', 'presente'),
+    marca(1, 'z', 'presente'), marca(2, 'z', 'presente'), marca(3, 'z', 'presente'), marca(4, 'z', 'ausente'),
+  ];
+  assert.deepStrictEqual(seg(['z', 'y', 'x'], caps, asis), ['x:siempre_asiste_falto', 'z:siempre_asiste_falto']);
 });
 
 console.log(`\n${passed} pruebas pasaron.`);

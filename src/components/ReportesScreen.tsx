@@ -4,7 +4,8 @@ import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../utils/asistenciaStats';
-import { contarPorTipo, filtrarPorTipo, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
+import { contarPorTipo, filtrarPorTipos, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
+import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO } from '../utils/seguimiento';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
@@ -12,7 +13,7 @@ import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '..
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser, type TipoEvento } from '../types';
 import MetricCard from './MetricCard';
 
-type SubTab = 'general' | 'compromiso';
+type SubTab = 'general' | 'compromiso' | 'seguimiento';
 
 export default function ReportesScreen({
   user,
@@ -30,9 +31,12 @@ export default function ReportesScreen({
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
   const [soloAudiovisual, setSoloAudiovisual] = useState(false);
-  // Filtro por tipo de evento: cada tipo tiene una asistencia esperada
-  // distinta, así que mezclarlos en un solo promedio engaña.
-  const [filterTipo, setFilterTipo] = useState<TipoEvento | 'todos'>('todos');
+  // Filtro por tipo de evento, de selección múltiple (ej. capacitaciones +
+  // bailes). Vacío = TODOS los eventos, que es el valor por defecto: cada
+  // evento importa, el filtro solo sirve para acotar cuando hace falta.
+  const [tiposSel, setTiposSel] = useState<TipoEvento[]>([]);
+  // Cuántos de cada grupo de seguimiento se muestran (el resto, bajo "Ver más").
+  const [seguimientoVisible, setSeguimientoVisible] = useState<Record<string, number>>({});
   // El detalle muestra solo los más recientes y se amplía bajo demanda — con
   // muchos eventos la lista completa obligaba a bajar y bajar.
   const DETALLE_PAGINA = 5;
@@ -66,13 +70,24 @@ export default function ReportesScreen({
   const confirmados = segmento.filter((p) => p.disponibilidad === 'si').length;
 
   const tiposPresentes = useMemo(() => contarPorTipo(capacitaciones), [capacitaciones]);
-  // Si el tipo elegido ya no existe (se borró o reclasificó el último), vuelve a "todos".
-  const tipoActivo: TipoEvento | 'todos' = tiposPresentes.some((t) => t.tipo === filterTipo) ? filterTipo : 'todos';
+  // Descarta tipos elegidos que ya no existen (se borró o reclasificó el último evento de ese tipo).
+  const tiposActivos = useMemo(
+    () => tiposSel.filter((t) => tiposPresentes.some((x) => x.tipo === t)),
+    [tiposSel, tiposPresentes]
+  );
+  function alternarTipo(t: TipoEvento) {
+    const nuevo = tiposActivos.includes(t) ? tiposActivos.filter((x) => x !== t) : [...tiposActivos, t];
+    // Elegir todos los tipos que existen equivale a no filtrar.
+    setTiposSel(nuevo.length === tiposPresentes.length ? [] : nuevo);
+    setDetalleVisible(DETALLE_PAGINA);
+  }
+  const etiquetaFiltro =
+    tiposActivos.length === 0 ? 'Todos los eventos' : tiposActivos.map((t) => infoTipo(t).label).join(' + ');
 
   const capsOrdenadas = useMemo(
     () =>
-      [...filtrarPorTipo(capacitaciones, tipoActivo)].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
-    [capacitaciones, tipoActivo]
+      [...filtrarPorTipos(capacitaciones, tiposActivos)].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
+    [capacitaciones, tiposActivos]
   );
 
   // Extraído a utils/asistenciaStats.ts — lo usa también HomeScreen para la
@@ -108,6 +123,12 @@ export default function ReportesScreen({
     [segmento, capsOrdenadas, asistencia]
   );
 
+  // Seguimiento / retención — usa los mismos eventos filtrados y el mismo segmento.
+  const seguimiento = useMemo(
+    () => calcularSeguimiento(segmento, capsOrdenadas, asistencia),
+    [segmento, capsOrdenadas, asistencia]
+  );
+
   const BAR_W = 44, GAP = 16, H = 100;
   const chartWidth = Math.max(grafico.length * (BAR_W + GAP) + GAP, 280);
 
@@ -126,21 +147,38 @@ export default function ReportesScreen({
         >
           🎯 Compromiso
         </button>
+        <button
+          onClick={() => setSub('seguimiento')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg whitespace-nowrap relative ${sub === 'seguimiento' ? 'bg-primary text-white' : 'text-slate-500'}`}
+        >
+          🔔 Seguimiento
+          {seguimiento.length > 0 && (
+            <span
+              className="absolute -top-1.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C62828] text-white text-[10px] leading-[18px] text-center"
+              aria-label={`${seguimiento.length} personas por contactar`}
+            >
+              {seguimiento.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Solo aparece si hay 2+ tipos de evento: con uno solo sería un filtro inútil. */}
+      {/* Solo aparece si hay 2+ tipos de evento: con uno solo sería un filtro inútil.
+          Selección múltiple: tocar un tipo lo suma o lo quita; "Todos" (sin
+          ninguno elegido) es el valor por defecto. */}
       {tiposPresentes.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" role="tablist" aria-label="Filtrar por tipo de evento">
+        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de evento">
           {[{ tipo: 'todos' as const, n: capacitaciones.length }, ...tiposPresentes].map(({ tipo, n }) => {
-            const activo = tipoActivo === tipo;
+            const activo = tipo === 'todos' ? tiposActivos.length === 0 : tiposActivos.includes(tipo);
             return (
               <button
                 key={tipo}
-                role="tab"
-                aria-selected={activo}
+                aria-pressed={activo}
                 onClick={() => {
-                  setFilterTipo(tipo);
-                  setDetalleVisible(DETALLE_PAGINA);
+                  if (tipo === 'todos') {
+                    setTiposSel([]);
+                    setDetalleVisible(DETALLE_PAGINA);
+                  } else alternarTipo(tipo);
                 }}
                 className={`shrink-0 min-h-[40px] text-xs font-bold rounded-full px-3.5 whitespace-nowrap border-[1.5px] ${
                   activo ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-600'
@@ -213,13 +251,13 @@ export default function ReportesScreen({
               value={`${avgAtt}%`}
               color="#E8863A"
               icon="📈"
-              sub={tipoActivo === 'todos' ? 'Todos los eventos' : infoTipo(tipoActivo).plural}
+              sub={etiquetaFiltro}
             />
             <MetricCard
-              label={tipoActivo === 'todos' ? 'Eventos' : infoTipo(tipoActivo).plural}
+              label={tiposActivos.length === 1 ? infoTipo(tiposActivos[0]).plural : 'Eventos'}
               value={capsOrdenadas.length}
               color="#9C27B0"
-              icon={tipoActivo === 'todos' ? '📅' : infoTipo(tipoActivo).icon}
+              icon={tiposActivos.length === 1 ? infoTipo(tiposActivos[0]).icon : '📅'}
             />
           </div>
 
@@ -322,6 +360,73 @@ export default function ReportesScreen({
           </div>
         ))}
       </div>
+        </>
+      )}
+
+      {sub === 'seguimiento' && (
+        <>
+          <div className="text-[11px] text-slate-500 px-1 leading-relaxed">
+            A quién conviene escribirle por lo que pasó en los eventos más recientes ({etiquetaFiltro.toLowerCase()}).
+            Cada persona aparece en un solo grupo. Solo cuentan eventos ya terminados; una falta justificada no cuenta.
+          </div>
+          {seguimiento.length === 0 && (
+            <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
+              <div className="text-3xl mb-2">🎉</div>
+              <div className="text-sm font-bold mb-1">Nadie requiere seguimiento por ahora</div>
+              <div className="text-xs text-slate-500">
+                Con estos eventos y filtros no hay faltas que atender (o aún no termina ningún evento).
+              </div>
+            </div>
+          )}
+          {CATEGORIAS_SEGUIMIENTO.map((cat) => {
+            const items = seguimiento.filter((i) => i.categoria === cat.id);
+            if (items.length === 0) return null;
+            const visibles = seguimientoVisible[cat.id] ?? 5;
+            return (
+              <div key={cat.id} className="bg-white rounded-2xl p-4 shadow-sm border-t-[3px]" style={{ borderTopColor: cat.color }}>
+                <div className="flex items-start gap-2">
+                  <span className="text-xl leading-none">{cat.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-extrabold leading-tight">{cat.titulo}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{cat.regla}</div>
+                  </div>
+                  <span className="shrink-0 text-xs font-bold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700">{items.length}</span>
+                </div>
+                <div className="divide-y divide-slate-100 mt-2">
+                  {items.slice(0, visibles).map((i) => {
+                    const tel = i.participante.telefono.replace(/\D/g, '');
+                    return (
+                      <div key={i.participante.id} className="flex items-center gap-2 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold truncate">{nombreCorto(i.participante.nombres, i.participante.apellidos)}</div>
+                          <div className="text-[11px] text-slate-500 leading-snug">{i.detalle}</div>
+                          <div className="text-[10px] text-slate-400">{i.participante.estaca}</div>
+                        </div>
+                        {tel && (
+                          <a
+                            href={`https://wa.me/51${tel}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="shrink-0 text-xs font-bold text-primary bg-primary/5 rounded-lg px-3 py-2.5 min-h-[44px] flex items-center"
+                          >
+                            💬 Escribir
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {items.length > visibles && (
+                  <button
+                    onClick={() => setSeguimientoVisible((v) => ({ ...v, [cat.id]: visibles + 10 }))}
+                    className="w-full mt-1 text-primary text-xs font-bold py-2.5 min-h-[44px]"
+                  >
+                    Ver {Math.min(10, items.length - visibles)} más · {items.length - visibles} restantes
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </>
       )}
 
