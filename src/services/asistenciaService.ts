@@ -1,3 +1,4 @@
+import { suscripcionCompartida } from '../utils/suscripcionCompartida';
 import { collection, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Asistencia, EstadoAsistencia } from '../types';
@@ -54,8 +55,14 @@ export function subscribeAllAsistencia(cb: (items: Asistencia[]) => void): () =>
     fn();
     return () => localListeners.delete(fn);
   }
-  return onSnapshot(collection(db, COL), (snap) => cb(snap.docs.map((d) => d.data() as Asistencia)));
+  return todaLaAsistenciaCompartida(cb);
 }
+
+// Una sola conexión a TODA la asistencia (puede ser miles de documentos):
+// Inicio, Gestión y Reportes la comparten y no la vuelven a descargar al cambiar de pestaña.
+const todaLaAsistenciaCompartida = suscripcionCompartida<Asistencia[]>((emitir) =>
+  onSnapshot(collection(db!, COL), (snap) => emitir(snap.docs.map((d) => d.data() as Asistencia)))
+);
 
 export async function marcarAsistencia(
   capId: string,

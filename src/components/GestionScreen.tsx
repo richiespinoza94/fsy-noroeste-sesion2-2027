@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AuditTimeline from './AuditTimeline';
+import HistorialTab from './HistorialTab';
 import { FAMILY_COLORS } from '../data/colors';
 import {
   addCompanerismo,
@@ -40,7 +41,7 @@ import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
-type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios';
+type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios' | 'historial';
 
 export default function GestionScreen({
   user,
@@ -80,7 +81,7 @@ export default function GestionScreen({
             ['roles', '🎭 Roles'],
             // El Coordinador Auxiliar solo ve Familias (la suya) y Roles.
             ...(!user.isAuxiliar ? [['capacitaciones', '📅 Capacitaciones'] as const] : []),
-            ...(user.canEditAll ? [['usuarios', '🔑 Usuarios'] as const] : []),
+            ...(user.canEditAll ? [['usuarios', '🔑 Usuarios'] as const, ['historial', '🕘 Historial'] as const] : []),
           ] as const
         ).map(([id, label]) => (
           <button
@@ -109,6 +110,7 @@ export default function GestionScreen({
         {sub === 'roles' && <RolesTab user={user} participantes={participantes} />}
         {sub === 'capacitaciones' && !user.isAuxiliar && <CapacitacionesTab user={user} capacitaciones={capacitaciones} />}
         {sub === 'usuarios' && user.canEditAll && <UsuariosTab user={user} participantes={participantes} />}
+        {sub === 'historial' && user.canEditAll && <HistorialTab participantes={participantes} capacitaciones={capacitaciones} familias={familias} />}
       </div>
     </div>
   );

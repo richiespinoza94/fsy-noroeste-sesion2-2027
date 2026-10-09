@@ -14,6 +14,9 @@ import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
+import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
+import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
+import { formatAuditDetails } from '../src/services/auditService';
 import { contarPorTipo, filtrarPorTipos, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
 import {
   calcularCandidatosPorRol,
@@ -32,19 +35,30 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
-import type { Asistencia, Capacitacion, Companerismo, Familia, Participante } from '../src/types';
+import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
 let passed = 0;
-function test(name: string, fn: () => void) {
-  try {
-    fn();
+const pendientes: Promise<void>[] = [];
+function test(name: string, fn: () => void | Promise<void>) {
+  const ok = () => {
     passed++;
     console.log(`✓ ${name}`);
-  } catch (e) {
+  };
+  const fallo = (e: unknown) => {
     console.error(`✗ ${name}`);
     console.error(e);
     process.exitCode = 1;
+  };
+  try {
+    const r = fn();
+    if (r && typeof (r as Promise<void>).then === 'function') {
+      pendientes.push((r as Promise<void>).then(ok, fallo)); // pruebas async: se esperan antes del resumen
+      return;
+    }
+    ok();
+  } catch (e) {
+    fallo(e);
   }
 }
 
@@ -1362,4 +1376,161 @@ test('158. seguimiento — orden: quien más asistió primero, luego por nombre'
   assert.deepStrictEqual(seg(['z', 'y', 'x'], caps, asis), ['x:siempre_asiste_falto', 'z:siempre_asiste_falto']);
 });
 
-console.log(`\n${passed} pruebas pasaron.`);
+// ── Historial (log de cambios legible) ──────────────────────────────────
+const CTX_H = {
+  participantes: [{ ...personaFake('ana'), nombres: 'Ana', apellidos: 'Pérez Soto', correo: 'ana@correo.com' } as Participante, { ...personaFake('juan'), nombres: 'Juan', apellidos: 'Lopez Diaz' } as Participante],
+  familias: [{ id: 'f1', nombre: 'Familia 1', customName: 'Leones', colorId: 'x', consejeros: [] } as Familia, { id: 'f2', nombre: 'Familia 2', customName: '', colorId: 'y', consejeros: [] } as Familia],
+  capacitaciones: [capFake('e1', '2027-02-02')],
+};
+function logH(accion: string, detalles: unknown, participanteId = '', admin = 'ana@correo.com', timestamp = '2027-03-01T15:00:00.000Z'): AuditLog {
+  return { id: `${accion}-${participanteId}-${timestamp}`, timestamp, admin, accion, participanteId, detalles: JSON.stringify(detalles) };
+}
+
+test('159. historial — marcar asistencia dice quién, a quién, qué y en qué evento', () => {
+  const e = describirEntrada(logH('MARCAR_ASISTENCIA', { capacitacionId: 'e1', estado: 'presente' }, 'juan'), CTX_H);
+  assert.strictEqual(e.grupo, 'asistencia');
+  assert.ok(e.actor.startsWith('Ana'));
+  assert.ok(e.texto.includes('presente') && e.texto.includes('Juan') && e.texto.includes(CTX_H.capacitaciones[0].label));
+});
+
+test('160. historial — editar persona muestra "antes → después" y traduce la familia a su nombre', () => {
+  const e = describirEntrada(logH('ACTUALIZAR_PARTICIPANTE', { asignacion: 'Logístico', familiaId: 'f1', _antes: { asignacion: 'Consejero', familiaId: '' } }, 'juan'), CTX_H);
+  assert.ok(e.texto.includes('rol: Consejero → Logístico'));
+  assert.ok(e.texto.includes('familia: sin familia → Leones'));
+  assert.ok(!e.texto.includes('_antes'));
+});
+
+test('161. historial — un log viejo (sin _antes) igual se entiende', () => {
+  const e = describirEntrada(logH('ACTUALIZAR_PARTICIPANTE', { telefono: '999' }, 'juan'), CTX_H);
+  assert.ok(e.texto.includes('teléfono: 999'));
+});
+
+test('162. historial — ids que ya no existen no rompen: caen a "una persona/familia/evento"', () => {
+  assert.ok(describirEntrada(logH('AÑADIR_MIEMBRO_FAMILIA', { familiaId: 'borrada' }, 'nadie'), CTX_H).texto.includes('una persona'));
+  assert.ok(describirEntrada(logH('MARCAR_ASISTENCIA', { capacitacionId: 'zzz', estado: 'ausente' }, 'juan'), CTX_H).texto.includes('un evento'));
+});
+
+test('163. historial — acción desconocida o detalles no-JSON se muestran sin fallar', () => {
+  const raro = { id: 'x', timestamp: '2027-03-01T15:00:00Z', admin: '', accion: 'COSA_NUEVA_X', participanteId: '', detalles: 'no es json' } as AuditLog;
+  const e = describirEntrada(raro, CTX_H);
+  assert.strictEqual(e.texto, 'cosa nueva x');
+  assert.strictEqual(e.actor, 'sistema');
+});
+
+test('164. historial — grupos: accesos aparte, usuarios, familias, eventos y personas', () => {
+  assert.strictEqual(grupoDeAccion('LOGIN_EXITOSO'), 'accesos');
+  assert.strictEqual(grupoDeAccion('SETUP_PASSWORD_FIRST_TIME'), 'accesos');
+  assert.strictEqual(grupoDeAccion('CREAR_USUARIO'), 'usuarios');
+  assert.strictEqual(grupoDeAccion('ELIMINAR_COMPANERISMO'), 'familias');
+  assert.strictEqual(grupoDeAccion('REPARTO_FAMILIAS_EJECUTADO'), 'familias');
+  assert.strictEqual(grupoDeAccion('CREAR_NOCHE_HOGAR'), 'eventos');
+  assert.strictEqual(grupoDeAccion('ACTUALIZAR_CAPACITACION'), 'eventos');
+  assert.strictEqual(grupoDeAccion('ACTUALIZAR_PARTICIPANTE'), 'personas');
+});
+
+test('165. historial — "Cambios" (por defecto) oculta los accesos; "Accesos" solo los muestra', () => {
+  const es = [logH('LOGIN_EXITOSO', {}), logH('MARCAR_ASISTENCIA', { capacitacionId: 'e1', estado: 'presente' }, 'juan')].map((l) => describirEntrada(l, CTX_H));
+  const ahora = new Date('2027-03-01T18:00:00Z');
+  assert.deepStrictEqual(filtrarHistorial(es, { grupo: 'cambios', rango: 'todo', texto: '' }, ahora).map((e) => e.grupo), ['asistencia']);
+  assert.deepStrictEqual(filtrarHistorial(es, { grupo: 'accesos', rango: 'todo', texto: '' }, ahora).map((e) => e.grupo), ['accesos']);
+});
+
+test('166. historial — rango "hoy" y "7 días" respetan la fecha local; "todo" no recorta', () => {
+  const ahora = new Date(2027, 2, 10, 12, 0);
+  const mk = (d: Date) => describirEntrada(logH('CREAR_FAMILIA', { nombre: 'F' }, '', 'ana@correo.com', d.toISOString()), CTX_H);
+  const es = [mk(new Date(2027, 2, 10, 8, 0)), mk(new Date(2027, 2, 5, 8, 0)), mk(new Date(2027, 1, 1, 8, 0))];
+  assert.strictEqual(filtrarHistorial(es, { grupo: 'cambios', rango: 'hoy', texto: '' }, ahora).length, 1);
+  assert.strictEqual(filtrarHistorial(es, { grupo: 'cambios', rango: '7d', texto: '' }, ahora).length, 2);
+  assert.strictEqual(filtrarHistorial(es, { grupo: 'cambios', rango: 'todo', texto: '' }, ahora).length, 3);
+});
+
+test('167. historial — la búsqueda por texto encuentra por usuario o por persona, sin importar mayúsculas', () => {
+  const es = [
+    logH('MARCAR_ASISTENCIA', { capacitacionId: 'e1', estado: 'presente' }, 'juan', 'ana@correo.com'),
+    logH('MARCAR_ASISTENCIA', { capacitacionId: 'e1', estado: 'presente' }, 'ana', 'otro@correo.com'),
+  ].map((l) => describirEntrada(l, CTX_H));
+  const f = (texto: string) => filtrarHistorial(es, { grupo: 'cambios', rango: 'todo', texto }, new Date('2027-03-02T00:00:00Z'));
+  assert.strictEqual(f('JUAN').length, 1);
+  assert.strictEqual(f('otro@correo').length, 1);
+  assert.strictEqual(f('presente').length, 2);
+  assert.strictEqual(f('nadie').length, 0);
+});
+
+test('168. historial — etiquetaDia: Hoy, Ayer y fecha corta', () => {
+  const ahora = new Date(2027, 2, 10, 12, 0);
+  assert.strictEqual(etiquetaDia(new Date(2027, 2, 10, 1, 0).toISOString(), ahora), 'Hoy');
+  assert.strictEqual(etiquetaDia(new Date(2027, 2, 9, 23, 0).toISOString(), ahora), 'Ayer');
+  assert.ok(etiquetaDia(new Date(2027, 2, 1, 9, 0).toISOString(), ahora).length > 4);
+  assert.strictEqual(etiquetaDia('basura', ahora), 'Sin fecha');
+});
+
+test('169. formatAuditDetails — con _antes muestra "antes → ahora" y no imprime _antes', () => {
+  const t = formatAuditDetails(JSON.stringify({ asignacion: 'Logístico', _antes: { asignacion: 'Consejero' } }));
+  assert.strictEqual(t, 'asignacion: Consejero → Logístico');
+  assert.strictEqual(formatAuditDetails(JSON.stringify({ a: 1 })), 'a: 1');
+});
+
+// ── Rendimiento: suscripciones compartidas e índices ────────────────────
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test('170. suscripcionCompartida — varios oyentes abren UNA sola conexión y todos reciben los datos', () => {
+  let aperturas = 0;
+  let emitir: (v: number) => void = () => {};
+  const sub = suscripcionCompartida<number>((e) => { aperturas++; emitir = e; return () => {}; });
+  const a: number[] = [], b: number[] = [];
+  sub((v) => a.push(v));
+  sub((v) => b.push(v));
+  emitir(7);
+  assert.strictEqual(aperturas, 1);
+  assert.deepStrictEqual(a, [7]);
+  assert.deepStrictEqual(b, [7]);
+});
+
+test('171. suscripcionCompartida — un oyente tardío recibe el último dato al instante (sin reabrir)', () => {
+  let aperturas = 0;
+  let emitir: (v: string) => void = () => {};
+  const sub = suscripcionCompartida<string>((e) => { aperturas++; emitir = e; return () => {}; });
+  sub(() => {});
+  emitir('datos');
+  const tardio: string[] = [];
+  sub((v) => tardio.push(v));
+  assert.deepStrictEqual(tardio, ['datos']);
+  assert.strictEqual(aperturas, 1);
+});
+
+test('172. suscripcionCompartida — al irse el último, la conexión sigue abierta durante la gracia y se reutiliza', async () => {
+  let aperturas = 0, cierres = 0;
+  let emitir: (v: number) => void = () => {};
+  const sub = suscripcionCompartida<number>((e) => { aperturas++; emitir = e; return () => { cierres++; }; }, 40);
+  const off = sub(() => {});
+  emitir(1);
+  off();
+  await espera(10);
+  const vistos: number[] = [];
+  sub((v) => vistos.push(v)); // vuelve dentro de la gracia
+  assert.deepStrictEqual(vistos, [1]);
+  assert.strictEqual(aperturas, 1);
+  assert.strictEqual(cierres, 0);
+});
+
+test('173. suscripcionCompartida — pasada la gracia sin oyentes se cierra, y un nuevo oyente la reabre', async () => {
+  let aperturas = 0, cierres = 0;
+  const sub = suscripcionCompartida<number>(() => { aperturas++; return () => { cierres++; }; }, 20);
+  sub(() => {})();
+  await espera(60);
+  assert.strictEqual(cierres, 1);
+  sub(() => {});
+  assert.strictEqual(aperturas, 2);
+});
+
+test('174. historial — describirEntradas indexa una vez y da el mismo resultado que describir una por una', () => {
+  const logs = [
+    logH('MARCAR_ASISTENCIA', { capacitacionId: 'e1', estado: 'presente' }, 'juan'),
+    logH('AÑADIR_MIEMBRO_FAMILIA', { familiaId: 'f2' }, 'ana'),
+  ];
+  const lote = describirEntradas(logs, CTX_H);
+  assert.deepStrictEqual(lote.map((e) => e.texto), logs.map((l) => describirEntrada(l, CTX_H).texto));
+  assert.ok(lote[1].texto.includes('Familia 2')); // sin customName cae al nombre
+});
+
+void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));

@@ -50,20 +50,16 @@ export async function ejecutarReparto(
   }
   if (!asignados.length) return; // nada que repartir — no vale la pena dejar un registro vacío en el historial
 
-  // Actualiza cada participante — ponytail: secuencial, no batch; el
-  // volumen de este proyecto (decenas de personas, no miles) no lo
-  // justifica, mismo criterio que el resto del proyecto (ver
-  // familiasService.ts, deleteFamilia).
-  for (const { participanteId, familiaId } of asignados) {
-    await updateParticipante(participanteId, { familiaId }, adminCorreo);
-  }
+  // En paralelo: cada update es independiente, así que repartir a 100 personas
+  // tarda lo de UNA ida y vuelta, no 100 una tras otra (async-parallel).
+  await Promise.all(asignados.map(({ participanteId, familiaId }) => updateParticipante(participanteId, { familiaId }, adminCorreo)));
 
-  for (const [familiaId, miembros] of Object.entries(porFamilia)) {
-    const familia = familias.find((f) => f.id === familiaId);
-    if (!familia || !miembros.length) continue;
-    const nuevosIds = miembros.map((p) => p.id);
-    await saveFamilia({ ...familia, consejeros: [...familia.consejeros, ...nuevosIds] });
-  }
+  await Promise.all(
+    Object.entries(porFamilia).flatMap(([familiaId, miembros]) => {
+      const familia = familias.find((f) => f.id === familiaId);
+      return familia && miembros.length ? [saveFamilia({ ...familia, consejeros: [...familia.consejeros, ...miembros.map((p) => p.id)] })] : [];
+    })
+  );
 
   const registro: Omit<RepartoFamiliasRegistro, 'id'> = {
     timestamp: new Date().toISOString(),
@@ -83,19 +79,18 @@ export async function ejecutarReparto(
 
 /** Deshace SOLO la corrida que se le pasa (normalmente la más reciente) — las demás del historial quedan intactas. */
 export async function deshacerReparto(registro: RepartoFamiliasRegistro, familias: Familia[], adminCorreo: string): Promise<void> {
-  for (const { participanteId, familiaIdAnterior } of registro.anterior) {
-    await updateParticipante(participanteId, { familiaId: familiaIdAnterior }, adminCorreo);
-  }
+  await Promise.all(registro.anterior.map(({ participanteId, familiaIdAnterior }) => updateParticipante(participanteId, { familiaId: familiaIdAnterior }, adminCorreo)));
 
   const porFamilia = new Map<string, string[]>();
   registro.asignados.forEach(({ familiaId, participanteId }) => {
     porFamilia.set(familiaId, [...(porFamilia.get(familiaId) || []), participanteId]);
   });
-  for (const [familiaId, ids] of porFamilia) {
-    const familia = familias.find((f) => f.id === familiaId);
-    if (!familia) continue;
-    await saveFamilia({ ...familia, consejeros: familia.consejeros.filter((id) => !ids.includes(id)) });
-  }
+  await Promise.all(
+    [...porFamilia].flatMap(([familiaId, ids]) => {
+      const familia = familias.find((f) => f.id === familiaId);
+      return familia ? [saveFamilia({ ...familia, consejeros: familia.consejeros.filter((id) => !ids.includes(id)) })] : [];
+    })
+  );
 
   if (!db) {
     localHistorial = localHistorial.filter((r) => r.id !== registro.id);

@@ -23,6 +23,10 @@ function notifyLocal() {
   localListeners.forEach((fn) => fn([...localStore]));
 }
 
+// Última lista recibida por la suscripción en vivo (la de App.tsx): sirve para
+// saber el valor ANTERIOR al editar sin pagar una lectura extra a Firestore.
+let ultimosPorId = new Map<string, Participante>();
+
 export function subscribeParticipantes(cb: (items: Participante[]) => void): () => void {
   if (!db) {
     localListeners.add(cb);
@@ -30,7 +34,9 @@ export function subscribeParticipantes(cb: (items: Participante[]) => void): () 
     return () => localListeners.delete(cb);
   }
   return onSnapshot(collection(db, COL), (snap) => {
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Participante));
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Participante);
+    ultimosPorId = new Map(items.map((p) => [p.id, p]));
+    cb(items);
   });
 }
 
@@ -132,13 +138,17 @@ export async function registrarParticipante(input: RegistroInput): Promise<Regis
 }
 
 export async function updateParticipante(id: string, changes: Partial<Participante>, adminCorreo: string) {
+  // Valor previo SOLO de los campos que cambian, tomado de la lista en memoria
+  // (cero lecturas extra a Firestore) para dejarlo en el historial.
+  const actual = (db ? ultimosPorId.get(id) : localStore.find((p) => p.id === id)) as unknown as Record<string, unknown> | undefined;
+  const antes: Record<string, unknown> = actual ? Object.fromEntries(Object.keys(changes).map((k) => [k, actual[k] ?? ''])) : {};
   if (!db) {
     localStore = localStore.map((p) => (p.id === id ? { ...p, ...changes } : p));
     notifyLocal();
   } else {
     await updateDoc(doc(db, COL, id), changes);
   }
-  await logAction(adminCorreo, 'ACTUALIZAR_PARTICIPANTE', id, changes);
+  await logAction(adminCorreo, 'ACTUALIZAR_PARTICIPANTE', id, { ...changes, _antes: antes });
 }
 
 export async function findParticipanteByCorreo(correo: string): Promise<Participante | null> {

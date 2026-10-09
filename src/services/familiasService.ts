@@ -1,6 +1,7 @@
 import { collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Companerismo, Familia, Participante } from '../types';
+import { suscripcionCompartida } from '../utils/suscripcionCompartida';
 import { logAction } from './auditService';
 import { updateParticipante } from './participantsService';
 
@@ -21,8 +22,15 @@ export function subscribeFamilias(cb: (items: Familia[]) => void): () => void {
     cb(ordenarFamilias([...localFamilias]));
     return () => famListeners.delete(cb);
   }
-  return onSnapshot(collection(db, FAM_COL), (snap) => cb(ordenarFamilias(snap.docs.map((d) => d.data() as Familia))));
+  return familiasCompartidas(cb);
 }
+
+const familiasCompartidas = suscripcionCompartida<Familia[]>((emitir) =>
+  onSnapshot(collection(db!, FAM_COL), (snap) => emitir(ordenarFamilias(snap.docs.map((d) => d.data() as Familia))))
+);
+const companerismoCompartido = suscripcionCompartida<Companerismo[]>((emitir) =>
+  onSnapshot(collection(db!, CP_COL), (snap) => emitir(snap.docs.map((d) => d.data() as Companerismo)))
+);
 
 /**
  * Firestore no garantiza ningún orden sin un `orderBy` explícito — el id de
@@ -68,7 +76,7 @@ export function subscribeCompanerismo(cb: (items: Companerismo[]) => void): () =
     cb([...localCompanerismo]);
     return () => cpListeners.delete(cb);
   }
-  return onSnapshot(collection(db, CP_COL), (snap) => cb(snap.docs.map((d) => d.data() as Companerismo)));
+  return companerismoCompartido(cb);
 }
 
 async function saveFamilia(f: Familia) {
