@@ -19,15 +19,17 @@ export default function ReportesScreen({
   user,
   participantes: todos,
   capacitaciones,
+  subInicial,
   onNavHiddenChange,
 }: {
   user: SessionUser;
   participantes: Participante[];
   capacitaciones: Capacitacion[];
+  subInicial?: SubTab;
   onNavHiddenChange: (hidden: boolean) => void;
 }) {
   const handleScroll = useScrollDirection(onNavHiddenChange);
-  const [sub, setSub] = useState<SubTab>('general');
+  const [sub, setSub] = useState<SubTab>(subInicial ?? 'general');
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
   const [filterEstaca, setFilterEstaca] = useState('');
   const [soloAudiovisual, setSoloAudiovisual] = useState(false);

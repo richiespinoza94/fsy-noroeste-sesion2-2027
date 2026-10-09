@@ -68,6 +68,12 @@ export default function App() {
 function StaffApp() {
   const [user, setUser] = useState<SessionUser | null>(() => getStoredSession());
   const [tab, setTab] = useState<Tab>('home');
+  // Pestaña interna a abrir al llegar a Reportes desde un atajo de Inicio (ej. el aviso de seguimiento).
+  const [reportesSub, setReportesSub] = useState<'seguimiento' | undefined>();
+  const navegar = (t: Tab, sub?: 'seguimiento') => {
+    setReportesSub(t === 'reportes' ? sub : undefined);
+    setTab(t);
+  };
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
   // "Cargando" y "vacío" son estados distintos — mismo patrón que ya se usa
@@ -155,7 +161,7 @@ function StaffApp() {
             participantes={participantes}
             capacitaciones={capacitaciones}
             cargando={cargandoDatos}
-            onNavigate={setTab}
+            onNavigate={navegar}
             {...navProps}
           />
         )}
@@ -169,7 +175,7 @@ function StaffApp() {
               <GestionScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
             )}
             {tab === 'reportes' && (user.canViewReports || user.isAuxiliar) && (
-              <ReportesScreen user={user} participantes={participantes} capacitaciones={capacitaciones} {...navProps} />
+              <ReportesScreen user={user} participantes={participantes} capacitaciones={capacitaciones} subInicial={reportesSub} {...navProps} />
             )}
           </Suspense>
         )}
@@ -196,7 +202,7 @@ function StaffApp() {
         ).map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => navegar(t.id)}
             className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 ${tab === t.id ? 'text-primary' : 'text-slate-500'}`}
           >
             <span className="text-lg">{t.icon}</span>

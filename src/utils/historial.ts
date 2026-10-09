@@ -60,7 +60,7 @@ const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 export function grupoDeAccion(accion: string): GrupoHistorial {
   if (accion.startsWith('LOGIN') || accion === 'SETUP_PASSWORD_FIRST_TIME') return 'accesos';
   if (accion.includes('USUARIO')) return 'usuarios';
-  if (accion === 'MARCAR_ASISTENCIA' || accion === 'ASISTENCIA_NOCHE_HOGAR') return 'asistencia';
+  if (accion === 'MARCAR_ASISTENCIA' || accion === 'QUITAR_ASISTENCIA' || accion === 'ASISTENCIA_NOCHE_HOGAR') return 'asistencia';
   if (accion.includes('FAMILIA') || accion.includes('COMPANERISMO') || accion.startsWith('REPARTO')) return 'familias';
   if (accion.includes('CAPACITACION') || accion.includes('NOCHE_HOGAR')) return 'eventos';
   return 'personas';
@@ -121,6 +121,9 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
   switch (log.accion) {
     case 'MARCAR_ASISTENCIA':
       texto = `marcó ${s(d.estado)} a ${sujeto} en ${evento(d.capacitacionId)}`;
+      break;
+    case 'QUITAR_ASISTENCIA':
+      texto = `quitó la marca de ${sujeto} en ${evento(d.capacitacionId)}`;
       break;
     case 'ASISTENCIA_NOCHE_HOGAR':
       texto = `marcó ${s(d.estado)} a ${sujeto} en una Noche de Hogar`;

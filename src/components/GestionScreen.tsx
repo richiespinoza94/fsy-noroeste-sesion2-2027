@@ -41,6 +41,10 @@ import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 
+// Reparto automático de compañías: ya no se va a usar. La sección queda oculta (no
+// borrada) por si hiciera falta de nuevo — basta poner esto en `true`.
+const REPARTO_VISIBLE = false;
+
 type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios' | 'historial';
 
 export default function GestionScreen({
@@ -77,7 +81,7 @@ export default function GestionScreen({
         {(
           [
             ['familias', '👥 Familias'],
-            ...(user.canRepartirFamilias ? [['reparto', '🔀 Reparto'] as const] : []),
+            ...(REPARTO_VISIBLE && user.canRepartirFamilias ? [['reparto', '🔀 Reparto'] as const] : []),
             ['roles', '🎭 Roles'],
             // El Coordinador Auxiliar solo ve Familias (la suya) y Roles.
             ...(!user.isAuxiliar ? [['capacitaciones', '📅 Capacitaciones'] as const] : []),
@@ -97,7 +101,7 @@ export default function GestionScreen({
         {sub === 'familias' && (
           <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} />
         )}
-        {sub === 'reparto' && user.canRepartirFamilias && (
+        {sub === 'reparto' && REPARTO_VISIBLE && user.canRepartirFamilias && (
           <RepartoTab
             user={user}
             participantes={participantes}

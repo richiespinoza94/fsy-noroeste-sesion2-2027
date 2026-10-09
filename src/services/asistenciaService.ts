@@ -1,5 +1,5 @@
 import { suscripcionCompartida } from '../utils/suscripcionCompartida';
-import { collection, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Asistencia, EstadoAsistencia } from '../types';
 import { logAction } from './auditService';
@@ -83,4 +83,16 @@ export async function marcarAsistencia(
     await setDoc(doc(db, COL, docId(capId, participanteId)), item);
   }
   await logAction(adminCorreo, 'MARCAR_ASISTENCIA', participanteId, { capacitacionId: capId, estado });
+}
+
+/** Quita la marca de una persona en un evento (vuelve a "sin marca") — lo usa el botón Deshacer de Asistencia. */
+export async function quitarMarca(capId: string, participanteId: string, adminCorreo: string) {
+  if (!db) {
+    const { [docId(capId, participanteId)]: _quitada, ...resto } = localStore;
+    localStore = resto;
+    notifyLocal();
+  } else {
+    await deleteDoc(doc(db, COL, docId(capId, participanteId)));
+  }
+  await logAction(adminCorreo, 'QUITAR_ASISTENCIA', participanteId, { capacitacionId: capId });
 }

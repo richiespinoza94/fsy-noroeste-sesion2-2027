@@ -25,3 +25,14 @@ export function hoyLocalISO(d: Date = new Date()): string {
   const dd = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
+
+/**
+ * Para el selector de Asistencia: "Hoy y próximos" (el más cercano primero) y
+ * "Pasados" (el más reciente primero). `hoy` es "yyyy-MM-dd" local.
+ */
+export function agruparEventosParaSelector(caps: Capacitacion[], hoy: string): { proximos: Capacitacion[]; pasados: Capacitacion[] } {
+  const clave = (c: Capacitacion) => `${c.fecha}${c.hora || ''}`;
+  const proximos = caps.filter((c) => c.fecha >= hoy).sort((a, b) => clave(a).localeCompare(clave(b)));
+  const pasados = caps.filter((c) => c.fecha < hoy).sort((a, b) => clave(b).localeCompare(clave(a)));
+  return { proximos, pasados };
+}

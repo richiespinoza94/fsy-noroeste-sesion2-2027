@@ -6,6 +6,7 @@ import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
 import { tipoDe } from '../utils/tiposEvento';
 import { calcularCumpleanosProximos } from '../utils/cumpleanos';
+import { calcularSeguimiento } from '../utils/seguimiento';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import MetricCard from './MetricCard';
 import CumpleanosCard from './CumpleanosCard';
@@ -27,7 +28,7 @@ export default function HomeScreen({
   participantes: Participante[];
   capacitaciones: Capacitacion[];
   cargando: boolean;
-  onNavigate: (tab: 'asistencia' | 'busqueda' | 'gestion' | 'reportes') => void;
+  onNavigate: (tab: 'asistencia' | 'busqueda' | 'gestion' | 'reportes', sub?: 'seguimiento') => void;
   onNavHiddenChange: (hidden: boolean) => void;
 }) {
   const handleScroll = useScrollDirection(onNavHiddenChange);
@@ -76,19 +77,29 @@ export default function HomeScreen({
   const relevante = useMemo(() => getCapacitacionParaHome(capacitaciones), [capacitaciones]);
   const statsRelevante = relevante ? porCap.find((s) => s.cap.id === relevante.cap.id) : null;
 
+  // A quién ve esta cuenta: todos, o (Coordinador Auxiliar) solo los integrantes
+  // de SUS familias — con sus teléfonos para saludar o escribir. Un solo cálculo
+  // compartido por cumpleaños y por el aviso de seguimiento.
+  const gente = useMemo(() => {
+    if (!user.isAuxiliar) return participantes;
+    const ids = new Set(familiasDeAuxiliar(user.participantId, companerismo, familias).flatMap((f) => f.consejeros));
+    return participantes.filter((p) => ids.has(p.id));
+  }, [participantes, user.isAuxiliar, user.participantId, companerismo, familias]);
+
   // Recalcular contra "ahora" en cada apertura de Home alcanza — no es un
   // dato que necesite estar vivo segundo a segundo como la asistencia.
-  // Al Coordinador Auxiliar solo le salen los cumpleaños de los integrantes
-  // de SUS familias (y con ellos sus teléfonos para saludar) — no los de
-  // toda la conferencia.
-  const cumpleanos = useMemo(() => {
-    let base = participantes;
-    if (user.isAuxiliar) {
-      const ids = new Set(familiasDeAuxiliar(user.participantId, companerismo, familias).flatMap((f) => f.consejeros));
-      base = participantes.filter((p) => ids.has(p.id));
-    }
-    return calcularCumpleanosProximos(base, new Date(), VENTANA_CUMPLEANOS_DIAS);
-  }, [participantes, user.isAuxiliar, user.participantId, companerismo, familias]);
+  const cumpleanos = useMemo(() => calcularCumpleanosProximos(gente, new Date(), VENTANA_CUMPLEANOS_DIAS), [gente]);
+
+  // Aviso de retención: quienes vinieron UNA vez y faltaron al siguiente evento
+  // (es cuando todavía se les puede recuperar). El detalle completo, con los
+  // otros grupos, está en Reportes → Seguimiento.
+  const primeraVezFaltaron = useMemo(
+    () =>
+      user.canViewReports || user.isAuxiliar
+        ? calcularSeguimiento(gente, capacitaciones, asistencia).filter((i) => i.categoria === 'primera_vez_falto').length
+        : 0,
+    [gente, capacitaciones, asistencia, user.canViewReports, user.isAuxiliar]
+  );
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
@@ -143,6 +154,23 @@ export default function HomeScreen({
           />
         )}
       </div>
+
+      {!cargando && primeraVezFaltaron > 0 && (
+        <button
+          onClick={() => onNavigate('reportes', 'seguimiento')}
+          className="min-h-[44px] bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm text-left border-l-4"
+          style={{ borderLeftColor: '#9C27B0' }}
+        >
+          <span className="text-2xl" aria-hidden="true">🌱</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold">
+              {primeraVezFaltaron} {primeraVezFaltaron === 1 ? 'persona vino por primera vez y faltó' : 'personas vinieron por primera vez y faltaron'} al siguiente
+            </div>
+            <div className="text-xs text-slate-500">Toca para ver quiénes y escribirles</div>
+          </div>
+          <span className="text-slate-300">›</span>
+        </button>
+      )}
 
       {/* Después de las métricas operativas (asistencia en vivo, confirmados),
           no antes — esto es seguimiento/cercanía, no es urgente como lo de

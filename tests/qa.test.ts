@@ -14,10 +14,11 @@ import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
+import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
-import { contarPorTipo, filtrarPorTipos, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
+import { agruparEventosParaSelector, contarPorTipo, filtrarPorTipos, hoyLocalISO, tipoDe } from '../src/utils/tiposEvento';
 import {
   calcularCandidatosPorRol,
   calcularEdad,
@@ -1531,6 +1532,33 @@ test('174. historial — describirEntradas indexa una vez y da el mismo resultad
   const lote = describirEntradas(logs, CTX_H);
   assert.deepStrictEqual(lote.map((e) => e.texto), logs.map((l) => describirEntrada(l, CTX_H).texto));
   assert.ok(lote[1].texto.includes('Familia 2')); // sin customName cae al nombre
+});
+
+// ── Asistencia: selector agrupado y deshacer ────────────────────────────
+test('175. agruparEventosParaSelector — "Hoy y próximos" ascendente, "Pasados" del más reciente al más antiguo', () => {
+  const caps = [eventoTipado('a', '2027-01-03'), eventoTipado('b', '2027-01-20'), eventoTipado('c', '2027-01-10'), eventoTipado('d', '2027-01-15'), eventoTipado('e', '2027-02-01')];
+  const g = agruparEventosParaSelector(caps, '2027-01-15');
+  assert.deepStrictEqual(g.proximos.map((c) => c.id), ['d', 'b', 'e']); // hoy cuenta como próximo
+  assert.deepStrictEqual(g.pasados.map((c) => c.id), ['c', 'a']);
+  assert.deepStrictEqual(agruparEventosParaSelector([], '2027-01-15'), { proximos: [], pasados: [] });
+});
+
+test('176. quitarMarca — vuelve a "sin marca" y no toca a los demás (modo local)', async () => {
+  let actual: Record<string, Asistencia> = {};
+  const off = subscribeAsistencia('capQ', (m) => { actual = m; });
+  await marcarAsistencia('capQ', 'p1', 'presente', 'admin@x.com');
+  await marcarAsistencia('capQ', 'p2', 'presente', 'admin@x.com');
+  assert.deepStrictEqual(Object.keys(actual).sort(), ['p1', 'p2']);
+  await quitarMarca('capQ', 'p1', 'admin@x.com');
+  assert.deepStrictEqual(Object.keys(actual), ['p2']);
+  await quitarMarca('capQ', 'inexistente', 'admin@x.com'); // no falla
+  off();
+});
+
+test('177. historial — quitar marca se describe y cae en el grupo Asistencia', () => {
+  const e = describirEntrada(logH('QUITAR_ASISTENCIA', { capacitacionId: 'e1' }, 'juan'), CTX_H);
+  assert.strictEqual(e.grupo, 'asistencia');
+  assert.ok(e.texto.startsWith('quitó la marca de Juan'));
 });
 
 void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));
