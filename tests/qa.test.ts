@@ -15,6 +15,7 @@ import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
+import { filtrarPorCompania, infoCompanias, resumenGrupo } from '../src/utils/companias';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -1559,6 +1560,47 @@ test('177. historial — quitar marca se describe y cae en el grupo Asistencia',
   const e = describirEntrada(logH('QUITAR_ASISTENCIA', { capacitacionId: 'e1' }, 'juan'), CTX_H);
   assert.strictEqual(e.grupo, 'asistencia');
   assert.ok(e.texto.startsWith('quitó la marca de Juan'));
+});
+
+// ── Compañías en Asistencia: número, filtro y avance ────────────────────
+const FAMS_C = [
+  { id: 'fa', nombre: 'Familia 1', customName: 'Compañía 1', colorId: 'rojo', consejeros: [] },
+  { id: 'fb', nombre: 'Familia 2', customName: '', colorId: 'amarillo', consejeros: [] },
+  { id: 'fc', nombre: 'Equipo especial', customName: '', colorId: 'noexiste', consejeros: [] },
+] as Familia[];
+const GENTE_C = [
+  { ...personaFake('a1'), familiaId: 'fa' },
+  { ...personaFake('a2'), familiaId: 'fa' },
+  { ...personaFake('b1'), familiaId: 'fb' },
+  { ...personaFake('s1'), familiaId: '' },
+  { ...personaFake('h1'), familiaId: 'eliminada' },
+] as Participante[];
+
+test('178. infoCompanias — número desde el nombre, posición si no tiene número, color con respaldo', () => {
+  const m = infoCompanias(FAMS_C);
+  assert.strictEqual(m.get('fa')?.numero, 1);
+  assert.strictEqual(m.get('fb')?.numero, 2);
+  assert.strictEqual(m.get('fc')?.numero, 3); // "Equipo especial" no trae número: usa su posición
+  assert.strictEqual(m.get('fa')?.nombre, 'Compañía 1');
+  assert.strictEqual(m.get('fb')?.nombre, 'Familia 2'); // sin nombre personalizado
+  assert.strictEqual(m.get('fc')?.hex, '#94A3B8'); // color desconocido → gris
+  assert.strictEqual(m.get('inexistente'), undefined);
+});
+
+test('179. filtrarPorCompania — todas, una compañía, y "sin" incluye también a quien apunta a una compañía eliminada', () => {
+  const m = infoCompanias(FAMS_C);
+  assert.strictEqual(filtrarPorCompania(GENTE_C, '', m).length, 5);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_C, 'fa', m).map((p) => p.id), ['a1', 'a2']);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_C, 'sin', m).map((p) => p.id), ['s1', 'h1']);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_C, 'fc', m), []);
+});
+
+test('180. resumenGrupo — avance del grupo filtrado, solo cuenta "presente", y un grupo vacío no divide por cero', () => {
+  const asis = { a1: { estado: 'presente' }, a2: { estado: 'justificado' }, b1: { estado: 'presente' } };
+  const m = infoCompanias(FAMS_C);
+  assert.deepStrictEqual(resumenGrupo(filtrarPorCompania(GENTE_C, 'fa', m), asis), { presentes: 1, total: 2, pct: 50 });
+  assert.deepStrictEqual(resumenGrupo(GENTE_C, asis), { presentes: 2, total: 5, pct: 40 });
+  assert.deepStrictEqual(resumenGrupo([], asis), { presentes: 0, total: 0, pct: 0 });
 });
 
 void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));
