@@ -21,6 +21,7 @@ service cloud.firestore {
     match /asistencia/{id}    { allow read, write: if true; }
     match /familias/{id}      { allow read, write: if true; }
     match /companerismo/{id}  { allow read, write: if true; }
+    match /parejasTrabajo/{id} { allow read, write: if true; } // compañerismos de trabajo dentro de una familia (2-3 integrantes) — ver parejasService.ts
     match /nochesHogar/{id}   { allow read, write: if true; }
     match /repartosFamilias/{id} { allow read, write: if true; } // historial de corridas del reparto automático de compañías, cada una con su snapshot de rollback — ver repartoFamiliasService.ts
     match /auditoria/{id}     { allow create, read: if true; allow update: if false; }
