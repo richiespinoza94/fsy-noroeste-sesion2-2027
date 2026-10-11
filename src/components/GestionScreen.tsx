@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AuditTimeline from './AuditTimeline';
 import HistorialTab from './HistorialTab';
+import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
 import {
   addCompanerismo,
@@ -38,8 +39,10 @@ import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../ser
 import { infoTipo, tipoDe } from '../utils/tiposEvento';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
+import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
+import { nombreConInicialMaterna } from '../utils/nombreCorto';
+import { resumenCompaneros, companerosDe } from '../utils/parejasTrabajo';
 
 // Reparto automático de compañías: ya no se va a usar. La sección queda oculta (no
 // borrada) por si hiciera falta de nuevo — basta poner esto en `true`.
@@ -159,6 +162,8 @@ function FamiliasTab({
   const famCp = fam ? companerismo.filter((c) => c.familiaId === fam.id) : [];
   const coordAux = participantes.filter(isCoordAux);
   const [detail, setDetail] = useState<Participante | null>(null);
+  const parejas = useParejas();
+  const porId = useMemo(() => new Map(participantes.map((p) => [p.id, p])), [participantes]);
 
   // Si el auxiliar tiene una sola familia, queda seleccionada sola.
   const soloUnaId = user.isAuxiliar && visibles.length === 1 ? visibles[0].id : '';
@@ -223,7 +228,7 @@ function FamiliasTab({
           {familias.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {familias.map((f) => (
-                <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} />
+                <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} parejas={parejas} />
               ))}
             </div>
           )}
@@ -286,6 +291,14 @@ function FamiliasTab({
 
           <CompanerismoCard fam={fam} cps={famCp} participantes={participantes} coordAux={coordAux} user={user} readOnly={user.isAuxiliar} />
 
+          <CompanerismosFamilia
+            fam={fam}
+            miembros={famMembers}
+            parejas={parejas}
+            correo={user.correo}
+            puedeEditar={user.canEditAll || user.isAuxiliar}
+          />
+
           <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
 
           <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -297,6 +310,11 @@ function FamiliasTab({
                   {p.asignacion !== 'Consejero' && (
                     <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
                       {p.asignacion || 'Sin rol'}
+                    </span>
+                  )}
+                  {companerosDe(p, parejas, porId).length > 0 && (
+                    <span className="block text-[11px] font-medium text-slate-500 mt-0.5">
+                      con {companerosDe(p, parejas, porId).map((c) => nombreConInicialMaterna(c.nombres, c.apellidos)).join(' y ')}
                     </span>
                   )}
                 </button>
@@ -671,15 +689,22 @@ function FamiliaStatsCard({
   );
 }
 
-function FamiliaBalanceCard({ familia, participantes }: { familia: Familia; participantes: Participante[] }) {
+function FamiliaBalanceCard({ familia, participantes, parejas }: { familia: Familia; participantes: Participante[]; parejas?: ParejaTrabajo[] }) {
   const miembros = participantes.filter((p) => familia.consejeros.includes(p.id));
   const cands: CandidatoReparto[] = miembros.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
   const stats = calcularEstadisticas(cands);
+  const comp = parejas ? resumenCompaneros(familia, parejas, miembros) : null;
   return (
     <div className="bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px]" style={{ borderTopColor: statColorHex(familia) }}>
       <div className="font-extrabold text-sm mb-2">{familia.customName || familia.nombre}</div>
       <div className="text-xs text-slate-600 space-y-0.5">
         <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
+        {comp && miembros.length > 0 && (
+          <div>
+            Compañerismos: <strong>{comp.grupos}</strong>
+            {comp.sinCompanero > 0 && <span className="text-amber-700 font-semibold"> · {comp.sinCompanero} sin compañero</span>}
+          </div>
+        )}
         <div className="pt-1 text-[10px] text-slate-500">
           Ventanilla {stats.porEstaca.Ventanilla} · P. Piedra {stats.porEstaca['Puente Piedra']} · Pro Lima{' '}
           {stats.porEstaca['Pro Lima']} · Otros {stats.porEstaca.Otros}
@@ -796,7 +821,7 @@ function CompanerismoCard({
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center mb-2">
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex-1">Compañerismos — Coord. Auxiliares</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex-1">Coordinadores Auxiliares</div>
         {!readOnly && (
           <button onClick={() => setAdding((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2 py-1">
             {adding ? 'Cancelar' : '+ Añadir'}
@@ -818,7 +843,7 @@ function CompanerismoCard({
           </div>
         );
       })}
-      {cps.length === 0 && !adding && <div className="text-xs text-slate-500 text-center py-1">Sin compañerismos asignados</div>}
+      {cps.length === 0 && !adding && <div className="text-xs text-slate-500 text-center py-1">Sin coordinadores auxiliares asignados</div>}
 
       {adding && (
         <div className="pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">

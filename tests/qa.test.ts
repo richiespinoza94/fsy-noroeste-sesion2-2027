@@ -16,6 +16,8 @@ import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } 
 import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
 import { filtrarPorCompania, infoCompanias, resumenGrupo } from '../src/utils/companias';
+import { companerosDe, planearGuardado, resumenCompaneros, vistaFamilia } from '../src/utils/parejasTrabajo';
+import { deshacerPareja, guardarPareja, subscribeParejas } from '../src/services/parejasService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -37,7 +39,7 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
-import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, Participante } from '../src/types';
+import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, ParejaTrabajo, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
 let passed = 0;
@@ -1601,6 +1603,108 @@ test('180. resumenGrupo — avance del grupo filtrado, solo cuenta "presente", y
   assert.deepStrictEqual(resumenGrupo(filtrarPorCompania(GENTE_C, 'fa', m), asis), { presentes: 1, total: 2, pct: 50 });
   assert.deepStrictEqual(resumenGrupo(GENTE_C, asis), { presentes: 2, total: 5, pct: 40 });
   assert.deepStrictEqual(resumenGrupo([], asis), { presentes: 0, total: 0, pct: 0 });
+});
+
+
+// ── Compañerismos de trabajo dentro de la familia ──────────────────────────
+const FAM_P = { id: 'F1', nombre: 'Familia 1', customName: '', colorId: 'rojo', consejeros: ['u1', 'u2', 'u3', 'u4', 'u5'] } as Familia;
+const GENTE_P = ['u1', 'u2', 'u3', 'u4', 'u5', 'x9'].map((id, i) => ({
+  ...personaFake(id),
+  familiaId: id === 'x9' ? 'F2' : 'F1',
+  genero: i % 2 ? 'M' : 'H',
+})) as Participante[];
+const MIEMBROS_P = GENTE_P.filter((p) => p.familiaId === 'F1');
+
+test('181. vistaFamilia — grupos, sin compañero, y quien salió de la familia sale del grupo', () => {
+  const parejas = [{ id: 'g1', familiaId: 'F1', miembros: ['u1', 'u2'] }, { id: 'g2', familiaId: 'F1', miembros: ['u3', 'u4', 'u5'] }];
+  const v = vistaFamilia(FAM_P, parejas, MIEMBROS_P);
+  assert.strictEqual(v.grupos.length, 2);
+  assert.strictEqual(v.sinCompanero.length, 0);
+  // u5 sale de la compañía: el trío pasa a dupla; si sale otro más, el grupo desaparece y el que queda figura "sin compañero"
+  const sin5 = MIEMBROS_P.filter((p) => p.id !== 'u5');
+  assert.deepStrictEqual(vistaFamilia(FAM_P, parejas, sin5).grupos.map((g) => g.personas.length).sort(), [2, 2]);
+  const sin45 = sin5.filter((p) => p.id !== 'u4');
+  const v2 = vistaFamilia(FAM_P, parejas, sin45);
+  assert.deepStrictEqual(v2.grupos.map((g) => g.id), ['g1']);
+  assert.deepStrictEqual(v2.sinCompanero.map((p) => p.id), ['u3']);
+  assert.deepStrictEqual(resumenCompaneros(FAM_P, parejas, sin45), { grupos: 1, sinCompanero: 1 });
+});
+
+test('182. vistaFamilia — ignora grupos de otra familia y una persona duplicada solo cuenta en un grupo', () => {
+  const parejas = [
+    { id: 'g1', familiaId: 'F1', miembros: ['u1', 'u2'] },
+    { id: 'gX', familiaId: 'F2', miembros: ['x9', 'u3'] },
+    { id: 'g3', familiaId: 'F1', miembros: ['u2', 'u3'] }, // u2 ya está en g1
+  ];
+  const v = vistaFamilia(FAM_P, parejas, MIEMBROS_P);
+  assert.deepStrictEqual(v.grupos.map((g) => g.id), ['g1']);
+  assert.deepStrictEqual(v.sinCompanero.map((p) => p.id).sort(), ['u3', 'u4', 'u5']);
+});
+
+test('183. planearGuardado — valida 2 a 3 personas distintas', () => {
+  const base = { familiaId: 'F1', id: null, existentes: [], nuevoId: 'n1' };
+  assert.throws(() => planearGuardado({ ...base, miembros: ['u1'] }), /al menos 2/);
+  assert.throws(() => planearGuardado({ ...base, miembros: ['u1', 'u1'] }), /al menos 2/); // repetida = 1 persona
+  assert.throws(() => planearGuardado({ ...base, miembros: ['u1', 'u2', 'u3', 'u4'] }), /3 personas/);
+  assert.deepStrictEqual(planearGuardado({ ...base, miembros: ['u1', 'u2', 'u3'] }).guardar, { id: 'n1', familiaId: 'F1', miembros: ['u1', 'u2', 'u3'] });
+  assert.strictEqual(planearGuardado({ ...base, id: 'viejo', miembros: ['u1', 'u2'] }).guardar.id, 'viejo');
+});
+
+test('184. planearGuardado — mover a alguien lo saca de su grupo anterior (se achica o se deshace)', () => {
+  const existentes = [
+    { id: 'g1', familiaId: 'F1', miembros: ['u1', 'u2'] },
+    { id: 'g2', familiaId: 'F1', miembros: ['u3', 'u4', 'u5'] },
+    { id: 'gX', familiaId: 'F2', miembros: ['u1', 'x9'] }, // otra familia: no se toca
+  ];
+  const plan = planearGuardado({ familiaId: 'F1', id: null, miembros: ['u2', 'u3'], existentes, nuevoId: 'n' });
+  assert.deepStrictEqual(plan.borrar, ['g1']); // g1 queda solo con u1 → se deshace
+  assert.deepStrictEqual(plan.actualizar, [{ id: 'g2', familiaId: 'F1', miembros: ['u4', 'u5'] }]); // trío → dupla
+  // Cambiar un grupo sin mover a nadie de otro no toca nada más
+  const igual = planearGuardado({ familiaId: 'F1', id: 'g1', miembros: ['u1', 'u2'], existentes, nuevoId: 'n' });
+  assert.deepStrictEqual([igual.borrar, igual.actualizar], [[], []]);
+});
+
+test('185. companerosDe — compañeros actuales; vacío sin grupo, sin compañía o si el otro ya salió', () => {
+  const todos = new Map(GENTE_P.map((p) => [p.id, p]));
+  const parejas = [{ id: 'g1', familiaId: 'F1', miembros: ['u1', 'u2', 'u3'] }];
+  assert.deepStrictEqual(companerosDe(todos.get('u1')!, parejas, todos).map((p) => p.id), ['u2', 'u3']);
+  assert.deepStrictEqual(companerosDe(todos.get('u4')!, parejas, todos), []);
+  assert.deepStrictEqual(companerosDe(todos.get('x9')!, parejas, todos), []); // otra familia
+  const sinCompania = new Map(todos).set('u2', { ...todos.get('u2')!, familiaId: '' });
+  assert.deepStrictEqual(companerosDe(todos.get('u1')!, parejas, sinCompania).map((p) => p.id), ['u3']);
+  assert.deepStrictEqual(companerosDe({ ...todos.get('u1')!, familiaId: '' }, parejas, todos), []);
+});
+
+test('186. guardarPareja / deshacerPareja (modo local) — arma, cambia y deshace; solo integrantes de la familia; sin duplicar personas', async () => {
+  let ultimo: ParejaTrabajo[] = [];
+  const baja = subscribeParejas((x) => (ultimo = x));
+  const a = await guardarPareja(FAM_P, null, ['u1', 'u2'], ultimo, 'a@x.com');
+  assert.strictEqual(ultimo.length, 1);
+  await assert.rejects(() => guardarPareja(FAM_P, null, ['u1', 'x9'], ultimo, 'a@x.com'), /integrantes de esta familia/);
+  // u2 pasa a otro grupo con u3: el grupo viejo (u1 solo) se deshace
+  await guardarPareja(FAM_P, null, ['u2', 'u3'], ultimo, 'a@x.com');
+  assert.strictEqual(ultimo.length, 1);
+  assert.deepStrictEqual(ultimo[0].miembros, ['u2', 'u3']);
+  // cambiar el grupo existente (misma id) a un trío
+  const b = ultimo[0];
+  await guardarPareja(FAM_P, b.id, ['u2', 'u3', 'u4'], ultimo, 'a@x.com');
+  assert.deepStrictEqual(ultimo.find((x) => x.id === b.id)?.miembros, ['u2', 'u3', 'u4']);
+  await deshacerPareja(ultimo[0], 'a@x.com');
+  assert.strictEqual(ultimo.length, 0);
+  void a;
+  baja();
+});
+
+test('187. historial — describe armar, cambiar y deshacer un compañerismo de trabajo, dentro del grupo "Familias"', () => {
+  const ctx = { participantes: GENTE_P, capacitaciones: [], familias: [FAM_P] };
+  const mk = (accion: string): AuditLog => ({ id: accion, timestamp: '2026-10-11T10:00:00', admin: 'a@x.com', accion, participanteId: '', detalles: JSON.stringify({ familiaId: 'F1', miembros: ['u1', 'u2'] }) } as AuditLog);
+  assert.strictEqual(grupoDeAccion('ARMAR_COMPANERISMO_FAMILIA'), 'familias');
+  assert.strictEqual(grupoDeAccion('DESHACER_COMPANERISMO_FAMILIA'), 'familias');
+  const e = describirEntradas([mk('ARMAR_COMPANERISMO_FAMILIA'), mk('CAMBIAR_COMPANERISMO_FAMILIA'), mk('DESHACER_COMPANERISMO_FAMILIA')], ctx).map((x) => x.texto);
+  assert.ok(/armó un compañerismo de trabajo en Familia 1: /.test(e[0]));
+  assert.ok(/^cambió un compañerismo/.test(e[1]));
+  assert.ok(/^deshizo el compañerismo de trabajo de /.test(e[2]));
+  assert.ok(!e.some((t) => t.includes('una persona')));
 });
 
 void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));

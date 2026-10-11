@@ -89,6 +89,18 @@ export interface Familia {
   consejeros: string[]; // IDs de Participante — históricamente solo 'Consejero' (ver isConsejero en familiasService.ts), pero desde el reparto automático (repartoFamiliasService.ts) también puede incluir 'Logístico'; el nombre del campo quedó igual para no migrar datos existentes
 }
 
+/**
+ * Compañerismo de TRABAJO dentro de una familia: 2 o 3 integrantes (Consejeros o
+ * Logísticos) que trabajan juntos. Es distinto de `Companerismo` (la pareja de
+ * Coordinadores Auxiliares asignada a la familia). No es oficial: lo arman los
+ * auxiliares de la familia o los coordinadores generales y se puede cambiar.
+ */
+export interface ParejaTrabajo {
+  id: string;
+  familiaId: string;
+  miembros: string[]; // IDs de Participante, 2 o 3
+}
+
 export interface Companerismo {
   id: string;
   familiaId: string;

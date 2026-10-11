@@ -3,6 +3,7 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { updateParticipante } from '../services/participantsService';
 import { fuzzyIncludes } from '../utils/search';
 import { nombreCorto } from '../utils/nombreCorto';
+import { TrabajaCon } from './CompanerismosFamilia';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, DISPONIBILIDAD_LABEL, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
@@ -126,6 +127,7 @@ export default function BusquedaScreen({
                   <Row icon="👤" label="Género" value={p.genero === 'H' ? 'Hombre' : 'Mujer'} />
                   <Row icon="🎖️" label="Experiencia" value={EXPERIENCIA_PREVIA_LABEL[p.experienciaPrevia] || 'No registrado'} />
                   <Row icon="📋" label="Asignación" value={p.asignacion || 'Sin asignar'} />
+                  {p.familiaId && <TrabajaCon persona={p} participantes={participantes} />}
                   <Row icon="✅" label="Disponibilidad" value={DISPONIBILIDAD_LABEL[p.disponibilidad] || 'No registrado'} />
                   <Row
                     icon="🎬"

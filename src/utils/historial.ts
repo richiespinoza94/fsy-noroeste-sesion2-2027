@@ -108,6 +108,7 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
 
   const persona = (id: unknown) => idx.personaPorId.get(s(id)) ?? 'una persona';
   const familia = (id: unknown) => (s(id) ? idx.familiaPorId.get(s(id)) ?? 'una familia' : 'sin familia');
+  const nombresDe = (ids: unknown) => (Array.isArray(ids) ? ids.map(persona).join(', ') : 'personas');
   const evento = (id: unknown) => idx.eventoPorId.get(s(id)) ?? 'un evento';
   const valor = (campo: string, v: unknown) => (campo === 'familiaId' ? familia(v) : s(v) || '—');
 
@@ -158,6 +159,13 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
       break;
     case 'AÑADIR_COMPANERISMO':
       texto = `armó un compañerismo en ${familia(d.familiaId)}: ${[d.p1Id, d.p2Id].filter((x) => s(x)).map(persona).join(' y ')}`;
+      break;
+    case 'ARMAR_COMPANERISMO_FAMILIA':
+    case 'CAMBIAR_COMPANERISMO_FAMILIA':
+      texto = `${log.accion.startsWith('ARMAR') ? 'armó' : 'cambió'} un compañerismo de trabajo en ${familia(d.familiaId)}: ${nombresDe(d.miembros)}`;
+      break;
+    case 'DESHACER_COMPANERISMO_FAMILIA':
+      texto = `deshizo el compañerismo de trabajo de ${nombresDe(d.miembros)} en ${familia(d.familiaId)}`;
       break;
     case 'ELIMINAR_COMPANERISMO':
       texto = 'quitó un compañerismo';
