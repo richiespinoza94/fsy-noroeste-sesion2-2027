@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
 import HistorialTab from './HistorialTab';
@@ -63,8 +63,18 @@ export default function GestionScreen({
   capacitaciones: Capacitacion[];
   onNavHiddenChange: (hidden: boolean) => void;
 }) {
-  const handleScroll = useScrollDirection(onNavHiddenChange);
+  // Bajando por una lista, el menú inferior y la franja de compañías se esconden; al subir un poco, vuelven.
+  const [bajando, setBajando] = useState(false);
+  const alCambiarScroll = useCallback(
+    (oculto: boolean) => {
+      setBajando(oculto);
+      onNavHiddenChange(oculto);
+    },
+    [onNavHiddenChange]
+  );
+  const handleScroll = useScrollDirection(alCambiarScroll);
   const [sub, setSub] = useState<SubTab>('familias');
+  useEffect(() => setBajando(false), [sub]);
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
   const [asistencia, setAsistencia] = useState<Asistencia[]>([]);
@@ -104,7 +114,7 @@ export default function GestionScreen({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24" onScroll={handleScroll}>
         {sub === 'familias' && (
-          <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} />
+          <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} ocultarFranja={bajando} />
         )}
         {sub === 'reparto' && REPARTO_VISIBLE && user.canRepartirFamilias && (
           <RepartoTab
@@ -131,11 +141,14 @@ function FamiliasTab({
   participantes,
   familias,
   companerismo,
+  ocultarFranja,
 }: {
   user: SessionUser;
   participantes: Participante[];
   familias: Familia[];
   companerismo: Companerismo[];
+  /** Bajando por la lista: la franja de compañías se esconde y deja solo una línea del color de la compañía. */
+  ocultarFranja: boolean;
 }) {
   const [selId, setSelId] = useState('');
   const [creating, setCreating] = useState(false);
@@ -247,7 +260,11 @@ function FamiliasTab({
       )}
 
       {fam && !unicaDelAuxiliar && (
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2 bg-bg flex gap-2 overflow-x-auto" role="group" aria-label="Elegir compañía">
+        <div
+          inert={ocultarFranja}
+          className={`sticky -top-4 z-10 -mx-4 -mt-4 bg-bg transition-transform duration-200 motion-reduce:transition-none ${ocultarFranja ? '-translate-y-full' : ''}`}
+        >
+        <div className="px-4 pt-4 pb-2 flex gap-2 overflow-x-auto" role="group" aria-label="Elegir compañía">
           {[{ id: '', label: 'Todas', nombre: 'Todas las compañías' }, ...visibles.map((f) => ({ id: f.id, label: String(companiasInfo.get(f.id)?.numero ?? ''), nombre: nombreCompania(f) }))].map((o) => {
             const activo = (fam?.id ?? '') === o.id;
             const info = companiasInfo.get(o.id);
@@ -271,6 +288,13 @@ function FamiliasTab({
               +
             </button>
           )}
+        </div>
+          {/* Con la franja escondida, esta línea recuerda en qué compañía estás. */}
+          <div
+            aria-hidden="true"
+            className={`absolute left-0 right-0 top-full h-1 transition-opacity duration-200 ${ocultarFranja ? 'opacity-100' : 'opacity-0'}`}
+            style={{ background: companiasInfo.get(fam.id)?.hex }}
+          />
         </div>
       )}
 
