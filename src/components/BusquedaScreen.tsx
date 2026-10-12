@@ -7,6 +7,7 @@ import { TrabajaCon } from './CompanerismosFamilia';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, DISPONIBILIDAD_LABEL, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
+import ScrollX from './ScrollX';
 
 function matches(p: Participante, query: string): boolean {
   return matchesQuery(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`, query);
@@ -112,7 +113,7 @@ export default function BusquedaScreen({
           )}
         </div>
         <div className="flex gap-2 items-center">
-          <div className="flex gap-2 overflow-x-auto pb-1 flex-1">
+          <ScrollX className="flex gap-2 pb-1 flex-1">
             <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
               Todas
             </Chip>
@@ -130,7 +131,7 @@ export default function BusquedaScreen({
                 {filterEstaca} ✕
               </Chip>
             )}
-          </div>
+          </ScrollX>
           <button
             onClick={() => { setSoloAudiovisual((v) => !v); setVisibleCount(PAGE_SIZE); }}
             title="Solo con experiencia en audiovisuales" aria-label="Audiovisual: solo con experiencia en audiovisuales"

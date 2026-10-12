@@ -9,6 +9,7 @@ import {
   type RangoHistorial,
 } from '../utils/historial';
 import type { AuditLog, Capacitacion, Familia, Participante } from '../types';
+import ScrollX from './ScrollX';
 
 const PAGINA = 20;
 const LOTE = 100; // cada lectura de Firestore se cobra: se pide poco y se amplía solo si hace falta
@@ -79,7 +80,7 @@ export default function HistorialTab({
         </button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de cambio">
+      <ScrollX className="flex gap-2 -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de cambio">
         {GRUPOS_HISTORIAL.map((g) => (
           <button
             key={g.id}
@@ -95,7 +96,7 @@ export default function HistorialTab({
             {g.label}
           </button>
         ))}
-      </div>
+      </ScrollX>
 
       <div className="flex gap-2">
         <input

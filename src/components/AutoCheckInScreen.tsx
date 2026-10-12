@@ -6,6 +6,8 @@ import { EVENTO_NOMBRE } from '../data/evento';
 import type { Asistencia, Capacitacion, Participante } from '../types';
 import { HABILIDADES_AUDIOVISUAL, SIN_EXPERIENCIA_AV } from '../types';
 import { fuzzyIncludes } from '../utils/search';
+import { hoyLocalISO } from '../utils/tiposEvento';
+import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
 
 // Un check-in por dispositivo, por capacitación — evita que una sola persona
 // marque presente a varios amigos desde su celular. No es a prueba de balas
@@ -186,7 +188,7 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
             ) : cap ? (
               <p className="text-xs text-white/70 mt-0.5">
                 {ventana === 'abierta' ? '📍 ' : '📅 '}
-                {cap.label} · {cap.fecha} {cap.hora && `· ${cap.hora}`}
+                {cap.label} · {fechaAmigable(cap.fecha, hoyLocalISO())} {cap.hora && `· ${rangoHora(cap.hora)}`}
               </p>
             ) : (
               <p className="text-xs text-white/70 mt-0.5">No hay capacitaciones programadas todavía.</p>
@@ -211,8 +213,8 @@ export default function AutoCheckInScreen({ onBack }: { onBack: () => void }) {
 
           {!cargando && ventana === 'muy_temprano' && cap && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-3 py-3">
-              Todavía es muy temprano. <strong>{cap.label}</strong> es el {cap.fecha}
-              {cap.hora && ` a las ${cap.hora}`} — puedes marcar tu asistencia desde 1 hora antes.
+              Todavía es muy temprano. <strong>{cap.label}</strong> es {/^(Hoy|Mañana)$/.test(fechaAmigable(cap.fecha, hoyLocalISO())) ? fechaAmigable(cap.fecha, hoyLocalISO()).toLowerCase() : `el ${fechaAmigable(cap.fecha, hoyLocalISO())}`}
+              {cap.hora && ` a las ${rangoHora(cap.hora)}`} — puedes marcar tu asistencia desde 1 hora antes.
             </div>
           )}
 

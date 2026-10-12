@@ -84,3 +84,11 @@ textarea {
 .animate-slide-down {
   animation: slideDown 0.28s ease both;
 }
+
+/* Tiras que se deslizan de lado: sin barra visible (ScrollX pone el degradado de borde). */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

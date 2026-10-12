@@ -14,6 +14,7 @@ import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '..
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser, type TipoEvento } from '../types';
 import MetricCard from './MetricCard';
 import InfoSheet, { BotonInfo } from './InfoSheet';
+import ScrollX from './ScrollX';
 
 type SubTab = 'general' | 'compromiso' | 'seguimiento';
 
@@ -180,7 +181,7 @@ export default function ReportesScreen({
           Selección múltiple: tocar un tipo lo suma o lo quita; "Todos" (sin
           ninguno elegido) es el valor por defecto. */}
       {tiposPresentes.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de evento">
+        <ScrollX className="flex gap-2 -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de evento">
           {[{ tipo: 'todos' as const, n: capacitaciones.length }, ...tiposPresentes].map(({ tipo, n }) => {
             const activo = tipo === 'todos' ? tiposActivos.length === 0 : tiposActivos.includes(tipo);
             return (
@@ -201,7 +202,7 @@ export default function ReportesScreen({
               </button>
             );
           })}
-        </div>
+        </ScrollX>
       )}
 
       <div className="flex gap-2">

@@ -37,7 +37,8 @@ import { EVENTO_NOMBRE } from '../data/evento';
 import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
-import { infoTipo, tipoDe } from '../utils/tiposEvento';
+import { hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
+import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
@@ -45,6 +46,7 @@ import { validateEmail } from '../utils/validation';
 import { nombreConInicialMaterna, nombreCorto } from '../utils/nombreCorto';
 import { resumenCompaneros, companerosDe } from '../utils/parejasTrabajo';
 import { infoCompanias, nombreCompania } from '../utils/companias';
+import ScrollX from './ScrollX';
 
 // Reparto automático de compañías: ya no se va a usar. La sección queda oculta (no
 // borrada) por si hiciera falta de nuevo — basta poner esto en `true`.
@@ -92,7 +94,8 @@ export default function GestionScreen({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex bg-white border-b border-slate-200 shrink-0 overflow-x-auto">
+      <div className="bg-white border-b border-slate-200 shrink-0">
+      <ScrollX seguir={sub} className="flex">
         {(
           [
             ['familias', '👥 Compañías'],
@@ -106,11 +109,13 @@ export default function GestionScreen({
           <button
             key={id}
             onClick={() => setSub(id)}
+            aria-current={sub === id ? 'true' : undefined}
             className={`flex-1 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap px-2 ${sub === id ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
           >
             {label}
           </button>
         ))}
+      </ScrollX>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24" onScroll={handleScroll}>
         {sub === 'familias' && (
@@ -264,7 +269,7 @@ function FamiliasTab({
           inert={ocultarFranja}
           className={`sticky -top-4 z-10 -mx-4 -mt-4 bg-bg transition-transform duration-200 motion-reduce:transition-none ${ocultarFranja ? '-translate-y-full' : ''}`}
         >
-        <div className="px-4 pt-4 pb-2 flex gap-2 overflow-x-auto" role="group" aria-label="Elegir compañía">
+        <ScrollX seguir={fam?.id ?? ""} className="px-4 pt-4 pb-2 flex gap-2" role="group" aria-label="Elegir compañía">
           {[{ id: '', label: 'Todas', nombre: 'Todas las compañías' }, ...visibles.map((f) => ({ id: f.id, label: String(companiasInfo.get(f.id)?.numero ?? ''), nombre: nombreCompania(f) }))].map((o) => {
             const activo = (fam?.id ?? '') === o.id;
             const info = companiasInfo.get(o.id);
@@ -288,7 +293,7 @@ function FamiliasTab({
               +
             </button>
           )}
-        </div>
+        </ScrollX>
           {/* Con la franja escondida, esta línea recuerda en qué compañía estás. */}
           <div
             aria-hidden="true"
@@ -652,7 +657,7 @@ function RepartoTab({
           <select className="input" value={capacitacionId} onChange={(e) => { setCapacitacionId(e.target.value); setPreview(null); }}>
             <option value="">— Elige la capacitación —</option>
             {capsOrdenadas.map((c) => (
-              <option key={c.id} value={c.id}>{c.label} — {c.fecha}</option>
+              <option key={c.id} value={c.id}>{c.label} — {fechaAmigable(c.fecha, hoyLocalISO())}</option>
             ))}
           </select>
         ) : (
@@ -839,7 +844,7 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
         <div key={noche.id} className="bg-slate-50 rounded-xl p-3 mt-2">
           <div className="flex justify-between text-xs mb-2">
             <strong className="text-primary">{noche.titulo}</strong>
-            <span className="text-slate-500">{noche.fecha}</span>
+            <span className="text-slate-500">{fechaAmigable(noche.fecha, hoyLocalISO())}</span>
           </div>
           <div className="flex flex-col gap-1.5">
             {miembros.map((p) => {
@@ -1194,7 +1199,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">{infoTipo(tipoDe(c)).icon}</div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold truncate">{c.label}</div>
-              <div className="text-[11px] text-slate-500">{c.fecha} · {c.hora}{c.horaFin ? `–${c.horaFin}` : ''} · {c.lugar}</div>
+              <div className="text-xs text-slate-500">{fechaAmigable(c.fecha, hoyLocalISO())} · {rangoHora(c.hora, c.horaFin)} · {c.lugar}</div>
               {/* Tipo editable en el lugar: select nativo (en celular abre el
                   selector del sistema, sin armar un modal propio). Los eventos
                   viejos sin tipo aparecen como Capacitación. */}

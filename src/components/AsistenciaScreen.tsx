@@ -12,6 +12,7 @@ import { agruparEventosParaSelector, hoyLocalISO, infoTipo, tipoDe } from '../ut
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
 import QrAsistenciaModal from './QrAsistenciaModal';
+import ScrollX from './ScrollX';
 
 export default function AsistenciaScreen({
   user,
@@ -239,7 +240,7 @@ export default function AsistenciaScreen({
         {/* Filtro rápido por compañía — solo si hay compañías con gente. Un toque filtra,
             otro toque sobre el mismo botón vuelve a "Todas". */}
         {conCompania > 0 && (
-          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 mb-2" role="group" aria-label="Filtrar por compañía">
+          <ScrollX className="flex gap-2 -mx-4 px-4 mb-2" role="group" aria-label="Filtrar por compañía">
             {([{ id: '', label: 'Todas' }, ...[...companias.values()].map((c) => ({ id: c.id, label: String(c.numero), c })), ...(sinCompania.sin > 0 ? [{ id: 'sin', label: 'Sin compañía' }] : []), ...(sinCompania.otros > 0 ? [{ id: 'otros', label: 'Otros roles' }] : [])] as { id: string; label: string; c?: InfoCompania }[]).map((o) => {
               const activo = filtroActivo === o.id;
               return (
@@ -257,7 +258,7 @@ export default function AsistenciaScreen({
                 </button>
               );
             })}
-          </div>
+          </ScrollX>
         )}
         <div className="flex items-center gap-2 mb-1.5">
           {([['por_marcar', 'Por marcar', conteo.porMarcar], ['presentes', 'Presentes', conteo.presentes]] as const).map(([id, label, n]) => {
