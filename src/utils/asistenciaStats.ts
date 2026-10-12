@@ -47,3 +47,11 @@ export function promedioAsistencia(porCap: AsistenciaPorCapacitacion[]): number 
   if (!conRegistros.length) return 0;
   return Math.round(conRegistros.reduce((s, c) => s + c.pct, 0) / conRegistros.length);
 }
+
+/** Mediana de asistencia sobre los mismos eventos que `promedioAsistencia` (con registros). Se muestra junto al promedio: un evento muy flojo o muy lleno mueve el promedio, la mediana no. */
+export function medianaAsistencia(porCap: AsistenciaPorCapacitacion[]): number {
+  const pcts = porCap.filter((c) => c.registros > 0).map((c) => c.pct).sort((a, b) => a - b);
+  if (!pcts.length) return 0;
+  const m = pcts.length >> 1;
+  return Math.round(pcts.length % 2 ? pcts[m] : (pcts[m - 1] + pcts[m]) / 2);
+}

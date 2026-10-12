@@ -327,12 +327,11 @@ function FamiliasTab({
             {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes asignados</div>}
 
             <div className="mt-3 pt-3 border-t border-slate-100">
-              <div className="text-[11px] text-slate-500 mb-1.5">
-                Consejeros o Logísticos sin compañía asignada. No incluye Coordinador Logístico ni Matrimonio
-                Logístico — esos son roles distintos.
-              </div>
               <input className="input" placeholder="Buscar Consejero o Logístico sin compañía…" value={search} onChange={(e) => setSearch(e.target.value)} />
               {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
+              {search.length >= 2 && results.length === 0 && (
+                <div className="text-xs text-slate-500 mt-1.5">Sin resultados. Solo aparecen Consejeros o Logísticos que aún no tienen compañía.</div>
+              )}
               {results.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 bg-primary/5 rounded-xl px-3 py-2 mt-1.5">
                   <div className="flex-1 text-sm font-semibold">
@@ -361,7 +360,6 @@ function FamiliasTab({
         <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
           <div className="text-3xl mb-2">👥</div>
           <div className="text-sm font-bold mb-1">No hay familias creadas</div>
-          <div className="text-xs text-slate-500">Crea la primera para organizar consejeros y compañerismos.</div>
         </div>
       )}
 
@@ -736,7 +734,6 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
         <span className="text-xl">🏠</span>
         <div className="flex-1">
           <div className="text-sm font-extrabold">Noches de Hogar</div>
-          <div className="text-[11px] text-slate-500">Planifica y mide asistencia interna de esta familia.</div>
         </div>
         <button onClick={() => setPlanning((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2.5 py-1.5">
           {planning ? 'Cerrar' : 'Planificar'}

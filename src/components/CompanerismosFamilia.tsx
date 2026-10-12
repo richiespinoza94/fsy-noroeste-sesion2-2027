@@ -149,7 +149,7 @@ export default function CompanerismosFamilia({
     return (
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Compañerismos</div>
-        <div className="text-xs text-slate-500">Hacen falta al menos 2 integrantes en la compañía para armar compañerismos.</div>
+        <div className="text-xs text-slate-500">Se necesitan 2 integrantes para armar compañerismos.</div>
       </div>
     );
   }
@@ -157,9 +157,7 @@ export default function CompanerismosFamilia({
   const editor = editando && (
     <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-2">
       <div className="text-sm font-bold mb-0.5">{editando.id ? 'Cambiar compañerismo' : 'Armar compañerismo'}</div>
-      <div className="text-xs text-slate-500 mb-2">
-        Toca a {MIN_PAREJA} personas (o {MAX_PAREJA} si son impares). Pueden ser del mismo sexo.
-      </div>
+      <div className="text-xs text-slate-500 mb-2">Elige {MIN_PAREJA} o {MAX_PAREJA} personas.</div>
       <div className="flex flex-wrap gap-1.5">
         {opciones.map((p) => {
           const on = sel.includes(p.id);
@@ -178,7 +176,7 @@ export default function CompanerismosFamilia({
           );
         })}
       </div>
-      {sel.length === MAX_PAREJA && <div className="text-xs text-slate-500 mt-2">Ya son {MAX_PAREJA}, el máximo. Quita a alguien para elegir a otra persona.</div>}
+      {sel.length === MAX_PAREJA && <div className="text-xs text-slate-500 mt-2">Máximo {MAX_PAREJA} personas.</div>}
       {error && <div className="text-xs text-red-500 font-semibold mt-2">❌ {error}</div>}
       <div className="flex gap-2 mt-3">
         <button
@@ -197,7 +195,7 @@ export default function CompanerismosFamilia({
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-2">
         <div className="text-xs font-bold text-slate-500 uppercase tracking-wide flex-1">
           Compañerismos ({vista.grupos.length})
         </div>
@@ -211,8 +209,6 @@ export default function CompanerismosFamilia({
           </button>
         )}
       </div>
-      <div className="text-xs text-slate-500 mb-2.5">Quiénes trabajan juntos en esta compañía. Aún no es oficial: se puede cambiar.</div>
-
       {editando && editando.id === null && editor}
 
       {vista.grupos.map((g) =>
@@ -240,10 +236,6 @@ export default function CompanerismosFamilia({
         )
       )}
       {vista.grupos.length === 0 && !editando && <div className="text-xs text-slate-500 text-center py-1.5">Aún no hay compañerismos.</div>}
-
-      {puedeEditar && !editando && vista.grupos.length > 0 && vista.sinCompanero.length === 1 && (
-        <div className="text-xs text-slate-500 mb-2">Queda 1 persona sola: para sumarla como trío, usa "Cambiar" en un compañerismo.</div>
-      )}
 
       {vista.sinCompanero.length > 0 && miembros.length > 0 && (
         <div className="mt-1">

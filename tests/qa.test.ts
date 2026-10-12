@@ -12,10 +12,11 @@ import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionPar
 import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
 import { fuzzyIncludes } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
-import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
+import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
 import { filtrarPorCompania, infoCompanias, resumenGrupo } from '../src/utils/companias';
+import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
 import { companerosDe, planearGuardado, resumenCompaneros, vistaFamilia } from '../src/utils/parejasTrabajo';
 import { deshacerPareja, guardarPareja, subscribeParejas } from '../src/services/parejasService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
@@ -1705,6 +1706,37 @@ test('187. historial — describe armar, cambiar y deshacer un compañerismo de 
   assert.ok(/^cambió un compañerismo/.test(e[1]));
   assert.ok(/^deshizo el compañerismo de trabajo de /.test(e[2]));
   assert.ok(!e.some((t) => t.includes('una persona')));
+});
+
+
+test('188. fechaAmigable — Hoy, Mañana, día y mes; año solo si cambia; cruza fin de mes y de año; fecha rara se devuelve igual', () => {
+  assert.strictEqual(fechaAmigable('2026-10-11', '2026-10-11'), 'Hoy');
+  assert.strictEqual(fechaAmigable('2026-10-12', '2026-10-11'), 'Mañana');
+  assert.strictEqual(fechaAmigable('2026-11-01', '2026-10-31'), 'Mañana');
+  assert.strictEqual(fechaAmigable('2027-01-01', '2026-12-31'), 'Mañana');
+  assert.strictEqual(fechaAmigable('2026-10-18', '2026-10-11'), 'dom 18 oct'); // 18 oct 2026 es domingo
+  assert.strictEqual(fechaAmigable('2026-10-10', '2026-10-11'), 'sáb 10 oct'); // ayer: sin "Hoy" ni "Mañana"
+  assert.strictEqual(fechaAmigable('2027-02-05', '2026-10-11'), 'vie 5 feb 2027');
+  assert.strictEqual(fechaAmigable('sin fecha', '2026-10-11'), 'sin fecha');
+});
+
+test('189. rangoHora — formato 12 h; comparte am/pm si coinciden; medianoche y mediodía', () => {
+  assert.strictEqual(rangoHora('17:00', '19:00'), '5:00–7:00 pm');
+  assert.strictEqual(rangoHora('11:00', '13:00'), '11:00 am–1:00 pm');
+  assert.strictEqual(rangoHora('17:00'), '5:00 pm');
+  assert.strictEqual(rangoHora('00:30'), '12:30 am');
+  assert.strictEqual(rangoHora('12:00', '14:00'), '12:00–2:00 pm');
+  assert.strictEqual(rangoHora(''), '');
+});
+
+test('190. medianaAsistencia — mediana de eventos con registros, par e impar, sin datos = 0, y aguanta un evento atípico que sí mueve el promedio', () => {
+  const mk = (pct: number, registros = 10) => ({ cap: capFake('m' + pct, '2027-01-01'), presentes: 0, ausentes: 0, justificados: 0, sinMarca: 0, pct, registros });
+  assert.strictEqual(medianaAsistencia([]), 0);
+  assert.strictEqual(medianaAsistencia([mk(50, 0)]), 0); // sin registros no cuenta
+  assert.strictEqual(medianaAsistencia([mk(60), mk(70), mk(20)]), 60);
+  assert.strictEqual(medianaAsistencia([mk(60), mk(71)]), 66); // (60+71)/2 = 65,5 → entero
+  const raros = [mk(90), mk(88), mk(89), mk(2)];
+  assert.ok(promedioAsistencia(raros) < 70 && medianaAsistencia(raros) >= 88); // el promedio cae por un evento; la mediana no
 });
 
 void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));

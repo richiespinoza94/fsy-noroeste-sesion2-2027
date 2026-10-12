@@ -24,8 +24,8 @@ export default function MetricCard({
       )}
       <div className="text-xl mb-1">{icon}</div>
       <div className="text-2xl font-extrabold" style={{ color }}>{cargando ? '—' : value}</div>
-      <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{label}</div>
-      {sub && !cargando && <div className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</div>}
+      <div className="text-xs text-slate-600 font-semibold mt-0.5">{label}</div>
+      {sub && !cargando && <div className="text-xs text-slate-500 mt-0.5 truncate">{sub}</div>}
     </div>
   );
 }

@@ -3,15 +3,16 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
-import { calcularAsistenciaPorCapacitacion, promedioAsistencia, soloOcurridas } from '../utils/asistenciaStats';
+import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../utils/asistenciaStats';
 import { contarPorTipo, filtrarPorTipos, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
-import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO } from '../utils/seguimiento';
+import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO, type CategoriaSeguimiento } from '../utils/seguimiento';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
 import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser, type TipoEvento } from '../types';
 import MetricCard from './MetricCard';
+import InfoSheet, { BotonInfo } from './InfoSheet';
 
 type SubTab = 'general' | 'compromiso' | 'seguimiento';
 
@@ -38,6 +39,8 @@ export default function ReportesScreen({
   // evento importa, el filtro solo sirve para acotar cuando hace falta.
   const [tiposSel, setTiposSel] = useState<TipoEvento[]>([]);
   // Cuántos de cada grupo de seguimiento se muestran (el resto, bajo "Ver más").
+  // Hoja ⓘ de Seguimiento: 'todas' desde el encabezado, o el grupo tocado (sale primero).
+  const [infoSeguimiento, setInfoSeguimiento] = useState<CategoriaSeguimiento | 'todas' | null>(null);
   const [seguimientoVisible, setSeguimientoVisible] = useState<Record<string, number>>({});
   // El detalle muestra solo los más recientes y se amplía bajo demanda — con
   // muchos eventos la lista completa obligaba a bajar y bajar.
@@ -100,6 +103,7 @@ export default function ReportesScreen({
     [segmento, capsOrdenadas, asistencia]
   );
   const avgAtt = useMemo(() => promedioAsistencia(attByCap), [attByCap]);
+  const medAtt = useMemo(() => medianaAsistencia(attByCap), [attByCap]);
   // Solo lo que ya ocurrió (o ya tiene marcas), del más reciente al más viejo.
   const ocurridas = useMemo(() => soloOcurridas(attByCap, hoyLocalISO()), [attByCap]);
   const detalle = useMemo(() => [...ocurridas].reverse(), [ocurridas]);
@@ -253,7 +257,7 @@ export default function ReportesScreen({
               value={`${avgAtt}%`}
               color="#E8863A"
               icon="📈"
-              sub={etiquetaFiltro}
+              sub={`Mediana ${medAtt}% · ${etiquetaFiltro}`}
             />
             <MetricCard
               label={tiposActivos.length === 1 ? infoTipo(tiposActivos[0]).plural : 'Eventos'}
@@ -367,17 +371,15 @@ export default function ReportesScreen({
 
       {sub === 'seguimiento' && (
         <>
-          <div className="text-[11px] text-slate-500 px-1 leading-relaxed">
-            A quién conviene escribirle por lo que pasó en los eventos más recientes ({etiquetaFiltro.toLowerCase()}).
-            Cada persona aparece en un solo grupo. Solo cuentan eventos ya terminados; una falta justificada no cuenta.
+          <div className="flex items-center gap-2 px-1">
+            <div className="flex-1 text-xs font-bold text-slate-500 uppercase tracking-wide">A quién escribirle · {etiquetaFiltro}</div>
+            <BotonInfo onClick={() => setInfoSeguimiento('todas')} etiqueta="Qué significa cada lista" />
           </div>
           {seguimiento.length === 0 && (
             <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
               <div className="text-3xl mb-2">🎉</div>
               <div className="text-sm font-bold mb-1">Nadie requiere seguimiento por ahora</div>
-              <div className="text-xs text-slate-500">
-                Con estos eventos y filtros no hay faltas que atender (o aún no termina ningún evento).
-              </div>
+              <div className="text-xs text-slate-500">Con estos filtros no hay faltas que atender.</div>
             </div>
           )}
           {CATEGORIAS_SEGUIMIENTO.map((cat) => {
@@ -390,9 +392,9 @@ export default function ReportesScreen({
                   <span className="text-xl leading-none">{cat.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-extrabold leading-tight">{cat.titulo}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{cat.regla}</div>
                   </div>
                   <span className="shrink-0 text-xs font-bold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700">{items.length}</span>
+                  <BotonInfo onClick={() => setInfoSeguimiento(cat.id)} etiqueta={`Qué significa: ${cat.titulo}`} />
                 </div>
                 <div className="divide-y divide-slate-100 mt-2">
                   {items.slice(0, visibles).map((i) => {
@@ -429,15 +431,36 @@ export default function ReportesScreen({
               </div>
             );
           })}
+          {infoSeguimiento && (
+            <InfoSheet titulo="¿Qué significa cada lista?" onClose={() => setInfoSeguimiento(null)}>
+              <div className="flex flex-col gap-3">
+                {[...CATEGORIAS_SEGUIMIENTO]
+                  .sort((a, b) => Number(b.id === infoSeguimiento) - Number(a.id === infoSeguimiento))
+                  .map((cat) => (
+                    <div key={cat.id} className="flex gap-3 rounded-xl bg-slate-50 p-3 border-l-4" style={{ borderLeftColor: cat.color }}>
+                      <span className="text-xl leading-none" aria-hidden="true">{cat.icon}</span>
+                      <div>
+                        <div className="text-sm font-extrabold">{cat.titulo}</div>
+                        <div className="text-sm text-slate-600 mt-0.5">{cat.regla}</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <div className="text-sm font-bold mt-4 mb-1">Para todas las listas</div>
+              <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1">
+                <li>Cada persona aparece en una sola lista.</li>
+                <li>Solo cuentan eventos que ya terminaron.</li>
+                <li>Una falta justificada no cuenta como falta.</li>
+                <li>Un evento solo cuenta para quien ya estaba registrado cuando ocurrió.</li>
+              </ul>
+            </InfoSheet>
+          )}
         </>
       )}
 
       {sub === 'compromiso' && (
         <>
-          <div className="text-[11px] text-slate-500 px-1 leading-relaxed">
-            Ordenado por tasa de asistencia sobre lo que cada quien realmente pudo hacer desde que se registró — no
-            por cuánto tiempo lleva en el programa, para no castigar a quien se unió después.
-          </div>
+          <div className="text-xs text-slate-500 px-1">Ordenado por asistencia desde que cada quien se registró.</div>
           <div className="flex flex-col gap-2">
             {compromiso.map(({ p, c }) => (
               <div key={p.id} className="bg-white rounded-2xl p-3.5 shadow-sm">

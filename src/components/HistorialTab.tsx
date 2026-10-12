@@ -68,7 +68,7 @@ export default function HistorialTab({
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-extrabold text-primary">🕘 Historial de cambios</div>
-          <div className="text-xs text-slate-500">Quién hizo qué y cuándo (últimos {logs.length} movimientos)</div>
+          <div className="text-xs text-slate-500">Últimos {logs.length} movimientos</div>
         </div>
         <button
           onClick={() => cargar()}

@@ -3,8 +3,9 @@ import type { Asistencia, Capacitacion, Companerismo, Familia, Participante, Ses
 import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
 import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
-import { calcularAsistenciaPorCapacitacion, promedioAsistencia } from '../utils/asistenciaStats';
-import { tipoDe } from '../utils/tiposEvento';
+import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia } from '../utils/asistenciaStats';
+import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
+import { hoyLocalISO, tipoDe } from '../utils/tiposEvento';
 import { calcularCumpleanosProximos } from '../utils/cumpleanos';
 import { calcularSeguimiento } from '../utils/seguimiento';
 import { useScrollDirection } from '../utils/useScrollDirection';
@@ -67,10 +68,10 @@ export default function HomeScreen({
   );
   // El promedio es solo de capacitaciones: un baile o una noche de hogar tienen
   // otra asistencia esperada y lo bajarían (el detalle por tipo está en Reportes).
-  const promedio = useMemo(
-    () => promedioAsistencia(porCap.filter((s) => tipoDe(s.cap) === 'capacitacion')),
-    [porCap]
-  );
+  const { promedio, mediana } = useMemo(() => {
+    const caps = porCap.filter((s) => tipoDe(s.cap) === 'capacitacion');
+    return { promedio: promedioAsistencia(caps), mediana: medianaAsistencia(caps) };
+  }, [porCap]);
 
   // La capacitación que corresponde mostrar AHORA: en curso si hay una
   // sesión ocurriendo en este momento, si no la última que ya terminó.
@@ -102,7 +103,7 @@ export default function HomeScreen({
   );
 
   return (
-    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
+    <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4 [&>*]:shrink-0" onScroll={handleScroll}>
       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20 min-h-[92px]">
         <div className="absolute -top-8 -right-10 w-36 h-36 rounded-full bg-accent/10" />
         <div className="relative">
@@ -114,7 +115,7 @@ export default function HomeScreen({
               <div className="text-lg font-extrabold">{next?.label || 'Sin capacitaciones programadas'}</div>
               {next && (
                 <div className="text-sm opacity-80 mt-1">
-                  {next.fecha} {next.hora && `· ${next.hora}${next.horaFin ? `–${next.horaFin}` : ''}`} · {next.lugar}
+                  {[fechaAmigable(next.fecha, hoyLocalISO()), next.hora && rangoHora(next.hora, next.horaFin), next.lugar].filter(Boolean).join(' · ')}
                 </div>
               )}
             </>
@@ -131,7 +132,7 @@ export default function HomeScreen({
           color="#E8863A"
           icon="📈"
           cargando={cargando}
-          sub={porCap.filter((c) => c.registros > 0).length ? 'Solo capacitaciones' : 'Aún sin capacitaciones marcadas'}
+          sub={porCap.filter((c) => c.registros > 0).length ? `Mediana ${mediana}%` : 'Aún sin capacitaciones marcadas'}
         />
         {relevante && statsRelevante ? (
           <MetricCard
@@ -166,7 +167,6 @@ export default function HomeScreen({
             <div className="text-sm font-bold">
               {primeraVezFaltaron} {primeraVezFaltaron === 1 ? 'persona vino por primera vez y faltó' : 'personas vinieron por primera vez y faltaron'} al siguiente
             </div>
-            <div className="text-xs text-slate-500">Toca para ver quiénes y escribirles</div>
           </div>
           <span className="text-slate-300">›</span>
         </button>
@@ -177,71 +177,17 @@ export default function HomeScreen({
           arriba, así que no debe competir por el primer vistazo. */}
       {!cargando && <CumpleanosCard items={cumpleanos} />}
 
-      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1 mt-1">Acciones rápidas</div>
       {!user.isAuxiliar && (
-      <a
-        href="/?page=registro"
-        target="_blank"
-        rel="noopener"
-        className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
-      >
-        <span className="text-2xl">📝</span>
-        <div className="flex-1">
-          <div className="text-sm font-bold">Registrar participante</div>
-          <div className="text-xs text-slate-500">Abre el formulario público</div>
-        </div>
-        <span className="text-slate-300">↗</span>
-      </a>
-      )}
-      {!user.isAuxiliar && (
-      <button
-        onClick={() => onNavigate('busqueda')}
-        className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
-      >
-        <span className="text-2xl">🔍</span>
-        <div className="flex-1">
-          <div className="text-sm font-bold">Buscar participante</div>
-          <div className="text-xs text-slate-500">Consulta y edita datos</div>
-        </div>
-        <span className="text-slate-300">›</span>
-      </button>
-      )}
-      {!user.isAuxiliar && (
-      <button
-        onClick={() => onNavigate('asistencia')}
-        className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
-      >
-        <span className="text-2xl">✅</span>
-        <div className="flex-1">
-          <div className="text-sm font-bold">Marcar asistencia</div>
-          <div className="text-xs text-slate-500">Registro por capacitación</div>
-        </div>
-        <span className="text-slate-300">›</span>
-      </button>
-      )}
-      <button
-        onClick={() => onNavigate('gestion')}
-        className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
-      >
-        <span className="text-2xl">⚙️</span>
-        <div className="flex-1">
-          <div className="text-sm font-bold">{user.isAuxiliar ? 'Mi familia y roles' : 'Familias, roles y capacitaciones'}</div>
-          <div className="text-xs text-slate-500">{user.isAuxiliar ? 'Gestiona a tus integrantes' : 'Gestión de la preparación'}</div>
-        </div>
-        <span className="text-slate-300">›</span>
-      </button>
-      {(user.canViewReports || user.isAuxiliar) && (
-        <button
-          onClick={() => onNavigate('reportes')}
-          className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left"
+        <a
+          href="/?page=registro"
+          target="_blank"
+          rel="noopener"
+          className="min-h-[44px] bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm text-left"
         >
-          <span className="text-2xl">📊</span>
-          <div className="flex-1">
-            <div className="text-sm font-bold">{user.isAuxiliar ? 'Reportes de mi familia' : 'Reportes'}</div>
-            <div className="text-xs text-slate-500">{user.isAuxiliar ? 'Asistencia y compromiso de tus integrantes' : 'Asistencia, estacas y roles'}</div>
-          </div>
-          <span className="text-slate-300">›</span>
-        </button>
+          <span className="text-2xl" aria-hidden="true">📝</span>
+          <span className="flex-1 text-sm font-bold">Registrar participante</span>
+          <span className="text-slate-400" aria-hidden="true">↗</span>
+        </a>
       )}
 
       <div className="text-xs text-slate-500 text-center mt-2">
