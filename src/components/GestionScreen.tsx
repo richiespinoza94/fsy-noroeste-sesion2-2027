@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
@@ -41,8 +42,9 @@ import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../serv
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
-import { nombreConInicialMaterna } from '../utils/nombreCorto';
+import { nombreConInicialMaterna, nombreCorto } from '../utils/nombreCorto';
 import { resumenCompaneros, companerosDe } from '../utils/parejasTrabajo';
+import { infoCompanias, nombreCompania } from '../utils/companias';
 
 // Reparto automático de compañías: ya no se va a usar. La sección queda oculta (no
 // borrada) por si hiciera falta de nuevo — basta poner esto en `true`.
@@ -83,7 +85,7 @@ export default function GestionScreen({
       <div className="flex bg-white border-b border-slate-200 shrink-0 overflow-x-auto">
         {(
           [
-            ['familias', '👥 Familias'],
+            ['familias', '👥 Compañías'],
             ...(REPARTO_VISIBLE && user.canRepartirFamilias ? [['reparto', '🔀 Reparto'] as const] : []),
             ['roles', '🎭 Roles'],
             // El Coordinador Auxiliar solo ve Familias (la suya) y Roles.
@@ -164,6 +166,18 @@ function FamiliasTab({
   const [detail, setDetail] = useState<Participante | null>(null);
   const parejas = useParejas();
   const porId = useMemo(() => new Map(participantes.map((p) => [p.id, p])), [participantes]);
+  const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
+  // Para "Deshacer" tras quitar a alguien: se lee la compañía ACTUAL, no la de cuando se tocó.
+  const familiasRef = useRef(familias);
+  familiasRef.current = familias;
+  const [integrantesAbierto, setIntegrantesAbierto] = useState(false);
+  useEffect(() => {
+    setIntegrantesAbierto(false);
+    setSearch('');
+    setError('');
+  }, [selId]);
+  const companiasInfo = useMemo(() => infoCompanias(visibles), [visibles]);
+  const unicaDelAuxiliar = user.isAuxiliar && visibles.length === 1;
 
   // Si el auxiliar tiene una sola familia, queda seleccionada sola.
   const soloUnaId = user.isAuxiliar && visibles.length === 1 ? visibles[0].id : '';
@@ -181,9 +195,19 @@ function FamiliasTab({
 
   async function handleDelete() {
     if (!fam) return;
-    if (!confirm(`¿Eliminar ${fam.customName || fam.nombre}? Se desvincularán ${fam.consejeros.length} integrante(s).`)) return;
+    if (!confirm(`¿Eliminar ${nombreCompania(fam)}? Se desvincularán ${fam.consejeros.length} integrante(s).`)) return;
     await deleteFamilia(fam, user.correo);
     setSelId('');
+  }
+
+  async function handleQuitar(p: Participante) {
+    if (!fam) return;
+    const f = fam;
+    await removeConsejeroFromFamilia(f, p.id, user.correo);
+    mostrarAviso(`${nombreCorto(p.nombres, p.apellidos)} salió de ${nombreCompania(f)}`, () => {
+      const actual = familiasRef.current.find((x) => x.id === f.id) ?? f;
+      if (!actual.consejeros.includes(p.id)) void addConsejeroToFamilia(actual, p, user.correo);
+    });
   }
 
   async function handleAdd(p: Participante) {
@@ -199,58 +223,60 @@ function FamiliasTab({
 
   return (
     <div className="flex flex-col gap-3">
-      {user.isAuxiliar ? (
-        visibles.length === 0 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 text-sm text-amber-800">
-            {user.participantId
-              ? 'Todavía no estás asignado a ninguna familia. Pide a un Coordinador General que te añada en el compañerismo de la familia que vas a apoyar.'
-              : 'Tu correo no coincide con ningún participante registrado, así que no podemos ubicar tu familia. Pide a un Coordinador General que revise tu cuenta.'}
-          </div>
-        ) : visibles.length === 1 ? (
-          <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3 text-sm font-bold text-primary">
-            🔒 Administrando: {fam?.customName || fam?.nombre}
-          </div>
-        ) : (
-          <select className="input" value={selId} onChange={(e) => setSelId(e.target.value)}>
-            <option value="">— Elige una de tus familias —</option>
-            {visibles.map((f) => (
-              <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
-            ))}
-          </select>
-        )
-      ) : (
-        <>
-          {/* Balance de las 4 compañías — visible siempre, no solo dentro de
-              Reparto, porque hace falta EXACTAMENTE acá: cuando alguien llega
-              después del corte automático (o se registra tarde) y hay que
-              asignarlo a mano, esto es lo que permite elegir bien a cuál
-              compañía mandarlo, no adivinar. */}
-          {familias.length > 0 && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              {familias.map((f) => (
-                <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} parejas={parejas} />
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <select className="input flex-1" value={selId} onChange={(e) => setSelId(e.target.value)}>
-              <option value="">— Elige una familia —</option>
-              {familias.map((f) => (
-                <option key={f.id} value={f.id}>{f.customName || f.nombre} ({f.consejeros.length})</option>
-              ))}
-            </select>
-            {user.canEditAll && (
-              <button onClick={() => setCreating(true)} className="bg-primary text-white text-sm font-bold rounded-xl px-4">
-                + Nueva
+      {user.isAuxiliar && visibles.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5 text-sm text-amber-800">
+          {user.participantId
+            ? 'Todavía no estás asignado a ninguna compañía. Pide a un Coordinador General que te añada como Coordinador Auxiliar de la compañía que vas a apoyar.'
+            : 'Tu correo no coincide con ningún participante registrado, así que no podemos ubicar tu compañía. Pide a un Coordinador General que revise tu cuenta.'}
+        </div>
+      )}
+
+      {/* Vista general: cada tarjeta abre su compañía. Con una compañía abierta,
+          las tarjetas dan paso a los chips de abajo (mismo patrón que Asistencia). */}
+      {!fam && visibles.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {visibles.map((f) => (
+            <FamiliaBalanceCard key={f.id} familia={f} participantes={participantes} parejas={parejas} onOpen={() => setSelId(f.id)} />
+          ))}
+        </div>
+      )}
+      {!fam && user.canEditAll && !creating && (
+        <button onClick={() => setCreating(true)} className="min-h-[44px] bg-primary text-white text-sm font-bold rounded-xl">
+          + Nueva compañía
+        </button>
+      )}
+
+      {fam && !unicaDelAuxiliar && (
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2 bg-bg flex gap-2 overflow-x-auto" role="group" aria-label="Elegir compañía">
+          {[{ id: '', label: 'Todas', nombre: 'Todas las compañías' }, ...visibles.map((f) => ({ id: f.id, label: String(companiasInfo.get(f.id)?.numero ?? ''), nombre: nombreCompania(f) }))].map((o) => {
+            const activo = (fam?.id ?? '') === o.id;
+            const info = companiasInfo.get(o.id);
+            return (
+              <button
+                key={o.id || 'todas'}
+                aria-pressed={activo}
+                aria-label={o.nombre}
+                onClick={() => setSelId(o.id)}
+                className={`shrink-0 min-h-[44px] min-w-[44px] px-3.5 rounded-full text-sm font-bold border inline-flex items-center justify-center gap-1.5 ${
+                  activo ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'
+                }`}
+              >
+                {info && <span className="w-2.5 h-2.5 rounded-full ring-1 ring-slate-400" style={{ background: info.hex }} aria-hidden="true" />}
+                {o.label}
               </button>
-            )}
-          </div>
-        </>
+            );
+          })}
+          {user.canEditAll && (
+            <button onClick={() => setCreating(true)} aria-label="Nueva compañía" className="shrink-0 min-h-[44px] min-w-[44px] px-3.5 rounded-full text-sm font-bold border border-dashed border-slate-300 text-slate-600 bg-white">
+              +
+            </button>
+          )}
+        </div>
       )}
 
       {creating && (
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
-          <div className="text-sm font-bold">Nueva familia</div>
+          <div className="text-sm font-bold">Nueva compañía</div>
           <input className="input" placeholder="Alias (opcional)" value={newName} onChange={(e) => setNewName(e.target.value)} />
           <div className="grid grid-cols-4 gap-2">
             {FAMILY_COLORS.map((c) => {
@@ -278,8 +304,10 @@ function FamiliasTab({
           <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl shrink-0" style={{ background: FAMILY_COLORS.find((c) => c.id === fam.colorId)?.hex || '#E0E0E0' }} />
             <div className="flex-1">
-              <div className="font-extrabold">{fam.customName || fam.nombre}</div>
-              {fam.customName && <div className="text-xs text-slate-500">{fam.nombre}</div>}
+              <div className="font-extrabold">{nombreCompania(fam)}</div>
+              {fam.customName && fam.customName !== nombreCompania({ customName: '', nombre: fam.nombre }) && (
+                <div className="text-xs text-slate-500">{nombreCompania({ customName: '', nombre: fam.nombre })}</div>
+              )}
             </div>
             {user.canEditAll && (
               <RenameButton
@@ -301,56 +329,64 @@ function FamiliasTab({
 
           <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Integrantes ({famMembers.length})</div>
-            {famMembers.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 mb-1.5">
-                <button onClick={() => setDetail(p)} className="flex-1 text-left text-sm font-semibold">
-                  {p.nombres} {p.apellidos}
-                  {p.asignacion !== 'Consejero' && (
-                    <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
-                      {p.asignacion || 'Sin rol'}
-                    </span>
-                  )}
-                  {companerosDe(p, parejas, porId).length > 0 && (
-                    <span className="block text-[11px] font-medium text-slate-500 mt-0.5">
-                      con {companerosDe(p, parejas, porId).map((c) => nombreConInicialMaterna(c.nombres, c.apellidos)).join(' y ')}
-                    </span>
-                  )}
-                </button>
-                <span className="text-[10px] text-slate-500">{p.estaca}</span>
-                <button onClick={() => removeConsejeroFromFamilia(fam, p.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">
-                  ✕
-                </button>
-              </div>
-            ))}
-            {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes asignados</div>}
-
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <input className="input" placeholder="Buscar Consejero o Logístico sin compañía…" value={search} onChange={(e) => setSearch(e.target.value)} />
-              {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
-              {search.length >= 2 && results.length === 0 && (
-                <div className="text-xs text-slate-500 mt-1.5">Sin resultados. Solo aparecen Consejeros o Logísticos que aún no tienen compañía.</div>
-              )}
-              {results.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 bg-primary/5 rounded-xl px-3 py-2 mt-1.5">
-                  <div className="flex-1 text-sm font-semibold">
-                    {p.nombres} {p.apellidos}
-                    {isLogistico(p) && (
-                      <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
-                        Logístico
-                      </span>
-                    )}
+          <div className="bg-white rounded-2xl shadow-sm">
+            <button
+              onClick={() => setIntegrantesAbierto((v) => !v)}
+              aria-expanded={integrantesAbierto}
+              className="w-full min-h-[48px] px-4 flex items-center gap-2 text-left"
+            >
+              <span className="flex-1 text-xs font-bold text-slate-500 uppercase tracking-wide">Integrantes ({famMembers.length})</span>
+              <span className={`text-slate-400 transition-transform ${integrantesAbierto ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
+            </button>
+            {integrantesAbierto && (
+              <div className="px-4 pb-4">
+                <input className="input" placeholder="Añadir integrante…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
+                {search.length >= 2 && results.length === 0 && (
+                  <div className="text-xs text-slate-500 mt-1.5">Sin resultados. Solo aparecen Consejeros o Logísticos que aún no tienen compañía.</div>
+                )}
+                {results.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 bg-primary/5 rounded-xl px-3 py-2 mt-1.5">
+                    <div className="flex-1 min-w-0 text-sm font-semibold">
+                      {nombreConInicialMaterna(p.nombres, p.apellidos)}
+                      {isLogistico(p) && (
+                        <span className="ml-1.5 text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">Logístico</span>
+                      )}
+                    </div>
+                    <button onClick={() => handleAdd(p)} className="min-h-[44px] px-3 bg-primary text-white text-xs font-bold rounded-lg">+ Añadir</button>
                   </div>
-                  <button onClick={() => handleAdd(p)} className="bg-primary text-white text-xs font-bold rounded-lg px-2.5 py-1.5">+ Añadir</button>
+                ))}
+
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {famMembers.map((p) => {
+                    const con = companerosDe(p, parejas, porId);
+                    return (
+                      <div key={p.id} className="flex items-center gap-1 bg-slate-50 rounded-xl pl-3">
+                        <button onClick={() => setDetail(p)} className="flex-1 min-w-0 text-left py-2">
+                          <span className="block text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</span>
+                          <span className="block text-xs text-slate-500 truncate">
+                            {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca, con.length ? `con ${con.map((c) => nombreConInicialMaterna(c.nombres, c.apellidos)).join(' y ')}` : ''].filter(Boolean).join(' · ')}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleQuitar(p)}
+                          aria-label={`Quitar a ${nombreCorto(p.nombres, p.apellidos)} de la compañía`}
+                          className="shrink-0 w-11 h-11 flex items-center justify-center text-red-500 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes todavía</div>}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {user.canEditAll && (
             <button onClick={handleDelete} className="border-2 border-red-200 text-red-600 font-bold rounded-xl py-2.5 text-sm">
-              🗑️ Eliminar familia
+              🗑️ Eliminar compañía
             </button>
           )}
         </>
@@ -359,9 +395,11 @@ function FamiliasTab({
       {familias.length === 0 && !creating && !user.isAuxiliar && (
         <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
           <div className="text-3xl mb-2">👥</div>
-          <div className="text-sm font-bold mb-1">No hay familias creadas</div>
+          <div className="text-sm font-bold mb-1">No hay compañías creadas</div>
         </div>
       )}
+
+      {avisoNodo}
 
       {detail && (
         <div className="fixed inset-0 bg-black/40 flex items-end z-50" onClick={(e) => e.target === e.currentTarget && setDetail(null)}>
@@ -606,7 +644,7 @@ function RepartoTab({
         >
           Calcular reparto
         </button>
-        {!familias.length && <div className="text-xs text-amber-700">Crea al menos una compañía en la pestaña Familias primero.</div>}
+        {!familias.length && <div className="text-xs text-amber-700">Crea al menos una compañía en la pestaña Compañías primero.</div>}
       </div>
 
       {preview ? (
@@ -673,7 +711,7 @@ function FamiliaStatsCard({
 }) {
   return (
     <div className="bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px]" style={{ borderTopColor: statColorHex(familia) }}>
-      <div className="font-extrabold text-sm mb-1">{familia.customName || familia.nombre}</div>
+      <div className="font-extrabold text-sm mb-1">{nombreCompania(familia)}</div>
       <div className="text-[11px] text-emerald-600 font-bold mb-2">+{nuevos} nuevo(s) propuesto(s)</div>
       <div className="text-xs text-slate-600 space-y-0.5">
         <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
@@ -687,14 +725,28 @@ function FamiliaStatsCard({
   );
 }
 
-function FamiliaBalanceCard({ familia, participantes, parejas }: { familia: Familia; participantes: Participante[]; parejas?: ParejaTrabajo[] }) {
+function FamiliaBalanceCard({
+  familia,
+  participantes,
+  parejas,
+  onOpen,
+}: {
+  familia: Familia;
+  participantes: Participante[];
+  parejas?: ParejaTrabajo[];
+  onOpen?: () => void;
+}) {
   const miembros = participantes.filter((p) => familia.consejeros.includes(p.id));
   const cands: CandidatoReparto[] = miembros.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
   const stats = calcularEstadisticas(cands);
   const comp = parejas ? resumenCompaneros(familia, parejas, miembros) : null;
-  return (
-    <div className="bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px]" style={{ borderTopColor: statColorHex(familia) }}>
-      <div className="font-extrabold text-sm mb-2">{familia.customName || familia.nombre}</div>
+  const clases = 'bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px] text-left w-full';
+  const cuerpo = (
+    <>
+      <div className="flex items-center mb-2">
+        <span className="flex-1 font-extrabold text-sm">{nombreCompania(familia)}</span>
+        {onOpen && <span className="text-slate-400" aria-hidden="true">›</span>}
+      </div>
       <div className="text-xs text-slate-600 space-y-0.5">
         <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
         {comp && miembros.length > 0 && (
@@ -703,11 +755,20 @@ function FamiliaBalanceCard({ familia, participantes, parejas }: { familia: Fami
             {comp.sinCompanero > 0 && <span className="text-amber-700 font-semibold"> · {comp.sinCompanero} sin compañero</span>}
           </div>
         )}
-        <div className="pt-1 text-[10px] text-slate-500">
+        <div className="pt-1 text-slate-500">
           Ventanilla {stats.porEstaca.Ventanilla} · P. Piedra {stats.porEstaca['Puente Piedra']} · Pro Lima{' '}
           {stats.porEstaca['Pro Lima']} · Otros {stats.porEstaca.Otros}
         </div>
       </div>
+    </>
+  );
+  return onOpen ? (
+    <button onClick={onOpen} aria-label={`Abrir ${nombreCompania(familia)}`} className={clases} style={{ borderTopColor: statColorHex(familia) }}>
+      {cuerpo}
+    </button>
+  ) : (
+    <div className={clases} style={{ borderTopColor: statColorHex(familia) }}>
+      {cuerpo}
     </div>
   );
 }
@@ -729,7 +790,7 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
   }
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-accent">
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-2.5">
         <span className="text-xl">🏠</span>
         <div className="flex-1">
@@ -802,6 +863,7 @@ function CompanerismoCard({
   const [sel1, setSel1] = useState<Participante | null>(null);
   const [sel2, setSel2] = useState<Participante | null>(null);
   const [error, setError] = useState('');
+  const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
 
   async function confirm() {
     try {
@@ -831,16 +893,28 @@ function CompanerismoCard({
         return (
           <div key={cp.id} className="flex items-center gap-2 bg-slate-50 border-l-[3px] border-primary rounded-xl px-3 py-2 mb-1.5">
             <div className="flex-1 text-xs">
-              <div>🤝 P1: {p1 ? `${p1.nombres} ${p1.apellidos}` : 'Sin asignar'}</div>
-              <div>🤝 P2: {p2 ? `${p2.nombres} ${p2.apellidos}` : 'Sin asignar'}</div>
+              <div>🤝 {p1 ? nombreCorto(p1.nombres, p1.apellidos) : 'Sin asignar'}</div>
+              <div>🤝 {p2 ? nombreCorto(p2.nombres, p2.apellidos) : 'Sin asignar'}</div>
             </div>
             {!readOnly && (
-              <button onClick={() => removeCompanerismo(cp.id, user.correo)} className="text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1">✕</button>
+              <button
+                aria-label="Quitar coordinadores auxiliares"
+                onClick={async () => {
+                  await removeCompanerismo(cp.id, user.correo);
+                  mostrarAviso('Coordinadores auxiliares quitados', () => {
+                    void addCompanerismo(fam.id, p1 ?? null, p2 ?? null, user.correo);
+                  });
+                }}
+                className="min-h-[44px] px-3 text-red-600 text-xs font-bold bg-red-50 rounded-lg"
+              >
+                Quitar
+              </button>
             )}
           </div>
         );
       })}
       {cps.length === 0 && !adding && <div className="text-xs text-slate-500 text-center py-1">Sin coordinadores auxiliares asignados</div>}
+      {avisoNodo}
 
       {adding && (
         <div className="pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
@@ -1205,7 +1279,7 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
             <div className={`text-[11px] font-semibold rounded-xl px-3 py-2 ${participanteConEseCorreo ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
               {participanteConEseCorreo
                 ? `✅ Coincide con ${participanteConEseCorreo.nombres} ${participanteConEseCorreo.apellidos} (${participanteConEseCorreo.asignacion || 'sin rol'}). Recuerda añadirlo en el compañerismo de su familia.`
-                : '⚠️ Ningún participante se registró con este correo: no podrá ver su familia hasta que coincida.'}
+                : '⚠️ Ningún participante se registró con este correo: no podrá ver su compañía hasta que coincida.'}
             </div>
           )}
           {rol === 'Coordinador Auxiliar' && (

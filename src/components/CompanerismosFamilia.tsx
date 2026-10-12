@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useAvisoDeshacer } from './AvisoDeshacer';
 import { deshacerPareja, guardarPareja, subscribeParejas } from '../services/parejasService';
 import { nombreConInicialMaterna } from '../utils/nombreCorto';
 import { MAX_PAREJA, MIN_PAREJA, companerosDe, vistaFamilia, type GrupoVista } from '../utils/parejasTrabajo';
@@ -37,13 +38,8 @@ const Persona = memo(function Persona({ p }: { p: Participante }) {
   );
 });
 
-interface Aviso {
-  texto: string;
-  deshacer: () => void;
-}
-
 /**
- * Compañerismos de trabajo dentro de una familia (2 o 3 integrantes que
+ * Compañerismos de trabajo dentro de una compañía (2 o 3 integrantes que
  * trabajan juntos). Los arma el auxiliar de la familia o un coordinador
  * general; el resto solo los ve. No son oficiales: se cambian cuando haga falta.
  */
@@ -66,8 +62,7 @@ export default function CompanerismosFamilia({
   const [sel, setSel] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
-  const temporizador = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
 
   // Al cambiar de familia se cierra todo lo abierto.
   useEffect(() => {
@@ -75,13 +70,6 @@ export default function CompanerismosFamilia({
     setSel([]);
     setError('');
   }, [fam.id]);
-  useEffect(() => () => clearTimeout(temporizador.current), []);
-
-  const mostrarAviso = useCallback((a: Aviso) => {
-    clearTimeout(temporizador.current);
-    setAviso(a);
-    temporizador.current = setTimeout(() => setAviso(null), 5000);
-  }, []);
 
   const parejasRef = useRef(parejas);
   parejasRef.current = parejas;
@@ -108,14 +96,10 @@ export default function CompanerismosFamilia({
     try {
       const nueva = await guardarPareja(fam, editando.id, sel, parejasRef.current, correo);
       cerrar();
-      mostrarAviso({
-        texto: editando.id ? 'Compañerismo cambiado' : 'Compañerismo armado',
-        deshacer: () => {
-          setAviso(null);
-          const previo = grupoPrevio ? grupoPrevio.personas.map((p) => p.id) : null;
-          if (previo) void guardarPareja(fam, nueva.id, previo, parejasRef.current, correo);
-          else void deshacerPareja(nueva, correo);
-        },
+      mostrarAviso(editando.id ? 'Compañerismo cambiado' : 'Compañerismo armado', () => {
+        const previo = grupoPrevio ? grupoPrevio.personas.map((p) => p.id) : null;
+        if (previo) void guardarPareja(fam, nueva.id, previo, parejasRef.current, correo);
+        else void deshacerPareja(nueva, correo);
       });
     } catch (e) {
       setError((e as Error).message);
@@ -127,12 +111,8 @@ export default function CompanerismosFamilia({
   function quitar(grupo: GrupoVista) {
     const previo: ParejaTrabajo = { id: grupo.id, familiaId: fam.id, miembros: grupo.personas.map((p) => p.id) };
     void deshacerPareja(previo, correo);
-    mostrarAviso({
-      texto: 'Compañerismo separado',
-      deshacer: () => {
-        setAviso(null);
-        void guardarPareja(fam, previo.id, previo.miembros, parejasRef.current.filter((x) => x.id !== previo.id), correo);
-      },
+    mostrarAviso('Compañerismo separado', () => {
+      void guardarPareja(fam, previo.id, previo.miembros, parejasRef.current.filter((x) => x.id !== previo.id), correo);
     });
   }
 
@@ -251,18 +231,7 @@ export default function CompanerismosFamilia({
         </div>
       )}
 
-      {aviso && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed left-4 right-4 bottom-20 z-30 mx-auto max-w-md bg-slate-900 text-white rounded-xl pl-4 pr-1 flex items-center gap-2 shadow-lg"
-        >
-          <span className="flex-1 text-sm py-2.5 truncate">{aviso.texto}</span>
-          <button onClick={aviso.deshacer} className="min-h-[44px] px-4 text-sm font-extrabold text-accent">
-            Deshacer
-          </button>
-        </div>
-      )}
+      {avisoNodo}
     </div>
   );
 }

@@ -39,7 +39,7 @@ export async function guardarPareja(
   adminCorreo: string
 ): Promise<ParejaTrabajo> {
   const fuera = miembros.filter((m) => !familia.consejeros.includes(m));
-  if (fuera.length) throw new Error('Solo pueden emparejarse integrantes de esta familia.');
+  if (fuera.length) throw new Error('Solo pueden emparejarse integrantes de esta compañía.');
   const plan = planearGuardado({ familiaId: familia.id, id, miembros, existentes, nuevoId: crypto.randomUUID() });
   if (!db) {
     const quitar = new Set([plan.guardar.id, ...plan.borrar, ...plan.actualizar.map((a) => a.id)]);

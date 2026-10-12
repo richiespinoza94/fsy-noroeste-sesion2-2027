@@ -144,7 +144,7 @@ export async function deleteFamilia(familia: Familia, adminCorreo: string) {
  */
 export async function addConsejeroToFamilia(familia: Familia, p: Participante, adminCorreo: string) {
   if (!isConsejero(p) && !isLogistico(p)) {
-    throw new Error('Solo Consejeros o Logísticos pueden integrar una familia.');
+    throw new Error('Solo Consejeros o Logísticos pueden integrar una compañía.');
   }
   const updated = { ...familia, consejeros: [...familia.consejeros, p.id] };
   await saveFamilia(updated);

@@ -15,7 +15,7 @@ import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
-import { filtrarPorCompania, infoCompanias, resumenGrupo } from '../src/utils/companias';
+import { filtrarPorCompania, infoCompanias, nombreCompania, resumenGrupo } from '../src/utils/companias';
 import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
 import { companerosDe, planearGuardado, resumenCompaneros, vistaFamilia } from '../src/utils/parejasTrabajo';
 import { deshacerPareja, guardarPareja, subscribeParejas } from '../src/services/parejasService';
@@ -1401,7 +1401,7 @@ test('159. historial — marcar asistencia dice quién, a quién, qué y en qué
 test('160. historial — editar persona muestra "antes → después" y traduce la familia a su nombre', () => {
   const e = describirEntrada(logH('ACTUALIZAR_PARTICIPANTE', { asignacion: 'Logístico', familiaId: 'f1', _antes: { asignacion: 'Consejero', familiaId: '' } }, 'juan'), CTX_H);
   assert.ok(e.texto.includes('rol: Consejero → Logístico'));
-  assert.ok(e.texto.includes('familia: sin familia → Leones'));
+  assert.ok(e.texto.includes('familia: sin compañía → Leones'));
   assert.ok(!e.texto.includes('_antes'));
 });
 
@@ -1535,7 +1535,7 @@ test('174. historial — describirEntradas indexa una vez y da el mismo resultad
   ];
   const lote = describirEntradas(logs, CTX_H);
   assert.deepStrictEqual(lote.map((e) => e.texto), logs.map((l) => describirEntrada(l, CTX_H).texto));
-  assert.ok(lote[1].texto.includes('Familia 2')); // sin customName cae al nombre
+  assert.ok(lote[1].texto.includes('Compañía 2')); // sin customName cae al nombre
 });
 
 // ── Asistencia: selector agrupado y deshacer ────────────────────────────
@@ -1585,7 +1585,7 @@ test('178. infoCompanias — número desde el nombre, posición si no tiene núm
   assert.strictEqual(m.get('fb')?.numero, 2);
   assert.strictEqual(m.get('fc')?.numero, 3); // "Equipo especial" no trae número: usa su posición
   assert.strictEqual(m.get('fa')?.nombre, 'Compañía 1');
-  assert.strictEqual(m.get('fb')?.nombre, 'Familia 2'); // sin nombre personalizado
+  assert.strictEqual(m.get('fb')?.nombre, 'Compañía 2'); // sin nombre personalizado
   assert.strictEqual(m.get('fc')?.hex, '#94A3B8'); // color desconocido → gris
   assert.strictEqual(m.get('inexistente'), undefined);
 });
@@ -1681,7 +1681,7 @@ test('186. guardarPareja / deshacerPareja (modo local) — arma, cambia y deshac
   const baja = subscribeParejas((x) => (ultimo = x));
   const a = await guardarPareja(FAM_P, null, ['u1', 'u2'], ultimo, 'a@x.com');
   assert.strictEqual(ultimo.length, 1);
-  await assert.rejects(() => guardarPareja(FAM_P, null, ['u1', 'x9'], ultimo, 'a@x.com'), /integrantes de esta familia/);
+  await assert.rejects(() => guardarPareja(FAM_P, null, ['u1', 'x9'], ultimo, 'a@x.com'), /integrantes de esta compañía/);
   // u2 pasa a otro grupo con u3: el grupo viejo (u1 solo) se deshace
   await guardarPareja(FAM_P, null, ['u2', 'u3'], ultimo, 'a@x.com');
   assert.strictEqual(ultimo.length, 1);
@@ -1702,7 +1702,7 @@ test('187. historial — describe armar, cambiar y deshacer un compañerismo de 
   assert.strictEqual(grupoDeAccion('ARMAR_COMPANERISMO_FAMILIA'), 'familias');
   assert.strictEqual(grupoDeAccion('DESHACER_COMPANERISMO_FAMILIA'), 'familias');
   const e = describirEntradas([mk('ARMAR_COMPANERISMO_FAMILIA'), mk('CAMBIAR_COMPANERISMO_FAMILIA'), mk('DESHACER_COMPANERISMO_FAMILIA')], ctx).map((x) => x.texto);
-  assert.ok(/armó un compañerismo de trabajo en Familia 1: /.test(e[0]));
+  assert.ok(/armó un compañerismo de trabajo en Compañía 1: /.test(e[0]));
   assert.ok(/^cambió un compañerismo/.test(e[1]));
   assert.ok(/^deshizo el compañerismo de trabajo de /.test(e[2]));
   assert.ok(!e.some((t) => t.includes('una persona')));
@@ -1740,3 +1740,10 @@ test('190. medianaAsistencia — mediana de eventos con registros, par e impar, 
 });
 
 void Promise.all(pendientes).then(() => console.log(`\n${passed} pruebas pasaron.`));
+
+test('191. nombreCompania — alias manda; sin alias "Familia N" se muestra como "Compañía N"', () => {
+  const base = { id: 'x', colorId: 'a', consejeros: [] };
+  assert.strictEqual(nombreCompania({ ...base, nombre: 'Familia 3', customName: '' } as Familia), 'Compañía 3');
+  assert.strictEqual(nombreCompania({ ...base, nombre: 'Familia 3', customName: 'Leones' } as Familia), 'Leones');
+  assert.strictEqual(nombreCompania({ ...base, nombre: 'Equipo especial', customName: '' } as Familia), 'Equipo especial');
+});

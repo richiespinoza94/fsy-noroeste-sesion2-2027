@@ -13,6 +13,11 @@ export interface InfoCompania {
   hex: string;
 }
 
+/** Nombre para mostrar: el alias si lo tiene; si no, "Familia 2" (nombre guardado) se ve como "Compañía 2". */
+export function nombreCompania(f: Pick<Familia, 'customName' | 'nombre'>): string {
+  return f.customName || f.nombre.replace(/^Familia\b/i, 'Compañía');
+}
+
 export function infoCompanias(familias: Familia[]): Map<string, InfoCompania> {
   const m = new Map<string, InfoCompania>();
   familias.forEach((f, i) => {
@@ -21,7 +26,7 @@ export function infoCompanias(familias: Familia[]): Map<string, InfoCompania> {
     m.set(f.id, {
       id: f.id,
       numero,
-      nombre: f.customName || f.nombre,
+      nombre: nombreCompania(f),
       hex: FAMILY_COLORS.find((c) => c.id === f.colorId)?.hex ?? '#94A3B8',
     });
   });

@@ -6,7 +6,7 @@ import { ejecutarReparto } from '../services/repartoFamiliasService';
 import { calcularCandidatosPorRol, calcularEstadoFamilia, calcularOActualizarPlanEnVivo, type CandidatoReparto } from '../utils/repartoFamilias';
 import { FAMILY_COLORS } from '../data/colors';
 import type { Asistencia, Capacitacion, EstadoAsistencia, Familia, Participante, SessionUser } from '../types';
-import { filtrarPorCompania, infoCompanias, resumenGrupo, type InfoCompania } from '../utils/companias';
+import { filtrarPorCompania, infoCompanias, nombreCompania, resumenGrupo, type InfoCompania } from '../utils/companias';
 import { agruparEventosParaSelector, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
@@ -374,7 +374,7 @@ const FilaAsistencia = memo(function FilaAsistencia({
             <>
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: FAMILY_COLORS.find((c) => c.id === sugerida.colorId)?.hex || '#94A3B8' }} />
               <span className="text-[11px] text-slate-500 flex-1 truncate">
-                Sin compañía — sugerida: <strong>{sugerida.customName || sugerida.nombre}</strong>
+                Sin compañía — sugerida: <strong>{nombreCompania(sugerida)}</strong>
               </span>
             </>
           ) : (

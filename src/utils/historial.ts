@@ -1,4 +1,5 @@
 import type { AuditLog, Capacitacion, Familia, Participante } from '../types';
+import { nombreCompania } from './companias';
 import { nombreCorto } from './nombreCorto';
 import { normalizeEmail } from './validation';
 
@@ -13,7 +14,7 @@ export const GRUPOS_HISTORIAL: { id: GrupoHistorial | 'cambios'; label: string }
   { id: 'cambios', label: 'Cambios' }, // todo menos accesos (ruido)
   { id: 'personas', label: 'Personas' },
   { id: 'asistencia', label: 'Asistencia' },
-  { id: 'familias', label: 'Familias' },
+  { id: 'familias', label: 'Compañías' },
   { id: 'eventos', label: 'Eventos' },
   { id: 'usuarios', label: 'Usuarios' },
   { id: 'accesos', label: 'Accesos' },
@@ -90,7 +91,7 @@ export function indexarContexto(ctx: ContextoHistorial): IndiceHistorial {
   return {
     personaPorId,
     personaPorCorreo,
-    familiaPorId: new Map(ctx.familias.map((f) => [f.id, f.customName || f.nombre])),
+    familiaPorId: new Map(ctx.familias.map((f) => [f.id, nombreCompania(f)])),
     eventoPorId: new Map(ctx.capacitaciones.map((c) => [c.id, c.label])),
   };
 }
@@ -107,7 +108,7 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
   const grupo = grupoDeAccion(log.accion);
 
   const persona = (id: unknown) => idx.personaPorId.get(s(id)) ?? 'una persona';
-  const familia = (id: unknown) => (s(id) ? idx.familiaPorId.get(s(id)) ?? 'una familia' : 'sin familia');
+  const familia = (id: unknown) => (s(id) ? idx.familiaPorId.get(s(id)) ?? 'una compañía' : 'sin compañía');
   const nombresDe = (ids: unknown) => (Array.isArray(ids) ? ids.map(persona).join(', ') : 'personas');
   const evento = (id: unknown) => idx.eventoPorId.get(s(id)) ?? 'un evento';
   const valor = (campo: string, v: unknown) => (campo === 'familiaId' ? familia(v) : s(v) || '—');
@@ -149,13 +150,13 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
       texto = `quitó a ${sujeto} de ${familia(d.familiaId)}`;
       break;
     case 'CREAR_FAMILIA':
-      texto = `creó ${s(d.customName) || s(d.nombre) || 'una familia'}`;
+      texto = `creó ${s(d.customName) || s(d.nombre).replace(/^Familia\b/i, 'Compañía') || 'una compañía'}`;
       break;
     case 'ACTUALIZAR_FAMILIA':
       texto = `editó ${familia(d.familiaId)}`;
       break;
     case 'ELIMINAR_FAMILIA':
-      texto = `eliminó ${s(d.nombre) || 'una familia'}`;
+      texto = `eliminó ${s(d.nombre).replace(/^Familia\b/i, 'Compañía') || 'una compañía'}`;
       break;
     case 'AÑADIR_COMPANERISMO':
       texto = `armó un compañerismo en ${familia(d.familiaId)}: ${[d.p1Id, d.p2Id].filter((x) => s(x)).map(persona).join(' y ')}`;
