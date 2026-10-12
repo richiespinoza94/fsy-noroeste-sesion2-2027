@@ -95,3 +95,32 @@ npx tsx tests/qa.test.ts     # deben pasar todas las pruebas
 ```
 
 Si se toca `firestore.rules`: hay que volver a pegarlo manualmente en Firebase Console → Firestore Database → Reglas → Publicar (no se sincroniza solo al desplegar a Vercel — misma lección que en CONFEJAS).
+
+## 8. Flujo de trabajo con Claude (leer antes de tocar código)
+
+- **Entrega por parches.** Claude trabaja en un clon de verificación y entrega `NNNN-nombre.patch`. Ricardo los aplica en Windows (`D:\Documentos\GitHub\FSY 2027\gestion-fsy-2027`, PowerShell): `git apply --ignore-whitespace <parche>`, `git add -A`, `git commit`, `git push`. Claude **no** hace push. Push a `master` despliega solo en Vercel (https://gestion-fsy-2027.vercel.app).
+- **Antes de entregar:** `npx tsc -b`, `npx tsx tests/qa.test.ts`, `npx vite build`; respetar el fin de línea (EOL) que tiene `HEAD` en cada archivo; comprobar que el parche aplica en LF y en CRLF (`--ignore-whitespace`).
+- **Firestore:** proyecto `confejas-2026`, base `fsy-2027`. Toda colección nueva necesita su `match` en `firestore.rules` **y** publicarse a mano en la consola (base `fsy-2027`), o aparece "missing or insufficient permissions". Ej.: `parejasTrabajo`.
+- **Fechas:** nunca `new Date('YYYY-MM-DD')` (desfase de zona horaria). Usar `src/utils/fechaAmigable.ts`.
+- **Contenedores flex-col con scroll** encogen a sus hijos: usar `shrink-0`.
+
+## 9. Convenciones de producto y UX
+
+- **Término único en la interfaz: "Compañía(s)"**, nunca "Familia". En Firestore se sigue guardando `Familia N` (hay regex que dependen de eso); en pantalla se usa `nombreCompania(f)` (`src/utils/companias.ts`).
+- **Nombres cortos:** Primer nombre + Apellido paterno + inicial del materno (`src/utils/nombreCorto.ts`).
+- **Siempre mediana junto al promedio** en las métricas.
+- Toques de 44 px como mínimo, texto de 12 px como mínimo, "Deshacer" (`useAvisoDeshacer`) en vez de `confirm()` en acciones de un toque, explicaciones en una hoja ⓘ (`InfoSheet`) y no como texto fijo.
+- **Compañerismos de trabajo** (`parejasTrabajo`): parejas o tríos dentro de una compañía, solo Consejeros y Logísticos, se permite "sin compañero" y se pueden modificar (no son oficiales). Distintos de los Coordinadores Auxiliares (`Companerismo`).
+- Marca: azul `#0E2954`, acento `#f5c038`, fondo `#eef1f7`.
+
+## 10. Estado y pendientes
+
+Aplicados: 0054–0056 (compañerismos de trabajo, Inicio limpio, hoja ⓘ en Seguimiento), 0057 (Gestión → Compañías).
+
+Pendientes, en orden:
+- **0058 Sugerir parejas:** propuesta determinista (hombre+mujer, sobrantes del mismo sexo entre sí, si el total es impar un solo trío, preferir distinta estaca), vista previa, "Aplicar / Otra propuesta / Cancelar", un solo lote con deshacer.
+- **0059 Asistencia:** chips "Por marcar / Presentes"; "Sin compañía" solo para Consejero/Logístico y "Otros roles" aparte; fecha siempre visible (sin salto de layout); botón "Justif.".
+- **0060 Búsqueda:** al escribir una estaca no busca ni sugiere estacas (bug); se mantiene el mínimo de 3 letras; chip "Audiovisual" en vez de "AV".
+- **0061 Reportes:** gráfico legible y sin barra oculta, nombres completos, contadores uniformes, "Por rol" ordenado de mayor a menor.
+- **0062 Transversal:** ocultar barras de scroll horizontales con degradado en los bordes (incluida la tira de pestañas de Gestión, donde "Historial" queda oculta), fechas ISO → `fechaAmigable`, ícono PWA (círculo verde "fsy 2027 Lima Noroeste") y `manifest`.
+- Por auditar: Roles, Capacitaciones, Usuarios, Compromiso, Seguimiento, Login.
