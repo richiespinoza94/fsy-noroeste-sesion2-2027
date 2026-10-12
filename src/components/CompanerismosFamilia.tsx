@@ -14,8 +14,9 @@ export function useParejas(): ParejaTrabajo[] {
 function GeneroTag({ genero }: { genero: Participante['genero'] }) {
   return (
     <span
+      role="img"
       aria-label={genero === 'H' ? 'Hombre' : 'Mujer'}
-      className={`shrink-0 w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center ${
+      className={`shrink-0 w-5 h-5 rounded-full text-[11px] font-extrabold flex items-center justify-center ${
         genero === 'H' ? 'bg-sky-100 text-sky-700' : 'bg-pink-100 text-pink-700'
       }`}
     >
@@ -30,7 +31,7 @@ const Persona = memo(function Persona({ p }: { p: Participante }) {
       <GeneroTag genero={p.genero} />
       <span className="text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</span>
       {p.asignacion === 'Logístico' && (
-        <span className="text-[11px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 shrink-0">Logístico</span>
+        <span className="text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 shrink-0">Logístico</span>
       )}
     </div>
   );
@@ -127,7 +128,7 @@ export default function CompanerismosFamilia({
     const previo: ParejaTrabajo = { id: grupo.id, familiaId: fam.id, miembros: grupo.personas.map((p) => p.id) };
     void deshacerPareja(previo, correo);
     mostrarAviso({
-      texto: 'Compañerismo deshecho',
+      texto: 'Compañerismo separado',
       deshacer: () => {
         setAviso(null);
         void guardarPareja(fam, previo.id, previo.miembros, parejasRef.current.filter((x) => x.id !== previo.id), correo);
@@ -147,16 +148,57 @@ export default function CompanerismosFamilia({
   if (miembros.length < MIN_PAREJA && vista.grupos.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Compañerismos</div>
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Compañerismos</div>
         <div className="text-xs text-slate-500">Hacen falta al menos 2 integrantes en la compañía para armar compañerismos.</div>
       </div>
     );
   }
 
+  const editor = editando && (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-2">
+      <div className="text-sm font-bold mb-0.5">{editando.id ? 'Cambiar compañerismo' : 'Armar compañerismo'}</div>
+      <div className="text-xs text-slate-500 mb-2">
+        Toca a {MIN_PAREJA} personas (o {MAX_PAREJA} si son impares). Pueden ser del mismo sexo.
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {opciones.map((p) => {
+          const on = sel.includes(p.id);
+          return (
+            <button
+              key={p.id}
+              aria-pressed={on}
+              onClick={() => alternar(p.id)}
+              className={`min-h-[44px] px-3 rounded-xl text-sm font-semibold border-2 flex items-center gap-2 ${
+                on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'
+              }`}
+            >
+              <GeneroTag genero={p.genero} />
+              {nombreConInicialMaterna(p.nombres, p.apellidos)}
+            </button>
+          );
+        })}
+      </div>
+      {sel.length === MAX_PAREJA && <div className="text-xs text-slate-500 mt-2">Ya son {MAX_PAREJA}, el máximo. Quita a alguien para elegir a otra persona.</div>}
+      {error && <div className="text-xs text-red-500 font-semibold mt-2">❌ {error}</div>}
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={guardar}
+          disabled={sel.length < MIN_PAREJA || guardando}
+          className="flex-1 min-h-[44px] bg-primary text-white font-bold rounded-xl text-sm disabled:opacity-40"
+        >
+          Guardar ({sel.length})
+        </button>
+        <button onClick={cerrar} className="flex-1 min-h-[44px] bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex-1">
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-wide flex-1">
           Compañerismos ({vista.grupos.length})
         </div>
         {puedeEditar && !editando && (
@@ -169,75 +211,43 @@ export default function CompanerismosFamilia({
           </button>
         )}
       </div>
-      <div className="text-[11px] text-slate-500 mb-2.5">Quiénes trabajan juntos en esta compañía. Aún no es oficial: se puede cambiar.</div>
+      <div className="text-xs text-slate-500 mb-2.5">Quiénes trabajan juntos en esta compañía. Aún no es oficial: se puede cambiar.</div>
 
-      {vista.grupos.map((g) => (
-        <div key={g.id} className="rounded-xl bg-slate-50 border-l-[3px] border-primary px-3 py-2 mb-2">
-          <div className="flex items-start gap-2">
-            <div className="flex-1 min-w-0 flex flex-col gap-1">
-              {g.personas.map((p) => (
-                <Persona key={p.id} p={p} />
-              ))}
-              {g.personas.length === 3 && <div className="text-[11px] font-bold text-slate-500">Trío</div>}
-            </div>
-            {puedeEditar && !editando && (
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => abrir(g)} className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg">
-                  Cambiar
-                </button>
-                <button onClick={() => quitar(g)} className="min-h-[44px] px-3 text-xs font-bold text-red-600 bg-red-50 rounded-lg">
-                  Deshacer
-                </button>
-              </div>
-            )}
+      {editando && editando.id === null && editor}
+
+      {vista.grupos.map((g) =>
+        editando?.id === g.id ? (
+          <div key={g.id}>{editor}</div>
+        ) : (
+        <div key={g.id} className="rounded-xl bg-slate-50 border-l-[3px] border-primary px-3 py-2.5 mb-2">
+          <div className="flex flex-col gap-1.5">
+            {g.personas.map((p) => (
+              <Persona key={p.id} p={p} />
+            ))}
+            {g.personas.length === 3 && <div className="text-xs font-bold text-slate-500">Trío</div>}
           </div>
+          {puedeEditar && !editando && (
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={() => abrir(g)} className="flex-1 min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg">
+                Cambiar
+              </button>
+              <button onClick={() => quitar(g)} className="flex-1 min-h-[44px] text-xs font-bold text-red-600 bg-red-50 rounded-lg">
+                Separar
+              </button>
+            </div>
+          )}
         </div>
-      ))}
+        )
+      )}
       {vista.grupos.length === 0 && !editando && <div className="text-xs text-slate-500 text-center py-1.5">Aún no hay compañerismos.</div>}
 
-      {editando && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-2">
-          <div className="text-sm font-bold mb-0.5">{editando.id ? 'Cambiar compañerismo' : 'Armar compañerismo'}</div>
-          <div className="text-[11px] text-slate-500 mb-2">
-            Toca a {MIN_PAREJA} personas (o {MAX_PAREJA} si son impares). Pueden ser del mismo sexo.
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {opciones.map((p) => {
-              const on = sel.includes(p.id);
-              return (
-                <button
-                  key={p.id}
-                  aria-pressed={on}
-                  onClick={() => alternar(p.id)}
-                  className={`min-h-[44px] px-3 rounded-xl text-sm font-semibold border-2 flex items-center gap-2 ${
-                    on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <GeneroTag genero={p.genero} />
-                  {nombreConInicialMaterna(p.nombres, p.apellidos)}
-                </button>
-              );
-            })}
-          </div>
-          {error && <div className="text-xs text-red-500 font-semibold mt-2">❌ {error}</div>}
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={guardar}
-              disabled={sel.length < MIN_PAREJA || guardando}
-              className="flex-1 min-h-[44px] bg-primary text-white font-bold rounded-xl text-sm disabled:opacity-40"
-            >
-              Guardar ({sel.length})
-            </button>
-            <button onClick={cerrar} className="flex-1 min-h-[44px] bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">
-              Cancelar
-            </button>
-          </div>
-        </div>
+      {puedeEditar && !editando && vista.grupos.length > 0 && vista.sinCompanero.length === 1 && (
+        <div className="text-xs text-slate-500 mb-2">Queda 1 persona sola: para sumarla como trío, usa "Cambiar" en un compañerismo.</div>
       )}
 
       {vista.sinCompanero.length > 0 && miembros.length > 0 && (
         <div className="mt-1">
-          <div className="text-[11px] font-bold text-slate-500 mb-1">Sin compañero ({vista.sinCompanero.length})</div>
+          <div className="text-xs font-bold text-slate-500 mb-1">Sin compañero ({vista.sinCompanero.length})</div>
           <div className="flex flex-wrap gap-1.5">
             {vista.sinCompanero.map((p) => (
               <span key={p.id} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 rounded-full pl-1 pr-2.5 py-1 text-xs font-semibold">
