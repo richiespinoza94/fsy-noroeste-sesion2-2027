@@ -4,7 +4,6 @@ import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas, variacionesPorEvento } from '../utils/asistenciaStats';
-import { infoCompanias } from '../utils/companias';
 import { contarPorTipo, filtrarPorTipos, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO, type CategoriaSeguimiento } from '../utils/seguimiento';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
@@ -57,12 +56,14 @@ export default function ReportesScreen({
   // calcula sobre `participantes`, así que basta con acotarlo acá.
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
-  // Las compañías las necesitan todos (el % de asistencia se calcula sobre quienes tienen una);
-  // el compañerismo, solo el Auxiliar para saber cuáles son las suyas.
-  useEffect(() => subscribeFamilias(setFamilias), []);
   useEffect(() => {
     if (!user.isAuxiliar) return;
-    return subscribeCompanerismo(setCompanerismo);
+    const u1 = subscribeFamilias(setFamilias);
+    const u2 = subscribeCompanerismo(setCompanerismo);
+    return () => {
+      u1();
+      u2();
+    };
   }, [user.isAuxiliar]);
   const participantes = useMemo(() => {
     if (!user.isAuxiliar) return todos;
@@ -99,13 +100,9 @@ export default function ReportesScreen({
   // Extraído a utils/asistenciaStats.ts — lo usa también HomeScreen para la
   // tarjeta de "asistencia en vivo / última capacitación", ya no vive
   // duplicado en 2 componentes.
-  // El % de asistencia se saca entre quienes tienen compañía asignada (cualquier rol):
-  // a quien no tiene no se le espera como a los demás, y bajaría el % sin ser falta.
-  const companias = useMemo(() => infoCompanias(familias), [familias]);
-  const baseAsistencia = useMemo(() => segmento.filter((p) => companias.has(p.familiaId)), [segmento, companias]);
   const attByCap = useMemo(
-    () => calcularAsistenciaPorCapacitacion(baseAsistencia, capsOrdenadas, asistencia),
-    [baseAsistencia, capsOrdenadas, asistencia]
+    () => calcularAsistenciaPorCapacitacion(segmento, capsOrdenadas, asistencia),
+    [segmento, capsOrdenadas, asistencia]
   );
   const avgAtt = useMemo(() => promedioAsistencia(attByCap), [attByCap]);
   const medAtt = useMemo(() => medianaAsistencia(attByCap), [attByCap]);
@@ -280,7 +277,7 @@ export default function ReportesScreen({
       <div className="flex items-center gap-2 px-1">
         <div className="flex-1 min-w-0">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Asistencia por evento · más recientes primero</div>
-          <div className="text-xs text-slate-500">% entre las {baseAsistencia.length} personas con compañía</div>
+          <div className="text-xs text-slate-500">% sobre {segmento.length} personas</div>
         </div>
         <BotonInfo onClick={() => setInfoPorcentaje(true)} etiqueta="Cómo se calcula el porcentaje" />
       </div>
@@ -352,8 +349,7 @@ export default function ReportesScreen({
       {infoPorcentaje && (
         <InfoSheet titulo="¿Cómo se calcula el porcentaje?" onClose={() => setInfoPorcentaje(false)}>
           <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1.5">
-            <li>Es presentes ÷ personas con compañía asignada, de cualquier rol (hoy {baseAsistencia.length} de {segmento.length}).</li>
-            <li>Quien no tiene compañía no entra ni en el porcentaje ni en los conteos.</li>
+            <li>Es presentes ÷ todas las personas del segmento (hoy {segmento.length}).</li>
             <li>«Sin marcar» (○) cuenta como no presente hasta que alguien lo marque.</li>
             <li>La flecha ▲▼ compara con el evento anterior que ya tiene marcas.</li>
             <li>El promedio y la mediana de arriba usan este mismo porcentaje.</li>

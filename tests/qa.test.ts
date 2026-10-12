@@ -1967,21 +1967,6 @@ test('207. quitarPalabrasDeEstaca — quita del texto las palabras que ya eligie
   assert.strictEqual(quitarPalabrasDeEstaca('juan', 'Pro Lima'), 'juan');
 });
 
-test('208. % de asistencia sobre quienes tienen compañía — quien no tiene no entra ni en el % ni en los conteos', () => {
-  const todos = ['a', 'b', 'c', 'd'].map((id, i) => ({ ...personaFake(id), familiaId: i < 3 ? 'f1' : '' })); // d sin compañía (p. ej. otro rol)
-  const m = infoCompanias([{ id: 'f1', nombre: 'Familia 1', colorId: '' } as unknown as Familia]);
-  const base = todos.filter((p) => m.has(p.familiaId));
-  const asistencia: Asistencia[] = [
-    { capacitacionId: 'u1', participanteId: 'a', estado: 'presente', timestamp: '' },
-    { capacitacionId: 'u1', participanteId: 'd', estado: 'presente', timestamp: '' }, // presente sin compañía: no cuenta
-  ];
-  const [s] = calcularAsistenciaPorCapacitacion(base, CAP_UNICA, asistencia);
-  assert.strictEqual(s.presentes, 1);
-  assert.strictEqual(s.sinMarca, 2);
-  assert.strictEqual(s.presentes + s.ausentes + s.justificados + s.sinMarca, base.length);
-  assert.strictEqual(s.pct, 33); // 1 de 3, no 2 de 4
-});
-
 test('209. variacionesPorEvento — compara con el evento anterior que tiene marcas; sin marcas o sin anterior = null', () => {
   const ev = (pct: number, registros: number) => ({ cap: capFake('x', '2027-01-01'), presentes: 0, ausentes: 0, justificados: 0, sinMarca: 0, registros, pct });
   assert.deepStrictEqual(variacionesPorEvento([ev(56, 9), ev(59, 9), ev(0, 0), ev(51, 9)]), [null, 3, null, -8]);
