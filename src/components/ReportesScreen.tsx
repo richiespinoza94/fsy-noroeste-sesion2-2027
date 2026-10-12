@@ -300,7 +300,7 @@ export default function ReportesScreen({
                         style={{ width: `${Math.max(d.pct, sinDatos ? 0 : 2)}%`, background: '#0E2954' }}
                       />
                     </div>
-                    <span className="w-11 shrink-0 text-right text-sm font-extrabold tabular-nums" style={{ color: sinDatos ? '#8899B0' : '#0E2954' }}>
+                    <span className="w-11 shrink-0 text-right text-sm font-extrabold tabular-nums" style={{ color: sinDatos ? '#64748B' : '#0E2954' }}>
                       {sinDatos ? '—' : `${d.pct}%`}
                     </span>
                   </div>
@@ -312,6 +312,7 @@ export default function ReportesScreen({
       )}
 
       <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Detalle · más recientes primero</div>
+      <div className="text-xs text-slate-500 px-1 -mt-3">✓ presente · ✕ ausente · J justificado · ○ sin marcar</div>
       <div className="flex flex-col gap-2">
         {detalle.slice(0, detalleVisible).map((d) => (
           <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm">
@@ -320,8 +321,8 @@ export default function ReportesScreen({
             <div className="grid grid-cols-4 gap-1.5 mt-2 text-xs">
               <Mark label={`✓ ${d.presentes}`} bg="#E8F5E9" fg="#2E7D32" />
               <Mark label={`✕ ${d.ausentes}`} bg="#FFEBEE" fg="#C62828" />
-              <Mark label={`J ${d.justificados}`} bg="#FFF3E0" fg="#EF6C00" />
-              <Mark label={`○ ${d.sinMarca}`} bg="#F5F5F5" fg="#757575" />
+              <Mark label={`J ${d.justificados}`} bg="#FFF3E0" fg="#B45309" />
+              <Mark label={`○ ${d.sinMarca}`} bg="#F5F5F5" fg="#616161" />
             </div>
           </div>
         ))}
@@ -412,7 +413,7 @@ export default function ReportesScreen({
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-bold truncate">{nombreCorto(i.participante.nombres, i.participante.apellidos)}</div>
                           <div className="text-xs text-slate-500 leading-snug">{i.detalle}</div>
-                          <div className="text-xs text-slate-400">{i.participante.estaca}</div>
+                          <div className="text-xs text-slate-500">{i.participante.estaca}</div>
                         </div>
                         {tel && (
                           <a
