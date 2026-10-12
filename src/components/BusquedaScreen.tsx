@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estacas';
+import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../data/estacas';
 import { updateParticipante } from '../services/participantsService';
-import { fuzzyIncludes } from '../utils/search';
+import { estacasSugeridas, matchesQuery, quitarPalabrasDeEstaca } from '../utils/search';
 import { nombreCorto } from '../utils/nombreCorto';
 import { TrabajaCon } from './CompanerismosFamilia';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../utils/audiovisual';
@@ -9,7 +9,7 @@ import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, DISPONIBILIDAD_LABEL, EXPERIENCIA_PREVIA_LABEL, type Asignacion, type Disponibilidad, type Genero, type Participante, type SessionUser } from '../types';
 
 function matches(p: Participante, query: string): boolean {
-  return fuzzyIncludes(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`, query);
+  return matchesQuery(`${p.nombres} ${p.apellidos} ${p.estaca} ${p.barrio}`, query);
 }
 
 export default function BusquedaScreen({
@@ -25,6 +25,7 @@ export default function BusquedaScreen({
   const [query, setQuery] = useState('');
   const [filterEstaca, setFilterEstaca] = useState('');
   const [soloAudiovisual, setSoloAudiovisual] = useState(false);
+  const [enfocado, setEnfocado] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Participante | null>(null);
   const PAGE_SIZE = 20;
@@ -52,19 +53,64 @@ export default function BusquedaScreen({
   // de esperar a redescubrirlo cuando crezca el roster.
   const results = allResults.slice(0, visibleCount);
 
+  // Al escribir el comienzo de una estaca ("pro", "huar"), se sugiere para filtrar de un toque.
+  const personasPorEstaca = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of participantes) m.set(p.estaca, (m.get(p.estaca) ?? 0) + 1);
+    return m;
+  }, [participantes]);
+  const sugeridas = useMemo(
+    () => estacasSugeridas(query, TODAS_LAS_ESTACAS).filter((e) => e !== filterEstaca),
+    [query, filterEstaca]
+  );
+  function elegirEstaca(e: string) {
+    setFilterEstaca(e);
+    setQuery(quitarPalabrasDeEstaca(query, e));
+    setExpandedId(null);
+    setVisibleCount(PAGE_SIZE);
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 bg-[#F4F6FA]/95 backdrop-blur px-4 pt-3 pb-2 border-b border-slate-200 z-10">
-        <input
-          className="input mb-2"
-          placeholder="🔍 Buscar por nombre, estaca o barrio…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setExpandedId(null);
-            setVisibleCount(PAGE_SIZE);
-          }}
-        />
+        <div className="relative mb-2">
+          <input
+            className="input"
+            placeholder="🔍 Buscar por nombre, estaca o barrio…"
+            value={query}
+            onFocus={() => setEnfocado(true)}
+            onBlur={() => setEnfocado(false)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setExpandedId(null);
+              setVisibleCount(PAGE_SIZE);
+            }}
+          />
+          {/* Sugerencia de estaca: flota sobre la lista (no empuja el encabezado). El pointerdown
+              no le quita el foco al buscador, si no el toque se perdería al cerrarse. */}
+          {enfocado && sugeridas.length > 0 && (
+            <div
+              role="listbox"
+              aria-label="Estacas sugeridas"
+              onPointerDown={(e) => e.preventDefault()}
+              className="absolute left-0 right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden"
+            >
+              {sugeridas.map((e) => (
+                <button
+                  key={e}
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => elegirEstaca(e)}
+                  className="w-full min-h-[44px] px-3.5 flex items-center gap-2 text-left text-sm border-b last:border-b-0 border-slate-100"
+                >
+                  <span aria-hidden="true">⛪</span>
+                  <span className="flex-1 font-semibold">Estaca {e}</span>
+                  <span className="text-xs text-slate-500">{personasPorEstaca.get(e) ?? 0}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex gap-2 items-center">
           <div className="flex gap-2 overflow-x-auto pb-1 flex-1">
             <Chip active={!filterEstaca} onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
@@ -78,19 +124,26 @@ export default function BusquedaScreen({
             <Chip active={filterEstaca === FILTRO_OTRAS} onClick={() => { setFilterEstaca(filterEstaca === FILTRO_OTRAS ? '' : FILTRO_OTRAS); setVisibleCount(PAGE_SIZE); }}>
               Otras
             </Chip>
+            {/* Estaca elegida desde la sugerencia que no tiene chip propio (Huaral, Barranca…): se ve y se quita de un toque. */}
+            {filterEstaca && filterEstaca !== FILTRO_OTRAS && !ESTACAS_PRINCIPALES.includes(filterEstaca) && (
+              <Chip active onClick={() => { setFilterEstaca(''); setVisibleCount(PAGE_SIZE); }}>
+                {filterEstaca} ✕
+              </Chip>
+            )}
           </div>
           <button
             onClick={() => { setSoloAudiovisual((v) => !v); setVisibleCount(PAGE_SIZE); }}
             title="Solo con experiencia en audiovisuales"
-            className={`shrink-0 text-xs font-bold rounded-full px-3.5 py-2.5 whitespace-nowrap border-[1.5px] ${
+            aria-pressed={soloAudiovisual}
+            className={`shrink-0 min-h-[44px] text-xs font-bold rounded-full px-3.5 whitespace-nowrap border-[1.5px] ${
               soloAudiovisual ? 'bg-accent border-accent text-primary' : 'bg-white border-slate-200 text-slate-600'
             }`}
           >
-            🎬 AV
+            🎬 Audiovisual
           </button>
         </div>
         {(query.trim().length >= MIN_QUERY || hayFiltroActivo) && (
-          <div className="text-[11px] text-slate-500 mt-1">
+          <div className="text-xs text-slate-500 mt-1">
             {allResults.length} resultado{allResults.length !== 1 ? 's' : ''}
           </div>
         )}
@@ -108,7 +161,7 @@ export default function BusquedaScreen({
                 <Avatar nombres={p.nombres} apellidos={p.apellidos} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate">{nombreCorto(p.nombres, p.apellidos)}</div>
-                  <div className="text-[11px] text-slate-500 truncate">📱 {p.telefono} · ⛪ {p.estaca}</div>
+                  <div className="text-xs text-slate-500 truncate">📱 {p.telefono} · ⛪ {p.estaca}</div>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap">
                     <Badge>{p.estaca}</Badge>
                     {p.asignacion && <Badge accent>{p.asignacion}</Badge>}
@@ -225,19 +278,19 @@ function EditSheet({
         <div className="flex flex-col gap-3">
           {(['nombres', 'apellidos', 'telefono', 'correo'] as const).map((k) => (
             <div key={k}>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">{k}</div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">{k}</div>
               <input className="input" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
             </div>
           ))}
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Género</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Género</div>
             <select className="input" value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value as Genero })}>
               <option value="H">Hombre</option>
               <option value="M">Mujer</option>
             </select>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Asignación</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Asignación</div>
             <select className="input" value={form.asignacion} onChange={(e) => setForm({ ...form, asignacion: e.target.value as Asignacion })}>
               {ASIGNACIONES.map((a) => (
                 <option key={a} value={a}>{a}</option>
@@ -245,7 +298,7 @@ function EditSheet({
             </select>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Disponibilidad</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Disponibilidad</div>
             <select className="input" value={form.disponibilidad} onChange={(e) => setForm({ ...form, disponibilidad: e.target.value as Disponibilidad })}>
               <option value="si">Sí, disponible</option>
               <option value="no_creo">No cree poder</option>
@@ -277,7 +330,7 @@ function Avatar({ nombres, apellidos }: { nombres: string; apellidos: string }) 
 function Badge({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
     <span
-      className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${accent ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500'}`}
+      className={`text-xs font-bold rounded-full px-2 py-0.5 ${accent ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500'}`}
     >
       {children}
     </span>
@@ -296,7 +349,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 text-xs font-bold rounded-full px-3.5 py-2.5 whitespace-nowrap ${
+      aria-pressed={active}
+      className={`shrink-0 min-h-[44px] text-xs font-bold rounded-full px-3.5 whitespace-nowrap ${
         active ? 'bg-primary text-white' : 'bg-white text-slate-500 border border-slate-200'
       }`}
     >

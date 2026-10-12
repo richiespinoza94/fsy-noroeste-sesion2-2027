@@ -10,7 +10,7 @@ import {
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
-import { fuzzyIncludes } from '../src/utils/search';
+import { estacasSugeridas, fuzzyIncludes, matchesQuery, quitarPalabrasDeEstaca } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
@@ -1943,4 +1943,26 @@ test('204. filtrarPorEstado / contarEstados — "por marcar" incluye sin marca y
   // el conteo del chip siempre coincide con la lista que muestra y con el resumen de avance
   assert.strictEqual(contarEstados(g, asis).presentes, resumenGrupo(g as unknown as Participante[], asis).presentes);
   assert.strictEqual(contarEstados(g, asis).porMarcar, filtrarPorEstado(g, asis, 'por_marcar').length);
+});
+
+test('205. matchesQuery — todas las palabras deben estar; tolera tildes y espacios omitidos', () => {
+  assert.strictEqual(matchesQuery('Juan Pérez Pro Lima', 'perez lima'), true);
+  assert.strictEqual(matchesQuery('Juan Pérez Pro Lima', 'juan prolima'), true);
+  assert.strictEqual(matchesQuery('Juan Pérez Pro Lima', 'juan ventanilla'), false);
+  assert.strictEqual(matchesQuery('Juan Pérez', '   '), true);
+});
+
+test('206. estacasSugeridas — sugiere estacas por inicio de palabra, ignora palabras de menos de 3 letras', () => {
+  const E = ['Pro Lima', 'El Olivar', 'Los Olivos', 'Ventanilla'];
+  assert.deepStrictEqual(estacasSugeridas('pro', E), ['Pro Lima']);
+  assert.deepStrictEqual(estacasSugeridas('prolima', E), ['Pro Lima']);
+  assert.deepStrictEqual(estacasSugeridas('juan oli', E).sort(), ['El Olivar', 'Los Olivos']);
+  assert.deepStrictEqual(estacasSugeridas('el', E), []);
+  assert.deepStrictEqual(estacasSugeridas('', E), []);
+});
+
+test('207. quitarPalabrasDeEstaca — quita del texto las palabras que ya eligieron la estaca', () => {
+  assert.strictEqual(quitarPalabrasDeEstaca('juan pro', 'Pro Lima'), 'juan');
+  assert.strictEqual(quitarPalabrasDeEstaca('pro', 'Pro Lima'), '');
+  assert.strictEqual(quitarPalabrasDeEstaca('juan', 'Pro Lima'), 'juan');
 });
