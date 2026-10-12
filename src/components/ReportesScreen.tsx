@@ -9,6 +9,7 @@ import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO, type CategoriaSeguimiento 
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
+import { fechaAmigable } from '../utils/fechaAmigable';
 import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
 import { ASIGNACIONES, type Asistencia, type Capacitacion, type Companerismo, type Familia, type Participante, type SessionUser, type TipoEvento } from '../types';
 import MetricCard from './MetricCard';
@@ -115,8 +116,14 @@ export default function ReportesScreen({
   const byEstaca = [
     ...ESTACAS_PRINCIPALES.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })),
     { estaca: 'Otras estacas', n: participantes.filter((p) => !ESTACAS_PRINCIPALES.includes(p.estaca)).length },
-  ].filter((x) => x.n > 0);
-  const byRol = ASIGNACIONES.map((r) => ({ rol: r, n: segmento.filter((p) => p.asignacion === r).length })).filter((x) => x.n > 0);
+  ]
+    .filter((x) => x.n > 0)
+    // De mayor a menor; "Otras estacas" (un cajón de varias) siempre al final.
+    .sort((a, b) => Number(a.estaca === 'Otras estacas') - Number(b.estaca === 'Otras estacas') || b.n - a.n);
+  // De mayor a menor; en empate, el orden de siempre de los roles (sort estable).
+  const byRol = ASIGNACIONES.map((r) => ({ rol: r, n: segmento.filter((p) => p.asignacion === r).length }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
 
   // Compromiso por persona: quién se preparó con tiempo y con constancia,
   // no solo quién "asistió más" en números absolutos — ordenado por tasa de
@@ -135,8 +142,7 @@ export default function ReportesScreen({
     [segmento, capsOrdenadas, asistencia]
   );
 
-  const BAR_W = 44, GAP = 16, H = 100;
-  const chartWidth = Math.max(grafico.length * (BAR_W + GAP) + GAP, 280);
+  const hoy = hoyLocalISO();
 
   return (
     <div className="h-full overflow-y-auto p-4 pb-24 flex flex-col gap-4" onScroll={handleScroll}>
@@ -160,7 +166,7 @@ export default function ReportesScreen({
           🔔 Seguimiento
           {seguimiento.length > 0 && (
             <span
-              className="absolute -top-1.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C62828] text-white text-[10px] leading-[18px] text-center"
+              className="absolute -top-1.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C62828] text-white text-xs leading-[18px] text-center"
               aria-label={`${seguimiento.length} personas por contactar`}
             >
               {seguimiento.length}
@@ -241,7 +247,7 @@ export default function ReportesScreen({
         </button>
       </div>
       {soloAudiovisual && (
-        <div className="text-[11px] text-slate-500 px-1 -mt-2">
+        <div className="text-xs text-slate-500 px-1 -mt-2">
           Mostrando solo consejeros con experiencia audiovisual real ({segmento.length} de{' '}
           {filterEstaca ? participantes.filter((p) => estacaEnFiltro(p.estaca, filterEstaca)).length : participantes.length}).
         </div>
@@ -269,47 +275,49 @@ export default function ReportesScreen({
 
       {grafico.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
             Tendencia de asistencia{ocurridas.length > GRAFICO_MAX ? ` · últimas ${GRAFICO_MAX} de ${ocurridas.length}` : ''}
           </div>
-          <div className="overflow-x-auto">
-            <svg width={chartWidth} height={H + 34}>
-              {[0, 50, 100].map((v) => {
-                const y = 10 + H - (v / 100) * H;
-                return (
-                  <g key={v}>
-                    <line x1={0} x2={chartWidth} y1={y} y2={y} stroke="#F0F4F8" />
-                    <text x={2} y={y - 2} fontSize={8} fill="#8899B0">{v}%</text>
-                  </g>
-                );
-              })}
-              {grafico.map((d, i) => {
-                const x = GAP + i * (BAR_W + GAP);
-                const barH = (d.pct / 100) * H;
-                const y = 10 + H - barH;
-                const muted = d.registros === 0;
-                return (
-                  <g key={d.cap.id}>
-                    <rect x={x} y={y} width={BAR_W} height={Math.max(barH, 2)} rx={5} fill={muted ? '#D5D9E0' : '#0E2954'} opacity={muted ? 0.5 : 0.9} />
-                    <text x={x + BAR_W / 2} y={y - 4} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0E2954">{d.pct}%</text>
-                    <text x={x + BAR_W / 2} y={H + 24} textAnchor="middle" fontSize={8} fill="#8899B0">{d.cap.fecha.slice(5)}</text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
+          {/* Una fila por evento (nombre completo + barra + %): cabe en cualquier
+              ancho, sin scroll horizontal ni texto diminuto. */}
+          <ul className="flex flex-col gap-3">
+            {grafico.map((d) => {
+              const sinDatos = d.registros === 0;
+              return (
+                <li key={d.cap.id}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold leading-snug">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</span>
+                    <span className="shrink-0 text-xs text-slate-500">{fechaAmigable(d.cap.fecha, hoy)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div
+                      className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden"
+                      role="img"
+                      aria-label={sinDatos ? 'Sin marcas todavía' : `${d.pct}% de asistencia`}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${Math.max(d.pct, sinDatos ? 0 : 2)}%`, background: '#0E2954' }}
+                      />
+                    </div>
+                    <span className="w-11 shrink-0 text-right text-sm font-extrabold tabular-nums" style={{ color: sinDatos ? '#8899B0' : '#0E2954' }}>
+                      {sinDatos ? '—' : `${d.pct}%`}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
-      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Detalle · más recientes primero</div>
+      <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Detalle · más recientes primero</div>
       <div className="flex flex-col gap-2">
         {detalle.slice(0, detalleVisible).map((d) => (
-          <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-sm font-bold truncate">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</div>
-              <div className="text-[11px] text-slate-500">{d.cap.fecha} · {d.registros} registros</div>
-            </div>
-            <div className="flex gap-1.5 text-[11px]">
+          <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm">
+            <div className="text-sm font-bold leading-snug">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</div>
+            <div className="text-xs text-slate-500">{fechaAmigable(d.cap.fecha, hoy)} · {d.registros} registros</div>
+            <div className="grid grid-cols-4 gap-1.5 mt-2 text-xs">
               <Mark label={`✓ ${d.presentes}`} bg="#E8F5E9" fg="#2E7D32" />
               <Mark label={`✕ ${d.ausentes}`} bg="#FFEBEE" fg="#C62828" />
               <Mark label={`J ${d.justificados}`} bg="#FFF3E0" fg="#EF6C00" />
@@ -334,12 +342,12 @@ export default function ReportesScreen({
           </button>
         )}
         {proximasSinMarcas > 0 && (
-          <div className="text-[11px] text-slate-500 text-center">+ {proximasSinMarcas} programada(s) sin marcas todavía</div>
+          <div className="text-xs text-slate-500 text-center">+ {proximasSinMarcas} programada(s) sin marcas todavía</div>
         )}
         {attByCap.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin eventos todavía.</div>}
       </div>
 
-      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Por estaca</div>
+      <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Por estaca</div>
       <div className="flex flex-col gap-1.5">
         {byEstaca.map(({ estaca, n }) => {
           const pct = participantes.length ? Math.round((n / participantes.length) * 100) : 0;
@@ -357,12 +365,12 @@ export default function ReportesScreen({
         })}
       </div>
 
-      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">Por rol</div>
+      <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Por rol</div>
       <div className="grid grid-cols-2 gap-2">
         {byRol.map(({ rol, n }) => (
           <div key={rol} className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
             <div className="text-lg font-extrabold text-primary">{n}</div>
-            <div className="text-[11px] text-slate-500 font-semibold">{rol}</div>
+            <div className="text-xs text-slate-500 font-semibold">{rol}</div>
           </div>
         ))}
       </div>
@@ -403,8 +411,8 @@ export default function ReportesScreen({
                       <div key={i.participante.id} className="flex items-center gap-2 py-2.5">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-bold truncate">{nombreCorto(i.participante.nombres, i.participante.apellidos)}</div>
-                          <div className="text-[11px] text-slate-500 leading-snug">{i.detalle}</div>
-                          <div className="text-[10px] text-slate-400">{i.participante.estaca}</div>
+                          <div className="text-xs text-slate-500 leading-snug">{i.detalle}</div>
+                          <div className="text-xs text-slate-400">{i.participante.estaca}</div>
                         </div>
                         {tel && (
                           <a
@@ -472,16 +480,16 @@ export default function ReportesScreen({
                         <span className="shrink-0" title="Asistió a todas las capacitaciones desde que se registró">🔥</span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500">{p.estaca}</div>
+                    <div className="text-xs text-slate-500">{p.estaca}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-lg font-extrabold text-primary">
                       {c.tasaAsistencia === null ? '—' : `${Math.round(c.tasaAsistencia * 100)}%`}
                     </div>
-                    <div className="text-[10px] text-slate-500">{c.asistencias}/{c.elegibles} asistencias</div>
+                    <div className="text-xs text-slate-500">{c.asistencias}/{c.elegibles} asistencias</div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
                   <span>{c.asistencias} asistencias totales · {c.inasistencias} inasistencias</span>
                   <span>Elegible en {c.elegibles}/{c.totalCapacitaciones} del programa</span>
                 </div>
@@ -497,7 +505,7 @@ export default function ReportesScreen({
 
 function Mark({ label, bg, fg }: { label: string; bg: string; fg: string }) {
   return (
-    <span className="rounded-full px-1.5 py-0.5 font-bold" style={{ background: bg, color: fg }}>
+    <span className="rounded-full py-1 font-bold text-center tabular-nums" style={{ background: bg, color: fg }}>
       {label}
     </span>
   );
