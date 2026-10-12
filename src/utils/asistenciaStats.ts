@@ -55,3 +55,17 @@ export function medianaAsistencia(porCap: AsistenciaPorCapacitacion[]): number {
   const m = pcts.length >> 1;
   return Math.round(pcts.length % 2 ? pcts[m] : (pcts[m - 1] + pcts[m]) / 2);
 }
+
+/**
+ * Cambio en puntos de % de cada evento frente al anterior CON marcas (la lista viene en orden cronológico).
+ * `null` si el evento no tiene marcas o si no hay un evento anterior con qué compararlo.
+ */
+export function variacionesPorEvento(cronologico: AsistenciaPorCapacitacion[]): (number | null)[] {
+  let anterior: number | null = null;
+  return cronologico.map((d) => {
+    if (d.registros === 0) return null;
+    const delta = anterior === null ? null : d.pct - anterior;
+    anterior = d.pct;
+    return delta;
+  });
+}

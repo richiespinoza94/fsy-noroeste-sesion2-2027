@@ -3,7 +3,8 @@ import { ESTACAS_PRINCIPALES, FILTRO_OTRAS, estacaEnFiltro } from '../data/estac
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { buildAsistenciaCsv, buildRegistroCsv, downloadCsv } from '../utils/csvExport';
 import { calcularCompromiso } from '../utils/compromiso';
-import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../utils/asistenciaStats';
+import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas, variacionesPorEvento } from '../utils/asistenciaStats';
+import { infoCompanias } from '../utils/companias';
 import { contarPorTipo, filtrarPorTipos, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { calcularSeguimiento, CATEGORIAS_SEGUIMIENTO, type CategoriaSeguimiento } from '../utils/seguimiento';
 import { tieneExperienciaAudiovisual } from '../utils/audiovisual';
@@ -47,6 +48,7 @@ export default function ReportesScreen({
   // muchos eventos la lista completa obligaba a bajar y bajar.
   const DETALLE_PAGINA = 5;
   const [detalleVisible, setDetalleVisible] = useState(DETALLE_PAGINA);
+  const [infoPorcentaje, setInfoPorcentaje] = useState(false);
 
   useEffect(() => subscribeAllAsistencia(setAsistencia), []);
 
@@ -55,14 +57,12 @@ export default function ReportesScreen({
   // calcula sobre `participantes`, así que basta con acotarlo acá.
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [companerismo, setCompanerismo] = useState<Companerismo[]>([]);
+  // Las compañías las necesitan todos (el % de asistencia se calcula sobre quienes tienen una);
+  // el compañerismo, solo el Auxiliar para saber cuáles son las suyas.
+  useEffect(() => subscribeFamilias(setFamilias), []);
   useEffect(() => {
     if (!user.isAuxiliar) return;
-    const u1 = subscribeFamilias(setFamilias);
-    const u2 = subscribeCompanerismo(setCompanerismo);
-    return () => {
-      u1();
-      u2();
-    };
+    return subscribeCompanerismo(setCompanerismo);
   }, [user.isAuxiliar]);
   const participantes = useMemo(() => {
     if (!user.isAuxiliar) return todos;
@@ -99,19 +99,23 @@ export default function ReportesScreen({
   // Extraído a utils/asistenciaStats.ts — lo usa también HomeScreen para la
   // tarjeta de "asistencia en vivo / última capacitación", ya no vive
   // duplicado en 2 componentes.
+  // El % de asistencia se saca entre quienes tienen compañía asignada (cualquier rol):
+  // a quien no tiene no se le espera como a los demás, y bajaría el % sin ser falta.
+  const companias = useMemo(() => infoCompanias(familias), [familias]);
+  const baseAsistencia = useMemo(() => segmento.filter((p) => companias.has(p.familiaId)), [segmento, companias]);
   const attByCap = useMemo(
-    () => calcularAsistenciaPorCapacitacion(segmento, capsOrdenadas, asistencia),
-    [segmento, capsOrdenadas, asistencia]
+    () => calcularAsistenciaPorCapacitacion(baseAsistencia, capsOrdenadas, asistencia),
+    [baseAsistencia, capsOrdenadas, asistencia]
   );
   const avgAtt = useMemo(() => promedioAsistencia(attByCap), [attByCap]);
   const medAtt = useMemo(() => medianaAsistencia(attByCap), [attByCap]);
   // Solo lo que ya ocurrió (o ya tiene marcas), del más reciente al más viejo.
   const ocurridas = useMemo(() => soloOcurridas(attByCap, hoyLocalISO()), [attByCap]);
-  const detalle = useMemo(() => [...ocurridas].reverse(), [ocurridas]);
+  const detalle = useMemo(() => {
+    const cambios = variacionesPorEvento(ocurridas);
+    return ocurridas.map((d, i) => ({ d, cambio: cambios[i] })).reverse();
+  }, [ocurridas]);
   const proximasSinMarcas = attByCap.length - ocurridas.length;
-  // El gráfico muestra las últimas 10: con más barras se vuelve un scroll horizontal infinito.
-  const GRAFICO_MAX = 10;
-  const grafico = useMemo(() => ocurridas.slice(-GRAFICO_MAX), [ocurridas]);
 
   const byEstaca = [
     ...ESTACAS_PRINCIPALES.map((e) => ({ estaca: e, n: participantes.filter((p) => p.estaca === e).length })),
@@ -273,59 +277,60 @@ export default function ReportesScreen({
             />
           </div>
 
-      {grafico.length > 0 && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
-            Tendencia de asistencia{tiposActivos.length > 0 ? ` · ${etiquetaFiltro}` : ''}{ocurridas.length > GRAFICO_MAX ? ` · últimas ${GRAFICO_MAX} de ${ocurridas.length}` : ''}
-          </div>
-          {/* Una fila por evento (nombre completo + barra + %): cabe en cualquier
-              ancho, sin scroll horizontal ni texto diminuto. */}
-          <ul className="flex flex-col gap-3">
-            {grafico.map((d) => {
-              const sinDatos = d.registros === 0;
-              return (
-                <li key={d.cap.id}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-semibold leading-snug">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</span>
-                    <span className="shrink-0 text-xs text-slate-500">{fechaAmigable(d.cap.fecha, hoy)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div
-                      className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden"
-                      role="img"
-                      aria-label={sinDatos ? 'Sin marcas todavía' : `${d.pct}% de asistencia`}
-                    >
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${Math.max(d.pct, sinDatos ? 0 : 2)}%`, background: '#0E2954' }}
-                      />
-                    </div>
-                    <span className="w-11 shrink-0 text-right text-sm font-extrabold tabular-nums" style={{ color: sinDatos ? '#64748B' : '#0E2954' }}>
-                      {sinDatos ? '—' : `${d.pct}%`}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+      <div className="flex items-center gap-2 px-1">
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Asistencia por evento · más recientes primero</div>
+          <div className="text-xs text-slate-500">% entre las {baseAsistencia.length} personas con compañía</div>
         </div>
-      )}
-
-      <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Detalle · más recientes primero</div>
-      <div className="text-xs text-slate-500 px-1 -mt-3">✓ presente · ✕ ausente · J justificado · ○ sin marcar</div>
-      <div className="flex flex-col gap-2">
-        {detalle.slice(0, detalleVisible).map((d) => (
-          <div key={d.cap.id} className="bg-white rounded-2xl p-3 shadow-sm">
-            <div className="text-sm font-bold leading-snug">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</div>
-            <div className="text-xs text-slate-500">{fechaAmigable(d.cap.fecha, hoy)} · {d.registros} registros</div>
-            <div className="grid grid-cols-4 gap-1.5 mt-2 text-xs">
-              <Mark label={`✓ ${d.presentes}`} bg="#E8F5E9" fg="#2E7D32" />
-              <Mark label={`✕ ${d.ausentes}`} bg="#FFEBEE" fg="#C62828" />
-              <Mark label={`J ${d.justificados}`} bg="#FFF3E0" fg="#B45309" />
-              <Mark label={`○ ${d.sinMarca}`} bg="#F5F5F5" fg="#616161" />
-            </div>
-          </div>
-        ))}
+        <BotonInfo onClick={() => setInfoPorcentaje(true)} etiqueta="Cómo se calcula el porcentaje" />
+      </div>
+      <div className="flex flex-col gap-3">
+        {detalle.slice(0, detalleVisible).map(({ d, cambio }, i) => {
+          const sinDatos = d.registros === 0;
+          const total = d.presentes + d.ausentes + d.justificados + d.sinMarca;
+          const trozos = [
+            { n: d.presentes, color: '#0E2954' },
+            { n: d.justificados, color: '#E8A33A' },
+            { n: d.ausentes, color: '#C62828' },
+          ];
+          return (
+            <article key={d.cap.id} className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  {i === 0 && (
+                    <span className="inline-block text-xs font-bold rounded-full px-2 py-0.5 mb-1 bg-accent text-primary">Último evento</span>
+                  )}
+                  <h3 className="text-sm font-extrabold leading-snug">{infoTipo(tipoDe(d.cap)).icon} {d.cap.label}</h3>
+                  <div className="text-xs text-slate-500 mt-0.5">{fechaAmigable(d.cap.fecha, hoy)} · {d.registros} de {total} con marca</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-2xl font-extrabold tabular-nums leading-none" style={{ color: sinDatos ? '#64748B' : '#0E2954' }}>
+                    {sinDatos ? '—' : `${d.pct}%`}
+                  </div>
+                  {cambio !== null && cambio !== 0 && (
+                    <div className="text-xs font-bold mt-1 tabular-nums" style={{ color: cambio > 0 ? '#2E7D32' : '#C62828' }}>
+                      {cambio > 0 ? '▲' : '▼'} {Math.abs(cambio)} pts
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Una sola barra reparte a todos: presentes, justificados, ausentes y lo que falta marcar. */}
+              <div
+                className="flex h-2.5 mt-3 rounded-full overflow-hidden bg-slate-200"
+                role="img"
+                aria-label={`${d.presentes} presentes, ${d.justificados} justificados, ${d.ausentes} ausentes y ${d.sinMarca} sin marcar, de ${total}`}
+              >
+                {total > 0 && trozos.map((t, k) => t.n > 0 && <div key={k} style={{ width: `${(t.n / total) * 100}%`, background: t.color }} />)}
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 mt-3 text-xs">
+                <Mark label={`✓ ${d.presentes}`} bg="#E8F5E9" fg="#2E7D32" />
+                <Mark label={`J ${d.justificados}`} bg="#FFF3E0" fg="#B45309" />
+                <Mark label={`✕ ${d.ausentes}`} bg="#FFEBEE" fg="#C62828" />
+                <Mark label={`○ ${d.sinMarca}`} bg="#F5F5F5" fg="#616161" />
+              </div>
+            </article>
+          );
+        })}
         {detalle.length > detalleVisible && (
           <button
             onClick={() => setDetalleVisible((n) => n + DETALLE_PAGINA * 2)}
@@ -335,10 +340,7 @@ export default function ReportesScreen({
           </button>
         )}
         {detalle.length > DETALLE_PAGINA && detalleVisible >= detalle.length && (
-          <button
-            onClick={() => setDetalleVisible(DETALLE_PAGINA)}
-            className="text-slate-500 text-xs font-bold py-2"
-          >
+          <button onClick={() => setDetalleVisible(DETALLE_PAGINA)} className="text-slate-500 text-xs font-bold py-2 min-h-[44px]">
             Ver menos
           </button>
         )}
@@ -347,6 +349,19 @@ export default function ReportesScreen({
         )}
         {attByCap.length === 0 && <div className="text-xs text-slate-500 text-center py-4">Sin eventos todavía.</div>}
       </div>
+      {infoPorcentaje && (
+        <InfoSheet titulo="¿Cómo se calcula el porcentaje?" onClose={() => setInfoPorcentaje(false)}>
+          <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1.5">
+            <li>Es presentes ÷ personas con compañía asignada, de cualquier rol (hoy {baseAsistencia.length} de {segmento.length}).</li>
+            <li>Quien no tiene compañía no entra ni en el porcentaje ni en los conteos.</li>
+            <li>«Sin marcar» (○) cuenta como no presente hasta que alguien lo marque.</li>
+            <li>La flecha ▲▼ compara con el evento anterior que ya tiene marcas.</li>
+            <li>El promedio y la mediana de arriba usan este mismo porcentaje.</li>
+          </ul>
+          <div className="text-sm font-bold mt-4 mb-1">Barra y conteos</div>
+          <div className="text-sm text-slate-600">✓ presentes · J justificados · ✕ ausentes · ○ sin marcar. La barra los reparte en ese orden.</div>
+        </InfoSheet>
+      )}
 
       <div className="text-xs font-bold text-slate-500 uppercase tracking-wide px-1">Por estaca</div>
       <div className="flex flex-col gap-1.5">
