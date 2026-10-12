@@ -118,7 +118,7 @@ Si se toca `firestore.rules`: hay que volver a pegarlo manualmente en Firebase C
 
 ## 10. Estado y pendientes
 
-Aplicados: 0054–0056 (compañerismos de trabajo, Inicio limpio, hoja ⓘ en Seguimiento), 0057 (Gestión → Compañías), 0058 (Sugerir parejas), 0058b/c (franja de compañías al ras y que se esconde al bajar), 0059 (Asistencia), 0060 (Búsqueda: varias palabras, sugerencia de estacas al escribir, chip "🎬 Audiovisual"). Búsqueda: cada palabra debe aparecer (tolera tildes y espacios omitidos, "prolima"); mínimo 3 letras; las estacas que coinciden se ofrecen como filtro.
+Aplicados: 0054–0056 (compañerismos de trabajo, Inicio limpio, hoja ⓘ en Seguimiento), 0057 (Gestión → Compañías), 0058 (Sugerir parejas), 0058b/c (franja de compañías al ras y que se esconde al bajar), 0059 (Asistencia), 0060 (Búsqueda: varias palabras, sugerencia de estacas al escribir, chip "🎬 AV"). Búsqueda: cada palabra debe aparecer (tolera tildes y espacios omitidos, "prolima"); mínimo 3 letras; las estacas que coinciden se ofrecen como filtro.
 
 Pendientes, en orden:
 - **0061 Reportes:** gráfico legible y sin barra oculta, nombres completos, contadores uniformes, "Por rol" ordenado de mayor a menor.

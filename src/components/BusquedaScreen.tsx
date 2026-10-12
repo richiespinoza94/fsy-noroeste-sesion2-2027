@@ -133,13 +133,13 @@ export default function BusquedaScreen({
           </div>
           <button
             onClick={() => { setSoloAudiovisual((v) => !v); setVisibleCount(PAGE_SIZE); }}
-            title="Solo con experiencia en audiovisuales"
+            title="Solo con experiencia en audiovisuales" aria-label="Audiovisual: solo con experiencia en audiovisuales"
             aria-pressed={soloAudiovisual}
             className={`shrink-0 min-h-[44px] text-xs font-bold rounded-full px-3.5 whitespace-nowrap border-[1.5px] ${
               soloAudiovisual ? 'bg-accent border-accent text-primary' : 'bg-white border-slate-200 text-slate-600'
             }`}
           >
-            🎬 Audiovisual
+            🎬 AV
           </button>
         </div>
         {(query.trim().length >= MIN_QUERY || hayFiltroActivo) && (
