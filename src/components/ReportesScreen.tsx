@@ -263,7 +263,7 @@ export default function ReportesScreen({
               value={`${avgAtt}%`}
               color="#E8863A"
               icon="📈"
-              sub={`Mediana ${medAtt}% · ${etiquetaFiltro}`}
+              sub={`Mediana ${medAtt}%`}
             />
             <MetricCard
               label={tiposActivos.length === 1 ? infoTipo(tiposActivos[0]).plural : 'Eventos'}
@@ -276,7 +276,7 @@ export default function ReportesScreen({
       {grafico.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
-            Tendencia de asistencia{ocurridas.length > GRAFICO_MAX ? ` · últimas ${GRAFICO_MAX} de ${ocurridas.length}` : ''}
+            Tendencia de asistencia{tiposActivos.length > 0 ? ` · ${etiquetaFiltro}` : ''}{ocurridas.length > GRAFICO_MAX ? ` · últimas ${GRAFICO_MAX} de ${ocurridas.length}` : ''}
           </div>
           {/* Una fila por evento (nombre completo + barra + %): cabe en cualquier
               ancho, sin scroll horizontal ni texto diminuto. */}
@@ -330,7 +330,7 @@ export default function ReportesScreen({
             onClick={() => setDetalleVisible((n) => n + DETALLE_PAGINA * 2)}
             className="bg-white border-[1.5px] border-slate-200 text-primary text-xs font-bold rounded-xl py-3 min-h-[44px]"
           >
-            Ver {Math.min(DETALLE_PAGINA * 2, detalle.length - detalleVisible)} más · {detalle.length - detalleVisible} restantes
+            {detalle.length - detalleVisible <= DETALLE_PAGINA * 2 ? `Ver ${detalle.length - detalleVisible} más` : `Ver ${DETALLE_PAGINA * 2} más · ${detalle.length - detalleVisible} restantes`}
           </button>
         )}
         {detalle.length > DETALLE_PAGINA && detalleVisible >= detalle.length && (
