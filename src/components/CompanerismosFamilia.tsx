@@ -1,8 +1,19 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
-import { deshacerPareja, guardarPareja, subscribeParejas } from '../services/parejasService';
+import InfoSheet, { BotonInfo } from './InfoSheet';
+import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../services/parejasService';
 import { nombreConInicialMaterna } from '../utils/nombreCorto';
-import { MAX_PAREJA, MIN_PAREJA, companerosDe, vistaFamilia, type GrupoVista } from '../utils/parejasTrabajo';
+import {
+  MAX_PAREJA,
+  MIN_PAREJA,
+  companerosDe,
+  estacasDistintas,
+  otraPropuesta,
+  sugerirParejas,
+  vistaFamilia,
+  type GrupoVista,
+  type PropuestaParejas,
+} from '../utils/parejasTrabajo';
 import type { Familia, ParejaTrabajo, Participante } from '../types';
 
 /** Lista compartida de compañerismos de trabajo (una sola conexión, ver parejasService). */
@@ -63,18 +74,36 @@ export default function CompanerismosFamilia({
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
   const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
+  // Vista previa de "Sugerir": null = cerrada.
+  const [propuesta, setPropuesta] = useState<PropuestaParejas | null>(null);
+  const [sinOtra, setSinOtra] = useState(false);
+  const [infoSugerir, setInfoSugerir] = useState(false);
 
   // Al cambiar de familia se cierra todo lo abierto.
   useEffect(() => {
     setEditando(null);
     setSel([]);
     setError('');
+    setPropuesta(null);
+    setSinOtra(false);
   }, [fam.id]);
+
+  // Si mientras se mira la vista previa alguien más arma o separa un compañerismo
+  // (otro auxiliar, otro celular), la propuesta se recalcula con la gente que
+  // de verdad sigue sin compañero, en vez de ofrecer algo que ya no se puede aplicar.
+  useEffect(() => {
+    if (!propuesta) return;
+    const libres = new Set(vista.sinCompanero.map((p) => p.id));
+    if (propuesta.grupos.every((g) => g.every((p) => libres.has(p.id)))) return;
+    const nueva = sugerirParejas(vista.sinCompanero, propuesta.semilla);
+    setPropuesta(nueva.grupos.length ? nueva : null);
+  }, [propuesta, vista.sinCompanero]);
 
   const parejasRef = useRef(parejas);
   parejasRef.current = parejas;
 
   function abrir(grupo: GrupoVista | null) {
+    setPropuesta(null);
     setEditando({ id: grupo?.id ?? null });
     setSel(grupo ? grupo.personas.map((p) => p.id) : []);
     setError('');
@@ -114,6 +143,43 @@ export default function CompanerismosFamilia({
     mostrarAviso('Compañerismo separado', () => {
       void guardarPareja(fam, previo.id, previo.miembros, parejasRef.current.filter((x) => x.id !== previo.id), correo);
     });
+  }
+
+  function abrirSugerencia() {
+    const p = sugerirParejas(vista.sinCompanero, 0);
+    if (!p.grupos.length) return;
+    setEditando(null);
+    setSel([]);
+    setError('');
+    setSinOtra(false);
+    setPropuesta(p);
+  }
+  function cerrarSugerencia() {
+    setPropuesta(null);
+    setSinOtra(false);
+    setError('');
+  }
+  function verOtra() {
+    if (!propuesta) return;
+    const otra = otraPropuesta(vista.sinCompanero, propuesta);
+    setError('');
+    setSinOtra(!otra);
+    if (otra) setPropuesta(otra);
+  }
+  async function aplicarSugerencia() {
+    if (!propuesta || guardando) return;
+    setGuardando(true);
+    try {
+      const nuevas = await guardarParejasLote(fam, propuesta.grupos.map((g) => g.map((p) => p.id)), parejasRef.current, correo);
+      cerrarSugerencia();
+      mostrarAviso(nuevas.length === 1 ? 'Compañerismo armado' : `${nuevas.length} compañerismos armados`, () => {
+        void deshacerParejasLote(nuevas, correo);
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
   }
 
   // En el selector: quienes no tienen compañero + los del grupo que se está cambiando.
@@ -173,22 +239,87 @@ export default function CompanerismosFamilia({
     </div>
   );
 
+  const panelSugerencia = propuesta && (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-2">
+      <div className="flex items-center gap-2 mb-0.5">
+        <div className="text-sm font-bold flex-1">Propuesta de compañerismos</div>
+        <BotonInfo onClick={() => setInfoSugerir(true)} etiqueta="Cómo se arma la propuesta" />
+      </div>
+      <div className="text-xs text-slate-500 mb-2">
+        {propuesta.grupos.length} {propuesta.grupos.length === 1 ? 'compañerismo' : 'compañerismos'} ·{' '}
+        {propuesta.grupos.filter((g) => estacasDistintas(g)).length} con estacas distintas
+      </div>
+      {propuesta.grupos.map((g) => (
+        <div key={g.map((p) => p.id).join('+')} className="rounded-xl bg-white border-l-[3px] border-primary px-3 py-2.5 mb-2">
+          <div className="flex flex-col gap-1.5">
+            {g.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 min-w-0">
+                <GeneroTag genero={p.genero} />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</div>
+                  <div className="text-xs text-slate-500 truncate">{p.estaca || 'Sin estaca'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {(g.length === 3 || !estacasDistintas(g)) && (
+            <div className="text-xs font-bold text-slate-500 mt-1.5">
+              {[g.length === 3 ? 'Trío' : '', !estacasDistintas(g) ? 'Misma estaca' : ''].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+      ))}
+      {propuesta.sobrantes.length > 0 && (
+        <div className="text-xs text-slate-500 mb-2">
+          Quedan sin compañero: {propuesta.sobrantes.map((p) => nombreConInicialMaterna(p.nombres, p.apellidos)).join(', ')}.
+        </div>
+      )}
+      {sinOtra && <div className="text-xs text-slate-500 mb-2">No hay otra combinación igual de buena que esta.</div>}
+      {error && <div className="text-xs text-red-500 font-semibold mb-2">❌ {error}</div>}
+      <button
+        onClick={aplicarSugerencia}
+        disabled={guardando}
+        className="w-full min-h-[44px] bg-primary text-white font-bold rounded-xl text-sm disabled:opacity-40"
+      >
+        Aplicar ({propuesta.grupos.length})
+      </button>
+      <div className="flex gap-2 mt-2">
+        <button onClick={verOtra} disabled={guardando} className="flex-1 min-h-[44px] bg-primary/10 text-primary font-bold rounded-xl text-sm disabled:opacity-40">
+          Otra propuesta
+        </button>
+        <button onClick={cerrarSugerencia} disabled={guardando} className="flex-1 min-h-[44px] bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-2">
         <div className="text-xs font-bold text-slate-500 uppercase tracking-wide flex-1">
           Compañerismos ({vista.grupos.length})
         </div>
-        {puedeEditar && !editando && (
-          <button
-            onClick={() => abrir(null)}
-            disabled={vista.sinCompanero.length < MIN_PAREJA}
-            className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
-          >
-            + Armar
-          </button>
+        {puedeEditar && !editando && !propuesta && (
+          <>
+            <button
+              onClick={abrirSugerencia}
+              disabled={vista.sinCompanero.length < MIN_PAREJA}
+              className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
+            >
+              ✨ Sugerir
+            </button>
+            <button
+              onClick={() => abrir(null)}
+              disabled={vista.sinCompanero.length < MIN_PAREJA}
+              className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
+            >
+              + Armar
+            </button>
+          </>
         )}
       </div>
+      {panelSugerencia}
       {editando && editando.id === null && editor}
 
       {vista.grupos.map((g) =>
@@ -202,7 +333,7 @@ export default function CompanerismosFamilia({
             ))}
             {g.personas.length === 3 && <div className="text-xs font-bold text-slate-500">Trío</div>}
           </div>
-          {puedeEditar && !editando && (
+          {puedeEditar && !editando && !propuesta && (
             <div className="flex gap-2 mt-2.5">
               <button onClick={() => abrir(g)} className="flex-1 min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg">
                 Cambiar
@@ -232,6 +363,17 @@ export default function CompanerismosFamilia({
       )}
 
       {avisoNodo}
+      {infoSugerir && (
+        <InfoSheet titulo="¿Cómo se arma la propuesta?" onClose={() => setInfoSugerir(false)}>
+          <ul className="text-sm text-slate-600 space-y-2 list-disc pl-5">
+            <li>Solo usa a quienes todavía no tienen compañero. Los compañerismos que ya armaste no se tocan.</li>
+            <li>Junta hombre con mujer. Si sobran del mismo sexo, quedan entre ellos.</li>
+            <li>Si la cantidad es impar, sale un solo trío.</li>
+            <li>A igualdad de sexo, prefiere juntar personas de estacas distintas.</li>
+            <li>Con "Otra propuesta" ves otra combinación igual de buena. Al aplicar, todo se guarda junto y puedes deshacerlo de una vez.</li>
+          </ul>
+        </InfoSheet>
+      )}
     </div>
   );
 }

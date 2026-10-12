@@ -168,6 +168,14 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
     case 'DESHACER_COMPANERISMO_FAMILIA':
       texto = `deshizo el compañerismo de trabajo de ${nombresDe(d.miembros)} en ${familia(d.familiaId)}`;
       break;
+    case 'SUGERIR_COMPANERISMOS_FAMILIA': {
+      const grupos = Array.isArray(d.grupos) ? d.grupos : [];
+      texto = `armó ${grupos.length} compañerismo${grupos.length === 1 ? '' : 's'} de trabajo sugerido${grupos.length === 1 ? '' : 's'} en ${familia(d.familiaId)}: ${grupos.map(nombresDe).join(' · ')}`;
+      break;
+    }
+    case 'DESHACER_SUGERENCIA_COMPANERISMOS':
+      texto = `deshizo los compañerismos sugeridos en ${familia(d.familiaId)}`;
+      break;
     case 'ELIMINAR_COMPANERISMO':
       texto = 'quitó un compañerismo';
       break;

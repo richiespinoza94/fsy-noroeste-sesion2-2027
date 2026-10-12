@@ -1,7 +1,7 @@
 import { collection, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Familia, ParejaTrabajo } from '../types';
-import { planearGuardado } from '../utils/parejasTrabajo';
+import { planearGuardado, planearLote } from '../utils/parejasTrabajo';
 import { suscripcionCompartida } from '../utils/suscripcionCompartida';
 import { logAction } from './auditService';
 
@@ -67,4 +67,45 @@ export async function deshacerPareja(pareja: ParejaTrabajo, adminCorreo: string)
     await deleteDoc(doc(db, COL, pareja.id));
   }
   void logAction(adminCorreo, 'DESHACER_COMPANERISMO_FAMILIA', '', { familiaId: pareja.familiaId, miembros: pareja.miembros });
+}
+
+/**
+ * Guarda de una vez todos los compañerismos de una propuesta (un solo batch:
+ * o se arman todos o ninguno). Devuelve los creados para poder deshacerlos.
+ */
+export async function guardarParejasLote(
+  familia: Familia,
+  grupos: string[][],
+  existentes: ParejaTrabajo[],
+  adminCorreo: string
+): Promise<ParejaTrabajo[]> {
+  const nuevas = planearLote({ familia, grupos, existentes, nuevoId: () => crypto.randomUUID() });
+  if (!db) {
+    local = [...local, ...nuevas];
+    notify();
+  } else {
+    const batch = writeBatch(db);
+    nuevas.forEach((n) => batch.set(doc(db!, COL, n.id), n));
+    await batch.commit();
+  }
+  void logAction(adminCorreo, 'SUGERIR_COMPANERISMOS_FAMILIA', '', { familiaId: familia.id, grupos: nuevas.map((n) => n.miembros) });
+  return nuevas;
+}
+
+/** Deshace una propuesta aplicada: borra todos sus compañerismos en un solo batch. */
+export async function deshacerParejasLote(parejas: ParejaTrabajo[], adminCorreo: string) {
+  if (!parejas.length) return;
+  if (!db) {
+    const quitar = new Set(parejas.map((x) => x.id));
+    local = local.filter((x) => !quitar.has(x.id));
+    notify();
+  } else {
+    const batch = writeBatch(db);
+    parejas.forEach((x) => batch.delete(doc(db!, COL, x.id)));
+    await batch.commit();
+  }
+  void logAction(adminCorreo, 'DESHACER_SUGERENCIA_COMPANERISMOS', '', {
+    familiaId: parejas[0].familiaId,
+    grupos: parejas.map((x) => x.miembros),
+  });
 }

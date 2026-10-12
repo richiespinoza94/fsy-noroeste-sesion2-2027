@@ -17,8 +17,8 @@ import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
 import { filtrarPorCompania, infoCompanias, nombreCompania, resumenGrupo } from '../src/utils/companias';
 import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
-import { companerosDe, planearGuardado, resumenCompaneros, vistaFamilia } from '../src/utils/parejasTrabajo';
-import { deshacerPareja, guardarPareja, subscribeParejas } from '../src/services/parejasService';
+import { MAX_SUGERIR, companerosDe, estacasDistintas, firmaPropuesta, otraPropuesta, planearGuardado, planearLote, resumenCompaneros, sugerirParejas, vistaFamilia } from '../src/utils/parejasTrabajo';
+import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../src/services/parejasService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -1746,4 +1746,158 @@ test('191. nombreCompania — alias manda; sin alias "Familia N" se muestra como
   assert.strictEqual(nombreCompania({ ...base, nombre: 'Familia 3', customName: '' } as Familia), 'Compañía 3');
   assert.strictEqual(nombreCompania({ ...base, nombre: 'Familia 3', customName: 'Leones' } as Familia), 'Leones');
   assert.strictEqual(nombreCompania({ ...base, nombre: 'Equipo especial', customName: '' } as Familia), 'Equipo especial');
+});
+
+// ── Sugerir compañerismos (0058) ───────────────────────────────────────────
+type G = 'H' | 'M';
+const gente = (spec: [string, G, string][]): Participante[] =>
+  spec.map(([id, genero, estaca]) => ({ ...personaFake(id), nombres: id.toUpperCase(), genero, estaca }) as Participante);
+const idsDe = (grupos: Participante[][]) => grupos.map((g) => g.map((p) => p.id).join('+'));
+// Costo calculado aparte (no importado): 100 por par del mismo sexo, 1 por par de la misma estaca.
+const costoGrupo = (g: Participante[]) => {
+  let c = 0;
+  for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) c += (g[i].genero === g[j].genero ? 100 : 0) + (g[i].estaca === g[j].estaca ? 1 : 0);
+  return c;
+};
+const costoTotal = (gs: Participante[][]) => gs.reduce((a, g) => a + costoGrupo(g), 0);
+// Fuerza bruta: la mejor partición en duplas (y un solo trío si la cantidad es impar).
+function mejorBruto(ps: Participante[]): number {
+  const rec = (resto: Participante[], trioPendiente: boolean): number => {
+    if (!resto.length) return trioPendiente ? Infinity : 0;
+    const [a, ...otros] = resto;
+    let m = Infinity;
+    for (let i = 0; i < otros.length; i++) {
+      m = Math.min(m, costoGrupo([a, otros[i]]) + rec(otros.filter((_, k) => k !== i), trioPendiente));
+      if (trioPendiente) for (let j = i + 1; j < otros.length; j++) {
+        m = Math.min(m, costoGrupo([a, otros[i], otros[j]]) + rec(otros.filter((_, k) => k !== i && k !== j), false));
+      }
+    }
+    return m;
+  };
+  return rec(ps, ps.length % 2 === 1);
+}
+
+test('192. sugerirParejas — 3 hombres y 3 mujeres: todas las duplas son hombre + mujer', () => {
+  const ps = gente([['a', 'H', 'V'], ['b', 'H', 'V'], ['c', 'H', 'V'], ['d', 'M', 'V'], ['e', 'M', 'V'], ['f', 'M', 'V']]);
+  const r = sugerirParejas(ps);
+  assert.strictEqual(r.grupos.length, 3);
+  assert.ok(r.grupos.every((g) => g.length === 2 && new Set(g.map((p) => p.genero)).size === 2));
+  assert.deepStrictEqual(r.sobrantes, []);
+});
+
+test('193. sugerirParejas — sobrantes del mismo sexo quedan entre sí; cantidad impar da un solo trío', () => {
+  const par = sugerirParejas(gente([['a', 'H', 'V'], ['b', 'H', 'V'], ['c', 'H', 'V'], ['d', 'H', 'V'], ['e', 'M', 'V'], ['f', 'M', 'V']]));
+  assert.strictEqual(costoTotal(par.grupos), 100 + 3); // 1 dupla de hombres (100) + 3 duplas que comparten estaca (1 c/u)
+  assert.deepStrictEqual(par.grupos.map((g) => g.length).sort(), [2, 2, 2]);
+  const impar = sugerirParejas(gente([['a', 'H', 'V'], ['b', 'H', 'V'], ['c', 'H', 'V'], ['d', 'M', 'V'], ['e', 'M', 'V']]));
+  assert.deepStrictEqual(impar.grupos.map((g) => g.length).sort(), [2, 3]);
+  assert.ok(impar.grupos.every((g) => new Set(g.map((p) => p.genero)).size === 2)); // ninguna sale solo de un sexo
+  assert.strictEqual(new Set(impar.grupos.flat().map((p) => p.id)).size, 5); // nadie repetido ni olvidado
+  const tres = sugerirParejas(gente([['a', 'H', 'V'], ['b', 'M', 'V'], ['c', 'H', 'V']]));
+  assert.deepStrictEqual(tres.grupos.map((g) => g.length), [3]);
+});
+
+test('194. sugerirParejas — con 0 o 1 persona no arma nada y la que queda figura como sobrante', () => {
+  assert.deepStrictEqual(sugerirParejas([]), { grupos: [], sobrantes: [], semilla: 0 });
+  const una = gente([['a', 'H', 'V']]);
+  const r = sugerirParejas(una);
+  assert.deepStrictEqual(r.grupos, []);
+  assert.deepStrictEqual(r.sobrantes.map((p) => p.id), ['a']);
+});
+
+test('195. sugerirParejas — prefiere estacas distintas aunque el orden alfabético juntaría a las iguales', () => {
+  // Alfabético: A(Ventanilla) con C(Ventanilla) sería lo más fácil; lo bueno es A-D y B-C
+  const ps = gente([['a', 'H', 'Ventanilla'], ['b', 'H', 'Pro Lima'], ['c', 'M', 'Ventanilla'], ['d', 'M', 'Pro Lima']]);
+  const r = sugerirParejas(ps);
+  assert.ok(r.grupos.every((g) => estacasDistintas(g)));
+  assert.strictEqual(estacasDistintas([ps[0], ps[2]]), false);
+  assert.strictEqual(estacasDistintas(gente([['x', 'H', ''], ['y', 'M', '']])), true); // sin estaca no cuenta como repetida
+  assert.strictEqual(estacasDistintas(gente([['x', 'H', ' ventanilla '], ['y', 'M', 'Ventanilla']])), false); // ignora espacios y mayúsculas
+});
+
+test('196. sugerirParejas — es la mejor combinación posible (contra fuerza bruta, pares e impares) y es reproducible', () => {
+  let semilla = 12345;
+  const azar = () => ((semilla = (semilla * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const estacas = ['Ventanilla', 'Puente Piedra', 'Pro Lima'];
+  for (let caso = 0; caso < 60; caso++) {
+    const n = 2 + (caso % 7); // 2..8
+    const ps = gente(Array.from({ length: n }, (_, i) => [`p${i}`, azar() < 0.5 ? 'H' : 'M', estacas[Math.floor(azar() * 3)]] as [string, G, string]));
+    const r = sugerirParejas(ps);
+    assert.strictEqual(costoTotal(r.grupos), mejorBruto(ps), `caso ${caso}`);
+    assert.strictEqual(r.grupos.flat().length, n);
+    assert.strictEqual(r.grupos.filter((g) => g.length === 3).length, n % 2);
+    assert.strictEqual(firmaPropuesta(sugerirParejas(ps)), firmaPropuesta(r)); // misma entrada, misma propuesta
+    assert.strictEqual(firmaPropuesta(sugerirParejas([...ps].reverse())), firmaPropuesta(r)); // y no depende del orden de la lista
+  }
+});
+
+test('197. otraPropuesta — da otra combinación igual de buena; null si no hay otra', () => {
+  const ps = gente([['a', 'H', 'V1'], ['b', 'H', 'V2'], ['c', 'H', 'V3'], ['d', 'M', 'V1'], ['e', 'M', 'V2'], ['f', 'M', 'V3']]);
+  const a = sugerirParejas(ps);
+  const b = otraPropuesta(ps, a);
+  assert.ok(b);
+  assert.notStrictEqual(firmaPropuesta(b!), firmaPropuesta(a));
+  assert.strictEqual(costoTotal(b!.grupos), costoTotal(a.grupos));
+  assert.notStrictEqual(b!.semilla, a.semilla);
+  assert.strictEqual(otraPropuesta(gente([['a', 'H', 'V'], ['b', 'M', 'V']]), sugerirParejas(gente([['a', 'H', 'V'], ['b', 'M', 'V']]))), null); // solo hay una forma de juntar a 2
+});
+
+test('198. sugerirParejas — con más de MAX_SUGERIR personas propone por tandas y el resto queda para la siguiente', () => {
+  const ps = gente(Array.from({ length: 21 }, (_, i) => [`q${String(i).padStart(2, '0')}`, i % 2 ? 'M' : 'H', i % 3 ? 'Pro Lima' : 'Ventanilla'] as [string, G, string]));
+  const t0 = Date.now();
+  const r = sugerirParejas(ps);
+  assert.ok(Date.now() - t0 < 3000);
+  assert.strictEqual(r.grupos.flat().length, MAX_SUGERIR);
+  assert.strictEqual(r.sobrantes.length, 21 - MAX_SUGERIR);
+  const usados = new Set(r.grupos.flat().map((p) => p.id));
+  const segunda = sugerirParejas(ps.filter((p) => !usados.has(p.id)));
+  assert.deepStrictEqual(segunda.grupos.map((g) => g.length), [3]); // quedan 3: un trío
+});
+
+test('199. planearLote — valida pertenencia, tamaño, repetidos y quien ya tiene compañero', () => {
+  const fam = { id: 'F1', consejeros: ['u1', 'u2', 'u3', 'u4', 'u5'] };
+  let k = 0;
+  const base = { familia: fam, existentes: [] as ParejaTrabajo[], nuevoId: () => `n${++k}` };
+  assert.deepStrictEqual(planearLote({ ...base, grupos: [['u1', 'u2'], ['u3', 'u4', 'u5']] }), [
+    { id: 'n1', familiaId: 'F1', miembros: ['u1', 'u2'] },
+    { id: 'n2', familiaId: 'F1', miembros: ['u3', 'u4', 'u5'] },
+  ]);
+  assert.throws(() => planearLote({ ...base, grupos: [] }), /No hay compañerismos/);
+  assert.throws(() => planearLote({ ...base, grupos: [['u1']] }), /2 o 3/);
+  assert.throws(() => planearLote({ ...base, grupos: [['u1', 'x9']] }), /integrantes de esta compañía/);
+  assert.throws(() => planearLote({ ...base, grupos: [['u1', 'u2'], ['u2', 'u3']] }), /repetida/);
+  const existentes = [{ id: 'g1', familiaId: 'F1', miembros: ['u1', 'u2'] }, { id: 'gX', familiaId: 'F2', miembros: ['u3', 'u4'] }];
+  assert.throws(() => planearLote({ ...base, existentes, grupos: [['u2', 'u3']] }), /ya tiene compañero/); // u2 ya está con u1
+  assert.strictEqual(planearLote({ ...base, existentes, grupos: [['u3', 'u4']] }).length, 1); // un grupo de OTRA familia no cuenta
+  // un grupo viejo con alguien que ya salió de la compañía no se ve en pantalla, así que no bloquea a quien quedó solo
+  const huerfano = [{ id: 'g9', familiaId: 'F1', miembros: ['u1', 'ya-no-esta'] }];
+  assert.strictEqual(planearLote({ ...base, existentes: huerfano, grupos: [['u1', 'u2']] }).length, 1);
+});
+
+test('200. guardarParejasLote / deshacerParejasLote (modo local) — un lote crea todo y el deshacer lo borra todo; no pisa a quien ya tiene compañero', async () => {
+  await Promise.all(pendientes.slice()); // el modo local comparte una lista: se espera a las otras pruebas async de parejas (186)
+  let ultimo: ParejaTrabajo[] = [];
+  const baja = subscribeParejas((x) => (ultimo = x));
+  const previas = ultimo.length;
+  const nuevas = await guardarParejasLote(FAM_P, [['u1', 'u2'], ['u3', 'u4', 'u5']], ultimo, 'a@x.com');
+  assert.strictEqual(nuevas.length, 2);
+  assert.strictEqual(ultimo.length, previas + 2);
+  await assert.rejects(() => guardarParejasLote(FAM_P, [['u1', 'u3']], ultimo, 'a@x.com'), /ya tiene compañero/);
+  assert.strictEqual(ultimo.length, previas + 2); // el rechazo no escribió nada
+  await deshacerParejasLote(nuevas, 'a@x.com');
+  assert.strictEqual(ultimo.length, previas);
+  await deshacerParejasLote([], 'a@x.com'); // vacío: no hace nada
+  baja();
+});
+
+test('201. historial — describe la propuesta aplicada y su deshacer, dentro del grupo "Familias"', () => {
+  const ctx = { participantes: GENTE_P, capacitaciones: [], familias: [FAM_P] };
+  const mk = (accion: string, grupos: string[][]): AuditLog => ({ id: accion, timestamp: '2026-10-11T10:00:00', admin: 'a@x.com', accion, participanteId: '', detalles: JSON.stringify({ familiaId: 'F1', grupos }) } as AuditLog);
+  assert.strictEqual(grupoDeAccion('SUGERIR_COMPANERISMOS_FAMILIA'), 'familias');
+  assert.strictEqual(grupoDeAccion('DESHACER_SUGERENCIA_COMPANERISMOS'), 'familias');
+  const e = describirEntradas([mk('SUGERIR_COMPANERISMOS_FAMILIA', [['u1', 'u2'], ['u3', 'u4']]), mk('SUGERIR_COMPANERISMOS_FAMILIA', [['u1', 'u2']]), mk('DESHACER_SUGERENCIA_COMPANERISMOS', [])], ctx).map((x) => x.texto);
+  assert.ok(/^armó 2 compañerismos de trabajo sugeridos en Compañía 1: /.test(e[0]));
+  assert.ok(/^armó 1 compañerismo de trabajo sugerido en /.test(e[1]));
+  assert.ok(/^deshizo los compañerismos sugeridos en Compañía 1/.test(e[2]));
+  assert.ok(!e.some((t) => t.includes('una persona')));
 });
