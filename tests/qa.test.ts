@@ -15,7 +15,7 @@ import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas } from '../src/utils/asistenciaStats';
 import { calcularSeguimiento } from '../src/utils/seguimiento';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../src/services/asistenciaService';
-import { filtrarPorCompania, infoCompanias, nombreCompania, resumenGrupo } from '../src/utils/companias';
+import { contarEstados, contarSinCompania, esDeReparto, filtrarPorCompania, filtrarPorEstado, infoCompanias, nombreCompania, resumenGrupo } from '../src/utils/companias';
 import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
 import { MAX_SUGERIR, companerosDe, estacasDistintas, firmaPropuesta, otraPropuesta, planearGuardado, planearLote, resumenCompaneros, sugerirParejas, vistaFamilia } from '../src/utils/parejasTrabajo';
 import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../src/services/parejasService';
@@ -1900,4 +1900,47 @@ test('201. historial — describe la propuesta aplicada y su deshacer, dentro de
   assert.ok(/^armó 1 compañerismo de trabajo sugerido en /.test(e[1]));
   assert.ok(/^deshizo los compañerismos sugeridos en Compañía 1/.test(e[2]));
   assert.ok(!e.some((t) => t.includes('una persona')));
+});
+
+// ── Asistencia (0059): Sin compañía vs Otros roles, y filtro por estado ─────
+const GENTE_R = [
+  { ...personaFake('c1'), familiaId: 'fa', asignacion: 'Consejero' },
+  { ...personaFake('c2'), familiaId: '', asignacion: 'Consejero' },
+  { ...personaFake('l1'), familiaId: '', asignacion: 'Logístico' },
+  { ...personaFake('l2'), familiaId: 'eliminada', asignacion: 'Logístico' },
+  { ...personaFake('o1'), familiaId: '', asignacion: 'Coordinador General' },
+  { ...personaFake('o2'), familiaId: '', asignacion: 'Audiovisuales' },
+  { ...personaFake('o3'), familiaId: '', asignacion: '' },
+  { ...personaFake('o4'), familiaId: 'fa', asignacion: 'Coordinador Auxiliar' }, // con compañía: no cuenta en ninguno de los dos
+] as Participante[];
+
+test('202. esDeReparto — solo Consejero y Logístico (no Coordinador Logístico ni Matrimonio Logístico)', () => {
+  assert.strictEqual(esDeReparto({ asignacion: 'Consejero' }), true);
+  assert.strictEqual(esDeReparto({ asignacion: 'Logístico' }), true);
+  for (const a of ['Coordinador Logístico', 'Matrimonio Logístico', 'Audiovisuales', 'Coordinador General', ''] as const) assert.strictEqual(esDeReparto({ asignacion: a }), false, a);
+});
+
+test('203. filtrarPorCompania — "sin" = Consejero/Logístico sin compañía (o con una eliminada); "otros" = el resto del equipo sin compañía', () => {
+  const m = infoCompanias(FAMS_C);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_R, 'sin', m).map((p) => p.id), ['c2', 'l1', 'l2']);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_R, 'otros', m).map((p) => p.id), ['o1', 'o2', 'o3']);
+  assert.deepStrictEqual(filtrarPorCompania(GENTE_R, 'fa', m).map((p) => p.id), ['c1', 'o4']); // quien tiene compañía, con cualquier rol
+  assert.deepStrictEqual(contarSinCompania(GENTE_R, m), { sin: 3, otros: 3 });
+  assert.deepStrictEqual(contarSinCompania([], m), { sin: 0, otros: 0 });
+  // "sin" y "otros" no se pisan y, con las compañías, cubren a todos
+  const total = ['sin', 'otros', 'fa', 'fb', 'fc'].reduce((n, f) => n + filtrarPorCompania(GENTE_R, f, m).length, 0);
+  assert.strictEqual(total, GENTE_R.length);
+});
+
+test('204. filtrarPorEstado / contarEstados — "por marcar" incluye sin marca y "ausente"; "justificado" no es ni por marcar ni presente', () => {
+  const g = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+  const asis = { a: { estado: 'presente' }, b: { estado: 'ausente' }, c: { estado: 'justificado' }, e: { estado: 'presente' } }; // d sin marca
+  assert.deepStrictEqual(filtrarPorEstado(g, asis, '').map((p) => p.id), ['a', 'b', 'c', 'd', 'e']);
+  assert.deepStrictEqual(filtrarPorEstado(g, asis, 'presentes').map((p) => p.id), ['a', 'e']);
+  assert.deepStrictEqual(filtrarPorEstado(g, asis, 'por_marcar').map((p) => p.id), ['b', 'd']);
+  assert.deepStrictEqual(contarEstados(g, asis), { presentes: 2, porMarcar: 2 });
+  assert.deepStrictEqual(contarEstados([], asis), { presentes: 0, porMarcar: 0 });
+  // el conteo del chip siempre coincide con la lista que muestra y con el resumen de avance
+  assert.strictEqual(contarEstados(g, asis).presentes, resumenGrupo(g as unknown as Participante[], asis).presentes);
+  assert.strictEqual(contarEstados(g, asis).porMarcar, filtrarPorEstado(g, asis, 'por_marcar').length);
 });

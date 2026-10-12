@@ -6,7 +6,8 @@ import { ejecutarReparto } from '../services/repartoFamiliasService';
 import { calcularCandidatosPorRol, calcularEstadoFamilia, calcularOActualizarPlanEnVivo, type CandidatoReparto } from '../utils/repartoFamilias';
 import { FAMILY_COLORS } from '../data/colors';
 import type { Asistencia, Capacitacion, EstadoAsistencia, Familia, Participante, SessionUser } from '../types';
-import { filtrarPorCompania, infoCompanias, nombreCompania, resumenGrupo, type InfoCompania } from '../utils/companias';
+import { contarEstados, contarSinCompania, filtrarPorCompania, filtrarPorEstado, infoCompanias, nombreCompania, resumenGrupo, type FiltroEstado, type InfoCompania } from '../utils/companias';
+import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
 import { agruparEventosParaSelector, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { nombreCorto } from '../utils/nombreCorto';
@@ -32,8 +33,10 @@ export default function AsistenciaScreen({
   const [aviso, setAviso] = useState<{ texto: string; deshacer?: () => void } | null>(null);
   const avisoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [qrOpen, setQrOpen] = useState(false);
-  // Filtro rápido por compañía: '' = todas · 'sin' = sin compañía · id de una compañía.
+  // Filtro rápido por compañía: '' = todas · 'sin' = sin compañía (Consejero/Logístico) · 'otros' = otros roles sin compañía · id de una compañía.
   const [filtroCompania, setFiltroCompania] = useState('');
+  // Filtro por estado: '' = todos · 'por_marcar' · 'presentes'. Un toque filtra, otro sobre el mismo vuelve a todos.
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('');
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [asignandoId, setAsignandoId] = useState('');
   // El plan EN VIVO (participanteId → familiaId) — se arma de a pedazos con
@@ -69,9 +72,13 @@ export default function AsistenciaScreen({
   // familiaId de cada persona), así que mostrar "(2)" y filtrar no cuesta ninguna lectura.
   const companias = useMemo(() => infoCompanias(familias), [familias]);
   const conCompania = useMemo(() => participantes.reduce((n, p) => n + (companias.has(p.familiaId) ? 1 : 0), 0), [participantes, companias]);
-  // Si la compañía elegida deja de existir, se vuelve a "Todas" sin tocar el estado.
-  const filtroActivo = filtroCompania === 'sin' || companias.has(filtroCompania) ? filtroCompania : '';
+  const sinCompania = useMemo(() => contarSinCompania(participantes, companias), [participantes, companias]);
+  // Si la compañía elegida deja de existir (o "Sin compañía"/"Otros roles" se queda vacío), se vuelve a "Todas" sin tocar el estado.
+  const filtroActivo =
+    (filtroCompania === 'sin' && sinCompania.sin > 0) || (filtroCompania === 'otros' && sinCompania.otros > 0) || companias.has(filtroCompania) ? filtroCompania : '';
   const grupo = useMemo(() => filtrarPorCompania(participantes, filtroActivo, companias), [participantes, filtroActivo, companias]);
+  const conteo = useMemo(() => contarEstados(grupo, asistencia), [grupo, asistencia]);
+  const grupoVisible = useMemo(() => filtrarPorEstado(grupo, asistencia, filtroEstado), [grupo, asistencia, filtroEstado]);
 
   // El POOL de elegibles ahora mismo (presentes, sin compañía, Consejero o
   // Logístico) — listar quién es elegible NO dispara ningún cálculo por sí
@@ -125,14 +132,14 @@ export default function AsistenciaScreen({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q) {
-      const list = grupo.filter((p) => `${p.nombres} ${p.apellidos} ${p.estaca}`.toLowerCase().includes(q));
+      const list = grupoVisible.filter((p) => `${p.nombres} ${p.apellidos} ${p.estaca}`.toLowerCase().includes(q));
       return [...list].sort((a, b) => a.apellidos.localeCompare(b.apellidos, 'es'));
     }
     // Sin búsqueda: quien necesita acción primero, recién llegados después,
     // el resto del roster (sin marcar todavía) al final — así no hay que
     // escarbar entre cientos de personas para ver a quién se acaba de
     // marcar presente.
-    return [...grupo].sort((a, b) => {
+    return [...grupoVisible].sort((a, b) => {
       const pa = prioridad.get(a.id) ?? 2;
       const pb = prioridad.get(b.id) ?? 2;
       if (pa !== pb) return pa - pb;
@@ -143,7 +150,7 @@ export default function AsistenciaScreen({
       }
       return a.apellidos.localeCompare(b.apellidos, 'es');
     });
-  }, [grupo, query, asistencia, prioridad]);
+  }, [grupoVisible, query, asistencia, prioridad]);
 
   const necesitanCompania = useMemo(() => filtered.reduce((n, p) => n + (prioridad.get(p.id) === 0 ? 1 : 0), 0), [filtered, prioridad]);
 
@@ -153,7 +160,6 @@ export default function AsistenciaScreen({
     [filtroActivo, grupo, participantes, asistencia]
   );
   const { presentes, total, pct } = resumen;
-  const etiquetaGrupo = filtroActivo === 'sin' ? 'Sin compañía' : companias.get(filtroActivo)?.nombre ?? '';
 
   const mostrarAviso = useCallback((a: { texto: string; deshacer?: () => void }) => {
     clearTimeout(avisoTimer.current);
@@ -216,9 +222,12 @@ export default function AsistenciaScreen({
             QR
           </button>
         </div>
-        {cap && !filtroActivo && (
-          <div className="text-xs text-slate-500 mb-2">
-            📅 {cap.fecha} {cap.hora && `· ${cap.hora}`} · 📍 {cap.lugar}
+        {/* Siempre visible: antes se escondía al filtrar por compañía y todo el encabezado saltaba. */}
+        {cap && (
+          <div className="text-xs text-slate-500 mb-2 truncate">
+            📅 {fechaAmigable(cap.fecha, hoyLocalISO())}
+            {cap.hora && ` · ${rangoHora(cap.hora, cap.horaFin)}`}
+            {cap.lugar && ` · 📍 ${cap.lugar}`}
           </div>
         )}
         <input
@@ -231,7 +240,7 @@ export default function AsistenciaScreen({
             otro toque sobre el mismo botón vuelve a "Todas". */}
         {conCompania > 0 && (
           <div className="flex gap-2 overflow-x-auto -mx-4 px-4 mb-2" role="group" aria-label="Filtrar por compañía">
-            {([{ id: '', label: 'Todas' }, ...[...companias.values()].map((c) => ({ id: c.id, label: String(c.numero), c })), ...(conCompania < participantes.length ? [{ id: 'sin', label: 'Sin compañía' }] : [])] as { id: string; label: string; c?: InfoCompania }[]).map((o) => {
+            {([{ id: '', label: 'Todas' }, ...[...companias.values()].map((c) => ({ id: c.id, label: String(c.numero), c })), ...(sinCompania.sin > 0 ? [{ id: 'sin', label: 'Sin compañía' }] : []), ...(sinCompania.otros > 0 ? [{ id: 'otros', label: 'Otros roles' }] : [])] as { id: string; label: string; c?: InfoCompania }[]).map((o) => {
               const activo = filtroActivo === o.id;
               return (
                 <button
@@ -250,9 +259,21 @@ export default function AsistenciaScreen({
             })}
           </div>
         )}
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
-          <span>{etiquetaGrupo || 'Check-in en vivo'}</span>
-          <strong className="text-primary">{presentes}/{total} · {pct}%</strong>
+        <div className="flex items-center gap-2 mb-1.5">
+          {([['por_marcar', 'Por marcar', conteo.porMarcar], ['presentes', 'Presentes', conteo.presentes]] as const).map(([id, label, n]) => {
+            const activo = filtroEstado === id;
+            return (
+              <button
+                key={id}
+                aria-pressed={activo}
+                onClick={() => setFiltroEstado(activo ? '' : id)}
+                className={`min-h-[44px] px-3.5 rounded-full text-sm font-bold border ${activo ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'}`}
+              >
+                {label} · {n}
+              </button>
+            );
+          })}
+          <strong className="ml-auto text-xs text-primary whitespace-nowrap">{presentes}/{total} · {pct}%</strong>
         </div>
         <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
           <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -261,7 +282,7 @@ export default function AsistenciaScreen({
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2 pb-24" onScroll={handleScroll}>
         {!query.trim() && necesitanCompania > 0 && (
-          <div className="text-[11px] font-bold text-primary uppercase tracking-wide px-1 -mb-1">
+          <div className="text-xs font-bold text-primary uppercase tracking-wide px-1 -mb-1">
             🏠 Necesitan compañía ({necesitanCompania})
           </div>
         )}
@@ -347,12 +368,12 @@ const FilaAsistencia = memo(function FilaAsistencia({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-slate-500 truncate">⛪ {p.estaca}</div>
+          <div className="text-xs text-slate-500 truncate">⛪ {p.estaca}</div>
         </div>
         <button
           onClick={() => onToggle(p, estado)}
           aria-pressed={checked}
-          className={`h-11 min-w-[92px] rounded-xl text-xs font-extrabold ${checked ? 'bg-emerald-500 text-white' : 'bg-primary/10 text-primary'}`}
+          className={`h-11 min-w-[88px] rounded-xl text-xs font-extrabold ${checked ? 'bg-emerald-500 text-white' : 'bg-primary/10 text-primary'}`}
         >
           {checked ? '✅ Asistió' : 'Marcar'}
         </button>
@@ -360,9 +381,9 @@ const FilaAsistencia = memo(function FilaAsistencia({
           onClick={() => onJustificar(p, estado)}
           aria-pressed={justified}
           aria-label="Justificar falta"
-          className={`h-11 w-11 rounded-xl text-xs font-extrabold ${justified ? 'bg-amber-400 text-white' : 'bg-amber-100 text-amber-700'}`}
+          className={`h-11 min-w-[60px] px-2 rounded-xl text-xs font-extrabold ${justified ? 'bg-amber-400 text-white' : 'bg-amber-100 text-amber-700'}`}
         >
-          J
+          Justif.
         </button>
       </div>
       {/* Asignación en vivo — solo Coordinador General, y solo si esta persona está
@@ -373,17 +394,17 @@ const FilaAsistencia = memo(function FilaAsistencia({
           {sugerida ? (
             <>
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: FAMILY_COLORS.find((c) => c.id === sugerida.colorId)?.hex || '#94A3B8' }} />
-              <span className="text-[11px] text-slate-500 flex-1 truncate">
+              <span className="text-xs text-slate-500 flex-1 truncate">
                 Sin compañía — sugerida: <strong>{nombreCompania(sugerida)}</strong>
               </span>
             </>
           ) : (
-            <span className="text-[11px] text-slate-500 flex-1 truncate">Sin compañía</span>
+            <span className="text-xs text-slate-500 flex-1 truncate">Sin compañía</span>
           )}
           <button
             disabled={asignando}
             onClick={() => onAsignar(p)}
-            className="shrink-0 min-h-[44px] bg-primary text-white text-[11px] font-bold rounded-lg px-3 disabled:opacity-50"
+            className="shrink-0 min-h-[44px] bg-primary text-white text-xs font-bold rounded-lg px-3 disabled:opacity-50"
           >
             {asignando ? (sugerida ? 'Asignando…' : 'Calculando…') : sugerida ? '🏠 Asignar' : '🏠 Asignar compañía'}
           </button>

@@ -113,14 +113,14 @@ Si se toca `firestore.rules`: hay que volver a pegarlo manualmente en Firebase C
 - **Compañerismos de trabajo** (`parejasTrabajo`): parejas o tríos dentro de una compañía, solo Consejeros y Logísticos, se permite "sin compañero" y se pueden modificar (no son oficiales). Distintos de los Coordinadores Auxiliares (`Companerismo`).
 - **Sugerir parejas** (`sugerirParejas` en `src/utils/parejasTrabajo.ts`, botón ✨ en Compañías): solo usa a quienes aún no tienen compañero (no toca los ya armados). Busca la combinación de menor costo con cálculo exacto (par del mismo sexo = 100, par de la misma estaca = 1): hombre + mujer siempre que se pueda, sobrantes del mismo sexo entre sí, un solo trío si la cantidad es impar, y a igualdad prefiere estacas distintas. `semilla` 0 = primera propuesta; "Otra propuesta" avanza la semilla hasta dar una combinación distinta (`otraPropuesta`, devuelve `null` si no hay). Con más de `MAX_SUGERIR` (18) personas propone por tandas. Aplicar guarda todo en un solo batch (`guardarParejasLote`) y falla si alguien ya tiene compañero (`planearLote`); Deshacer borra el lote entero (`deshacerParejasLote`). Acciones de auditoría: `SUGERIR_COMPANERISMOS_FAMILIA`, `DESHACER_SUGERENCIA_COMPANERISMOS`. No hay colección nueva ni cambios en `firestore.rules`.
 - **Franja de compañías en Gestión:** fija arriba (`sticky -top-4`, el `-4` compensa el `p-4` del contenedor que scrollea), pero se esconde al bajar y vuelve al subir, igual que el menú inferior (`useScrollDirection`); escondida, deja una línea de 4 px del color de la compañía.
+- **Asistencia** (`AsistenciaScreen.tsx`): chips de estado "Por marcar · n" / "Presentes · n" (un toque filtra, otro vuelve a todos; "Por marcar" = sin marca o "ausente", el justificado no cuenta en ninguno) en la misma fila que el avance. Chip "Sin compañía" = solo Consejero/Logístico (`esDeReparto`); "Otros roles" = el resto del equipo sin compañía. La fecha del evento siempre se ve (antes se escondía al filtrar y el encabezado saltaba). Botón "Justif." con texto, no "J".
 - Marca: azul `#0E2954`, acento `#f5c038`, fondo `#eef1f7`.
 
 ## 10. Estado y pendientes
 
-Aplicados: 0054–0056 (compañerismos de trabajo, Inicio limpio, hoja ⓘ en Seguimiento), 0057 (Gestión → Compañías), 0058 (Sugerir parejas).
+Aplicados: 0054–0056 (compañerismos de trabajo, Inicio limpio, hoja ⓘ en Seguimiento), 0057 (Gestión → Compañías), 0058 (Sugerir parejas), 0058b/c (franja de compañías al ras y que se esconde al bajar), 0059 (Asistencia).
 
 Pendientes, en orden:
-- **0059 Asistencia:** chips "Por marcar / Presentes"; "Sin compañía" solo para Consejero/Logístico y "Otros roles" aparte; fecha siempre visible (sin salto de layout); botón "Justif.".
 - **0060 Búsqueda:** al escribir una estaca no busca ni sugiere estacas (bug); se mantiene el mínimo de 3 letras; chip "Audiovisual" en vez de "AV".
 - **0061 Reportes:** gráfico legible y sin barra oculta, nombres completos, contadores uniformes, "Por rol" ordenado de mayor a menor.
 - **0062 Transversal:** ocultar barras de scroll horizontales con degradado en los bordes (incluida la tira de pestañas de Gestión, donde "Historial" queda oculta), fechas ISO → `fechaAmigable`, ícono PWA (círculo verde "fsy 2027 Lima Noroeste") y `manifest`.
