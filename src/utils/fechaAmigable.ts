@@ -35,3 +35,10 @@ export function rangoHora(hora: string, horaFin?: string): string {
   if (!b) return `${a.texto} ${a.sufijo}`;
   return a.sufijo === b.sufijo ? `${a.texto}–${b.texto} ${b.sufijo}` : `${a.texto} ${a.sufijo}–${b.texto} ${b.sufijo}`;
 }
+
+/** Piezas para dibujar una fecha tipo calendario: { dia: 'jue', num: 15, mes: 'oct' }. */
+export function partesFecha(iso: string): { dia: string; num: number; mes: string } | null {
+  const f = partes(iso);
+  if (!f) return null;
+  return { dia: DIAS[new Date(Date.UTC(f[0], f[1] - 1, f[2])).getUTCDay()], num: f[2], mes: MESES[f[1] - 1] };
+}

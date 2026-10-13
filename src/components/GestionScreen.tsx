@@ -34,14 +34,15 @@ import { downloadBlob, generarRepartoPdf } from '../utils/repartoPdf';
 import { generarPresentacionHtml } from '../utils/repartoPresentacion';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { EVENTO_NOMBRE } from '../data/evento';
-import { crearNocheHogar, marcarAsistenciaNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
+import { crearNocheHogar, editarNocheHogar, eliminarNocheHogar, marcarAsistenciaNocheHogar, marcarVariosNocheHogar, restaurarNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
+import { ordenarParaVista, resumenNoche, sumarDias } from '../utils/nochesHogar';
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
 import { hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
-import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
+import { fechaAmigable, partesFecha, rangoHora } from '../utils/fechaAmigable';
 import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
-import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
+import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type EstadoAsistencia, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 import { nombreConInicialMaterna, nombreCorto } from '../utils/nombreCorto';
 import { resumenCompaneros } from '../utils/parejasTrabajo';
@@ -800,69 +801,238 @@ function FamiliaBalanceCard({
   );
 }
 
+const NOCHES_PAGINA = 5;
+const tituloVisible = (t: string) => t.replace(/\bFamilia\b/g, 'Compañía');
+
 function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Participante[]; user: SessionUser }) {
   const [noches, setNoches] = useState<NocheHogar[]>([]);
-  const [planning, setPlanning] = useState(false);
+  // `formulario`: null = cerrado · 'nueva' = planificar · id = editando esa noche.
+  const [formulario, setFormulario] = useState<string | null>(null);
   const [fecha, setFecha] = useState('');
   const [titulo, setTitulo] = useState('Noche de Hogar');
+  const [abierta, setAbierta] = useState<string | null | undefined>(undefined); // undefined = la primera de la lista
+  const [visibles, setVisibles] = useState(NOCHES_PAGINA);
+  const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
 
   useEffect(() => subscribeNochesHogar(fam.id, setNoches), [fam.id]);
+  useEffect(() => {
+    setFormulario(null);
+    setAbierta(undefined);
+    setVisibles(NOCHES_PAGINA);
+  }, [fam.id]);
 
-  async function crear() {
-    if (!fecha) return;
-    await crearNocheHogar(fam.id, fecha, titulo, user.correo);
-    setPlanning(false);
-    setFecha('');
-    setTitulo('Noche de Hogar');
+  const hoy = hoyLocalISO();
+  const lista = useMemo(() => ordenarParaVista(noches, hoy), [noches, hoy]);
+  // Solo una noche abierta a la vez: con una por semana hasta enero son ~14, y todas abiertas serían cientos de filas.
+  const abiertaId = abierta === undefined ? lista[0]?.id ?? null : abierta;
+
+  function abrirFormulario(id: 'nueva' | NocheHogar) {
+    if (id === 'nueva') {
+      setFecha(hoy);
+      setTitulo('Noche de Hogar');
+      setFormulario('nueva');
+    } else {
+      setFecha(id.fecha);
+      setTitulo(tituloVisible(id.titulo));
+      setFormulario(id.id);
+    }
   }
+
+  async function guardar() {
+    if (!fecha) return;
+    if (formulario === 'nueva') {
+      const nueva = await crearNocheHogar(fam.id, fecha, titulo, user.correo);
+      setAbierta(nueva.id);
+    } else {
+      const noche = noches.find((n) => n.id === formulario);
+      if (noche) await editarNocheHogar(noche, fecha, titulo, user.correo);
+    }
+    setFormulario(null);
+  }
+
+  async function marcar(noche: NocheHogar, id: string, estado: EstadoAsistencia) {
+    await marcarAsistenciaNocheHogar(noche, id, estado, user.correo);
+  }
+
+  async function todosPresentes(noche: NocheHogar) {
+    const antes: Record<string, EstadoAsistencia> = {};
+    const despues: Record<string, EstadoAsistencia> = {};
+    for (const m of miembros) {
+      const e = noche.asistencia[m.id];
+      if (e === 'presente' || e === 'justificado') continue; // a quien está justificado no se le pisa
+      antes[m.id] = e ?? 'ausente';
+      despues[m.id] = 'presente';
+    }
+    if (!Object.keys(despues).length) return;
+    await marcarVariosNocheHogar(noche, despues, user.correo);
+    mostrarAviso(`${Object.keys(despues).length} marcados presentes`, () => void marcarVariosNocheHogar(noche, antes, user.correo));
+  }
+
+  async function eliminar(noche: NocheHogar) {
+    await eliminarNocheHogar(noche, user.correo);
+    mostrarAviso('Noche de Hogar eliminada', () => void restaurarNocheHogar(noche, user.correo));
+  }
+
+  const formularioNode = formulario && (
+    <div className="flex flex-col gap-2 mb-3 bg-slate-50 rounded-xl p-3">
+      <label className="text-xs font-bold text-slate-600" htmlFor="noche-fecha">Fecha</label>
+      <div className="flex gap-2">
+        <input id="noche-fecha" className="input flex-1" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <button type="button" onClick={() => setFecha(hoy)} className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg">Hoy</button>
+        <button type="button" onClick={() => setFecha(sumarDias(hoy, 1))} className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg">Mañana</button>
+      </div>
+      <label className="text-xs font-bold text-slate-600" htmlFor="noche-titulo">Título</label>
+      <input id="noche-titulo" className="input" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+      <div className="flex gap-2">
+        <button onClick={guardar} disabled={!fecha} className="flex-1 min-h-[44px] bg-primary text-white font-bold rounded-xl text-sm disabled:opacity-40">
+          {formulario === 'nueva' ? 'Guardar Noche de Hogar' : 'Guardar cambios'}
+        </button>
+        <button onClick={() => setFormulario(null)} className="min-h-[44px] px-4 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">Cancelar</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-xl">🏠</span>
+        <span className="text-xl" aria-hidden="true">🏠</span>
         <div className="flex-1">
-          <div className="text-sm font-extrabold">Noches de Hogar</div>
+          <div className="text-sm font-extrabold">Noches de Hogar{noches.length > 0 ? ` (${noches.length})` : ''}</div>
+          <div className="text-xs text-slate-500">Registro interno de la compañía</div>
         </div>
-        <button onClick={() => setPlanning((v) => !v)} className="min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg px-3">
-          {planning ? 'Cerrar' : 'Planificar'}
-        </button>
+        {formulario !== 'nueva' && (
+          <button onClick={() => abrirFormulario('nueva')} className="min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg px-3">
+            + Planificar
+          </button>
+        )}
       </div>
 
-      {planning && (
-        <div className="flex flex-col gap-2 mb-3">
-          <input className="input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-          <input className="input" placeholder="Título" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
-          <button onClick={crear} className="bg-primary text-white font-bold rounded-xl py-2.5 text-sm">Guardar Noche de Hogar</button>
-        </div>
+      {formulario === 'nueva' && formularioNode}
+
+      {noches.length === 0 && formulario !== 'nueva' && (
+        <button onClick={() => abrirFormulario('nueva')} className="w-full min-h-[44px] text-sm font-bold text-primary border-2 border-dashed border-primary/30 rounded-xl">
+          Planifica la primera Noche de Hogar
+        </button>
       )}
 
-      {noches.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Aún no hay Noches de Hogar planificadas.</div>}
+      <div className="flex flex-col gap-2">
+        {lista.slice(0, visibles).map((noche) => {
+          const r = resumenNoche(noche.asistencia, miembros);
+          const f = partesFecha(noche.fecha);
+          const esHoy = noche.fecha === hoy;
+          const futura = noche.fecha > hoy;
+          const sinMarcas = r.presentes + r.justificados === 0;
+          const abierto = abiertaId === noche.id;
+          return (
+            <div key={noche.id} className={`rounded-xl border ${esHoy ? 'border-accent bg-amber-50/40' : 'border-slate-200 bg-slate-50'}`}>
+              <button
+                onClick={() => setAbierta(abierto ? null : noche.id)}
+                aria-expanded={abierto}
+                className="w-full min-h-[56px] flex items-center gap-3 px-3 py-2 text-left"
+              >
+                {f && (
+                  <span className={`shrink-0 w-12 rounded-lg text-center py-1 leading-none ${esHoy ? 'bg-accent text-primary' : 'bg-white text-primary border border-slate-200'}`}>
+                    <span className="block text-xs font-bold uppercase">{f.dia}</span>
+                    <span className="block text-lg font-extrabold tabular-nums">{f.num}</span>
+                    <span className="block text-xs font-bold uppercase">{f.mes}</span>
+                  </span>
+                )}
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold leading-snug">{tituloVisible(noche.titulo)}</span>
+                  <span className="block text-xs text-slate-500">
+                    {esHoy ? 'Hoy · ' : ''}
+                    {futura ? 'Por venir' : sinMarcas ? 'Sin marcas' : `${r.presentes} de ${r.total} presentes${r.justificados ? ` · ${r.justificados} justif.` : ''}`}
+                  </span>
+                </span>
+                {!futura && !sinMarcas && <span className="shrink-0 text-lg font-extrabold text-primary tabular-nums">{r.pct}%</span>}
+                <span className={`shrink-0 text-slate-500 transition-transform motion-reduce:transition-none ${abierto ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
+              </button>
 
-      {noches.map((noche) => (
-        <div key={noche.id} className="bg-slate-50 rounded-xl p-3 mt-2">
-          <div className="flex justify-between gap-2 text-xs mb-2">
-            <strong className="text-primary">{noche.titulo.replace(/\bFamilia\b/g, 'Compañía')}</strong>
-            <span className="text-slate-500">{fechaAmigable(noche.fecha, hoyLocalISO())}</span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {miembros.map((p) => {
-              const checked = noche.asistencia[p.id] === 'presente';
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => marcarAsistenciaNocheHogar(noche, p.id, checked ? 'ausente' : 'presente', user.correo)}
-                  className={`flex justify-between items-center gap-2 min-h-[44px] rounded-lg px-2.5 py-1.5 text-xs border ${
-                    checked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200'
-                  }`}
-                >
-                  <span className="min-w-0 text-left">{nombreCorto(p.nombres, p.apellidos)}</span>
-                  <strong className="shrink-0 whitespace-nowrap">{checked ? '✅ Presente' : '○ Marcar'}</strong>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+              {abierto && (
+                <div className="px-3 pb-3">
+                  {formulario === noche.id ? (
+                    formularioNode
+                  ) : (
+                    <>
+                      <div
+                        className="flex h-2.5 rounded-full overflow-hidden bg-slate-200"
+                        role="img"
+                        aria-label={`${r.presentes} presentes, ${r.justificados} justificados y ${r.porMarcar} por marcar, de ${r.total}`}
+                      >
+                        {r.total > 0 && (
+                          <>
+                            <div style={{ width: `${(r.presentes / r.total) * 100}%`, background: '#0E2954' }} />
+                            <div style={{ width: `${(r.justificados / r.total) * 100}%`, background: '#E8A33A' }} />
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex-1 text-xs text-slate-500 tabular-nums">
+                          ✓ {r.presentes} · J {r.justificados} · ○ {r.porMarcar}
+                        </div>
+                        {r.porMarcar > 0 && (
+                          <button onClick={() => void todosPresentes(noche)} className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg">
+                            ✓ Todos presentes
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        {miembros.map((p) => {
+                          const e = noche.asistencia[p.id];
+                          const presente = e === 'presente';
+                          const justif = e === 'justificado';
+                          return (
+                            <div key={p.id} className={`flex items-center rounded-lg border ${presente ? 'bg-emerald-50 border-emerald-200' : justif ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+                              <button
+                                onClick={() => void marcar(noche, p.id, presente ? 'ausente' : 'presente')}
+                                aria-pressed={presente}
+                                className="flex-1 min-w-0 min-h-[48px] flex items-center gap-3 pl-3 text-left"
+                              >
+                                <span
+                                  className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold ${
+                                    presente ? 'bg-emerald-600 text-white' : justif ? 'bg-amber-600 text-white' : 'border-2 border-slate-300 text-transparent'
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  {justif ? 'J' : '✓'}
+                                </span>
+                                <span className="min-w-0 text-sm font-semibold">{nombreCorto(p.nombres, p.apellidos)}</span>
+                              </button>
+                              <button
+                                onClick={() => void marcar(noche, p.id, justif ? 'ausente' : 'justificado')}
+                                aria-pressed={justif}
+                                aria-label={`Justificado: ${nombreCorto(p.nombres, p.apellidos)}`}
+                                className={`shrink-0 w-12 min-h-[48px] text-xs font-extrabold ${justif ? 'text-amber-800' : 'text-slate-500'}`}
+                              >
+                                J
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {miembros.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Esta compañía aún no tiene integrantes.</div>}
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => abrirFormulario(noche)} className="flex-1 min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg">
+                          ✏️ Editar fecha o título
+                        </button>
+                        <button onClick={() => void eliminar(noche)} className="min-h-[44px] px-4 text-xs font-bold text-red-600 bg-red-50 rounded-lg">
+                          Eliminar
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {lista.length > visibles && (
+          <button onClick={() => setVisibles((n) => n + NOCHES_PAGINA)} className="min-h-[44px] text-xs font-bold text-primary bg-white border-[1.5px] border-slate-200 rounded-xl">
+            Ver {Math.min(NOCHES_PAGINA, lista.length - visibles)} más · {lista.length - visibles} restantes
+          </button>
+        )}
+      </div>
+      {avisoNodo}
     </div>
   );
 }

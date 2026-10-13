@@ -19,7 +19,8 @@ import { contarEstados, contarSinCompania, esDeReparto, filtrarPorCompania, filt
 import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
 import { MAX_SUGERIR, companerosDe, estacasDistintas, firmaPropuesta, otraPropuesta, planearGuardado, planearLote, resumenCompaneros, sugerirParejas, vistaFamilia } from '../src/utils/parejasTrabajo';
 import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../src/services/parejasService';
-import { ordenarNoches } from '../src/services/nochesHogarService';
+import { crearNocheHogar, editarNocheHogar, eliminarNocheHogar, marcarVariosNocheHogar, ordenarNoches, restaurarNocheHogar, subscribeNochesHogar } from '../src/services/nochesHogarService';
+import { ordenarParaVista, resumenNoche, sumarDias } from '../src/utils/nochesHogar';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -41,7 +42,7 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
-import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, ParejaTrabajo, Participante } from '../src/types';
+import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, NocheHogar, ParejaTrabajo, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
 let passed = 0;
@@ -1978,4 +1979,45 @@ test('210. ordenarNoches — la más reciente primero, sin depender del orden en
   const n = (id: string, fecha: string) => ({ id, familiaId: 'f', fecha, titulo: 't', creadoPor: '', asistencia: {} });
   assert.deepStrictEqual(ordenarNoches([n('b', '2026-10-08'), n('c', '2026-10-15'), n('a', '2026-10-01')]).map((x) => x.fecha), ['2026-10-15', '2026-10-08', '2026-10-01']);
   assert.deepStrictEqual(ordenarNoches([]), []);
+});
+
+test('211. ordenarParaVista — primero lo que viene (la más cercana arriba), después lo pasado (la más reciente arriba)', () => {
+  const n = (id: string, fecha: string) => ({ id, familiaId: 'f', fecha, titulo: 't', creadoPor: '', asistencia: {} });
+  const orden = ordenarParaVista([n('a', '2026-10-01'), n('d', '2026-12-01'), n('b', '2026-10-08'), n('c', '2026-10-15'), n('e', '2026-10-13')], '2026-10-13').map((x) => x.id);
+  assert.deepStrictEqual(orden, ['e', 'c', 'd', 'b', 'a']); // hoy (13) cuenta como "viene"
+  assert.deepStrictEqual(ordenarParaVista([], '2026-10-13'), []);
+});
+
+test('212. resumenNoche — cuenta solo a los integrantes actuales; "ausente" y sin marca son "por marcar"', () => {
+  const miembros = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+  const r = resumenNoche({ a: 'presente', b: 'justificado', c: 'ausente', fuera: 'presente' }, miembros); // "fuera" ya no está en la compañía
+  assert.deepStrictEqual(r, { presentes: 1, justificados: 1, porMarcar: 2, total: 4, pct: 25 });
+  assert.deepStrictEqual(resumenNoche({}, []), { presentes: 0, justificados: 0, porMarcar: 0, total: 0, pct: 0 });
+});
+
+test('213. sumarDias — cruza fin de mes y de año sin desfase de zona horaria', () => {
+  assert.strictEqual(sumarDias('2026-10-13', 1), '2026-10-14');
+  assert.strictEqual(sumarDias('2026-10-31', 1), '2026-11-01');
+  assert.strictEqual(sumarDias('2026-12-31', 1), '2027-01-01');
+  assert.strictEqual(sumarDias('2027-01-18', -1), '2027-01-17');
+});
+
+test('214. marcarVariosNocheHogar / editar / eliminar / restaurar (modo local) — un guardado cambia a varios; eliminar y restaurar devuelven la noche con su asistencia', async () => {
+  const sub = (cb: (n: NocheHogar[]) => void) => subscribeNochesHogar('fam-214', cb);
+  let actual: NocheHogar[] = [];
+  const off = sub((n) => (actual = n));
+  const creada = await crearNocheHogar('fam-214', '2026-10-15', 'Noche de Hogar', 'x@y.z');
+  await marcarVariosNocheHogar(creada, { a: 'presente', b: 'presente' }, 'x@y.z');
+  assert.deepStrictEqual(actual[0].asistencia, { a: 'presente', b: 'presente' });
+  await marcarVariosNocheHogar(actual[0], { a: 'ausente' }, 'x@y.z'); // el deshacer
+  assert.deepStrictEqual(actual[0].asistencia, { a: 'ausente', b: 'presente' });
+  await editarNocheHogar(actual[0], '2026-10-16', '  ', 'x@y.z');
+  assert.strictEqual(actual[0].fecha, '2026-10-16');
+  assert.strictEqual(actual[0].titulo, 'Noche de Hogar'); // título vacío vuelve al de siempre
+  const antes = actual[0];
+  await eliminarNocheHogar(antes, 'x@y.z');
+  assert.strictEqual(actual.length, 0);
+  await restaurarNocheHogar(antes, 'x@y.z');
+  assert.deepStrictEqual(actual[0].asistencia, { a: 'ausente', b: 'presente' });
+  off();
 });

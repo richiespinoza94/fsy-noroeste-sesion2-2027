@@ -61,7 +61,7 @@ const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 export function grupoDeAccion(accion: string): GrupoHistorial {
   if (accion.startsWith('LOGIN') || accion === 'SETUP_PASSWORD_FIRST_TIME') return 'accesos';
   if (accion.includes('USUARIO')) return 'usuarios';
-  if (accion === 'MARCAR_ASISTENCIA' || accion === 'QUITAR_ASISTENCIA' || accion === 'ASISTENCIA_NOCHE_HOGAR') return 'asistencia';
+  if (accion === 'MARCAR_ASISTENCIA' || accion === 'QUITAR_ASISTENCIA' || accion === 'ASISTENCIA_NOCHE_HOGAR' || accion === 'ASISTENCIA_MASIVA_NOCHE_HOGAR') return 'asistencia';
   if (accion.includes('FAMILIA') || accion.includes('COMPANERISMO') || accion.startsWith('REPARTO')) return 'familias';
   if (accion.includes('CAPACITACION') || accion.includes('NOCHE_HOGAR')) return 'eventos';
   return 'personas';
@@ -129,6 +129,18 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
       break;
     case 'ASISTENCIA_NOCHE_HOGAR':
       texto = `marcó ${s(d.estado)} a ${sujeto} en una Noche de Hogar`;
+      break;
+    case 'ASISTENCIA_MASIVA_NOCHE_HOGAR':
+      texto = `marcó ${s(d.estado)} a ${s(d.cantidad)} persona(s) en una Noche de Hogar de ${familia(d.familiaId)}`;
+      break;
+    case 'EDITAR_NOCHE_HOGAR':
+      texto = `editó una Noche de Hogar de ${familia(d.familiaId)} (${s(d.fecha)})`;
+      break;
+    case 'ELIMINAR_NOCHE_HOGAR':
+      texto = `eliminó una Noche de Hogar de ${familia(d.familiaId)} (${s(d.fecha)})`;
+      break;
+    case 'RESTAURAR_NOCHE_HOGAR':
+      texto = `deshizo la eliminación de una Noche de Hogar de ${familia(d.familiaId)} (${s(d.fecha)})`;
       break;
     case 'ACTUALIZAR_PARTICIPANTE': {
       const antes = (d._antes && typeof d._antes === 'object' ? d._antes : {}) as Record<string, unknown>;
