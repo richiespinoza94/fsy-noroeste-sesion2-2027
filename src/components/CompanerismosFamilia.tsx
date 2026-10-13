@@ -319,6 +319,13 @@ export default function CompanerismosFamilia({
           </>
         )}
       </div>
+      {puedeEditar && !editando && !propuesta && miembros.length > 0 && vista.sinCompanero.length < MIN_PAREJA && (
+        <div className="text-xs text-slate-500 mb-2">
+          {vista.sinCompanero.length === 0
+            ? 'Todos tienen compañero. Para armar otro, separa uno o añade integrantes.'
+            : 'Solo queda 1 sin compañero: añade a alguien más o cámbialo a un compañerismo.'}
+        </div>
+      )}
       {panelSugerencia}
       {editando && editando.id === null && editor}
 
@@ -338,7 +345,7 @@ export default function CompanerismosFamilia({
               <button onClick={() => abrir(g)} className="flex-1 min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg">
                 Cambiar
               </button>
-              <button onClick={() => quitar(g)} className="flex-1 min-h-[44px] text-xs font-bold text-red-600 bg-red-50 rounded-lg">
+              <button onClick={() => quitar(g)} className="min-h-[44px] px-5 text-xs font-bold text-red-600 bg-red-50 rounded-lg">
                 Separar
               </button>
             </div>

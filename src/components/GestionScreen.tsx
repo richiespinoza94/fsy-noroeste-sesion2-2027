@@ -44,7 +44,7 @@ import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
 import { nombreConInicialMaterna, nombreCorto } from '../utils/nombreCorto';
-import { resumenCompaneros, companerosDe } from '../utils/parejasTrabajo';
+import { resumenCompaneros } from '../utils/parejasTrabajo';
 import { infoCompanias, nombreCompania } from '../utils/companias';
 import ScrollX from './ScrollX';
 
@@ -183,7 +183,6 @@ function FamiliasTab({
   const coordAux = participantes.filter(isCoordAux);
   const [detail, setDetail] = useState<Participante | null>(null);
   const parejas = useParejas();
-  const porId = useMemo(() => new Map(participantes.map((p) => [p.id, p])), [participantes]);
   const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
   // Para "Deshacer" tras quitar a alguien: se lee la compañía ACTUAL, no la de cuando se tocó.
   const familiasRef = useRef(familias);
@@ -388,13 +387,12 @@ function FamiliasTab({
 
                 <div className="mt-3 flex flex-col gap-1.5">
                   {famMembers.map((p) => {
-                    const con = companerosDe(p, parejas, porId);
                     return (
                       <div key={p.id} className="flex items-center gap-1 bg-slate-50 rounded-xl pl-3">
                         <button onClick={() => setDetail(p)} className="flex-1 min-w-0 text-left py-2">
                           <span className="block text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</span>
                           <span className="block text-xs text-slate-500 truncate">
-                            {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca, con.length ? `con ${con.map((c) => nombreConInicialMaterna(c.nombres, c.apellidos)).join(' y ')}` : ''].filter(Boolean).join(' · ')}
+                            {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca].filter(Boolean).join(' · ')}
                           </span>
                         </button>
                         <button
@@ -825,7 +823,7 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
         <div className="flex-1">
           <div className="text-sm font-extrabold">Noches de Hogar</div>
         </div>
-        <button onClick={() => setPlanning((v) => !v)} className="text-xs font-bold text-primary bg-primary/10 rounded-lg px-2.5 py-1.5">
+        <button onClick={() => setPlanning((v) => !v)} className="min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg px-3">
           {planning ? 'Cerrar' : 'Planificar'}
         </button>
       </div>
@@ -842,8 +840,8 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
 
       {[...noches].reverse().map((noche) => (
         <div key={noche.id} className="bg-slate-50 rounded-xl p-3 mt-2">
-          <div className="flex justify-between text-xs mb-2">
-            <strong className="text-primary">{noche.titulo}</strong>
+          <div className="flex justify-between gap-2 text-xs mb-2">
+            <strong className="text-primary">{noche.titulo.replace(/\bFamilia\b/g, 'Compañía')}</strong>
             <span className="text-slate-500">{fechaAmigable(noche.fecha, hoyLocalISO())}</span>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -853,12 +851,12 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
                 <button
                   key={p.id}
                   onClick={() => marcarAsistenciaNocheHogar(noche, p.id, checked ? 'ausente' : 'presente', user.correo)}
-                  className={`flex justify-between items-center rounded-lg px-2.5 py-1.5 text-xs border ${
+                  className={`flex justify-between items-center gap-2 min-h-[44px] rounded-lg px-2.5 py-1.5 text-xs border ${
                     checked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200'
                   }`}
                 >
-                  <span>{p.nombres} {p.apellidos}</span>
-                  <strong>{checked ? '✅ Presente' : '○ Marcar'}</strong>
+                  <span className="min-w-0 text-left">{nombreCorto(p.nombres, p.apellidos)}</span>
+                  <strong className="shrink-0 whitespace-nowrap">{checked ? '✅ Presente' : '○ Marcar'}</strong>
                 </button>
               );
             })}
