@@ -19,6 +19,7 @@ import { contarEstados, contarSinCompania, esDeReparto, filtrarPorCompania, filt
 import { fechaAmigable, rangoHora } from '../src/utils/fechaAmigable';
 import { MAX_SUGERIR, companerosDe, estacasDistintas, firmaPropuesta, otraPropuesta, planearGuardado, planearLote, resumenCompaneros, sugerirParejas, vistaFamilia } from '../src/utils/parejasTrabajo';
 import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../src/services/parejasService';
+import { ordenarNoches } from '../src/services/nochesHogarService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -1971,4 +1972,10 @@ test('209. variacionesPorEvento — compara con el evento anterior que tiene mar
   const ev = (pct: number, registros: number) => ({ cap: capFake('x', '2027-01-01'), presentes: 0, ausentes: 0, justificados: 0, sinMarca: 0, registros, pct });
   assert.deepStrictEqual(variacionesPorEvento([ev(56, 9), ev(59, 9), ev(0, 0), ev(51, 9)]), [null, 3, null, -8]);
   assert.deepStrictEqual(variacionesPorEvento([]), []);
+});
+
+test('210. ordenarNoches — la más reciente primero, sin depender del orden en que llegan', () => {
+  const n = (id: string, fecha: string) => ({ id, familiaId: 'f', fecha, titulo: 't', creadoPor: '', asistencia: {} });
+  assert.deepStrictEqual(ordenarNoches([n('b', '2026-10-08'), n('c', '2026-10-15'), n('a', '2026-10-01')]).map((x) => x.fecha), ['2026-10-15', '2026-10-08', '2026-10-01']);
+  assert.deepStrictEqual(ordenarNoches([]), []);
 });

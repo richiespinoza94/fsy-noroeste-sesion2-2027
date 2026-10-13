@@ -838,7 +838,7 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
 
       {noches.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Aún no hay Noches de Hogar planificadas.</div>}
 
-      {[...noches].reverse().map((noche) => (
+      {noches.map((noche) => (
         <div key={noche.id} className="bg-slate-50 rounded-xl p-3 mt-2">
           <div className="flex justify-between gap-2 text-xs mb-2">
             <strong className="text-primary">{noche.titulo.replace(/\bFamilia\b/g, 'Compañía')}</strong>
