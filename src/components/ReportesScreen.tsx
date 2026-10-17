@@ -181,7 +181,7 @@ export default function ReportesScreen({
           Selección múltiple: tocar un tipo lo suma o lo quita; "Todos" (sin
           ninguno elegido) es el valor por defecto. */}
       {tiposPresentes.length > 1 && (
-        <ScrollX className="flex gap-2 -mx-4 px-4 pb-0.5" role="group" aria-label="Filtrar por tipo de evento">
+        <ScrollX className="flex gap-2 -mx-4 px-4 pb-0.5 shrink-0" role="group" aria-label="Filtrar por tipo de evento">
           {[{ tipo: 'todos' as const, n: capacitaciones.length }, ...tiposPresentes].map(({ tipo, n }) => {
             const activo = tipo === 'todos' ? tiposActivos.length === 0 : tiposActivos.includes(tipo);
             return (

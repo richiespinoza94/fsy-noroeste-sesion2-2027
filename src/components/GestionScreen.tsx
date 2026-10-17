@@ -768,7 +768,7 @@ function FamiliaBalanceCard({
   const cands: CandidatoReparto[] = miembros.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
   const stats = calcularEstadisticas(cands);
   const comp = parejas ? resumenCompaneros(familia, parejas, miembros) : null;
-  const clases = 'bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px] text-left w-full';
+  const clases = 'bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px] text-left w-full flex flex-col justify-start'; // un <button> centra su contenido en vertical: sin esto, la tarjeta más baja de la fila queda desalineada
   const cuerpo = (
     <>
       <div className="flex items-center mb-2">
@@ -1421,6 +1421,7 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
   const [estaca, setEstaca] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
 
   useEffect(() => subscribeUsuarios(setUsuarios), []);
 
@@ -1451,7 +1452,7 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cuentas de staff</div>
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Cuentas de staff</div>
         <button onClick={() => setCreando(true)} className="bg-primary text-white text-xs font-bold rounded-lg px-3 py-1.5">
           + Añadir
         </button>
@@ -1461,11 +1462,11 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
           <div className="text-sm font-bold">Nueva cuenta de staff</div>
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Correo</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Correo</div>
             <input className="input" type="email" placeholder="correo@ejemplo.com" value={correo} onChange={(e) => setCorreo(e.target.value)} />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Rol</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Rol</div>
             <select className="input" value={rol} onChange={(e) => setRol(e.target.value as (typeof ROLES_STAFF)[number])}>
               {ROLES_STAFF.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -1473,7 +1474,7 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
             </select>
           </div>
           {rol === 'Coordinador Auxiliar' && validateEmail(correo) && (
-            <div className={`text-[11px] font-semibold rounded-xl px-3 py-2 ${participanteConEseCorreo ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
+            <div className={`text-xs font-semibold rounded-xl px-3 py-2 ${participanteConEseCorreo ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
               {participanteConEseCorreo
                 ? `✅ Coincide con ${participanteConEseCorreo.nombres} ${participanteConEseCorreo.apellidos} (${participanteConEseCorreo.asignacion || 'sin rol'}). Recuerda añadirlo en el compañerismo de su familia.`
                 : '⚠️ Ningún participante se registró con este correo: no podrá ver su compañía hasta que coincida.'}
@@ -1481,12 +1482,12 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
           )}
           {rol === 'Coordinador Auxiliar' && (
             <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Estaca</div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Estaca</div>
               <input className="input" placeholder="Ej: Ventanilla" value={estaca} onChange={(e) => setEstaca(e.target.value)} />
             </div>
           )}
           {error && <div className="text-xs text-red-500 font-semibold">❌ {error}</div>}
-          <div className="text-[11px] text-slate-500">
+          <div className="text-xs text-slate-500">
             La persona entra con este correo y cualquier contraseña — la app le va a pedir crear la suya en el primer acceso.
           </div>
           <div className="flex gap-2">
@@ -1514,8 +1515,8 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
             {u.correo[0]?.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold truncate">{u.correo}</div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-sm font-bold break-all">{u.correo}</div>
+            <div className="text-xs text-slate-500">
               {u.rol}
               {u.estaca && ` · ${u.estaca}`}
               {!u.passwordHash && ' · aún no entró'}
@@ -1523,8 +1524,12 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
           </div>
           {u.correo !== user.correo && (
             <button
-              onClick={() => setUsuarioActivo(u.correo, !u.activo, user.correo)}
-              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 shrink-0 ${
+              onClick={() => {
+                const activar = !u.activo;
+                void setUsuarioActivo(u.correo, activar, user.correo);
+                mostrarAviso(activar ? `Cuenta activada: ${u.correo}` : `Cuenta desactivada: ${u.correo}`, () => void setUsuarioActivo(u.correo, !activar, user.correo));
+              }}
+              className={`text-xs font-bold rounded-lg px-3 min-h-[44px] shrink-0 ${
                 u.activo ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'
               }`}
             >
@@ -1533,6 +1538,7 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
           )}
         </div>
       ))}
+      {avisoNodo}
     </div>
   );
 }
