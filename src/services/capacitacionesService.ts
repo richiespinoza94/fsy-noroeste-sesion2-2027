@@ -198,3 +198,40 @@ export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
   const pasadas = parsed.sort((a, b) => b.d.getTime() - a.d.getTime());
   return pasadas[0].c;
 }
+
+/**
+ * Qué evento abre por defecto la pantalla Asistencia. getNextCapacitacion solo
+ * mira eventos que aún no empezaron, así que con el baile del sábado YA en
+ * marcha saltaba a la dominical del domingo. Aquí manda "lo de hoy":
+ * 1) uno en curso ahora (si se solapan, el que empezó más tarde);
+ * 2) si no, el próximo de HOY que aún no empieza (el más cercano);
+ * 3) si no, el último de HOY que ya terminó (sigue pasándose lista hasta el cierre del día);
+ * 4) si hoy no hay nada, el futuro más próximo; y si no, el pasado más reciente.
+ */
+export function getCapacitacionParaAsistencia(caps: Capacitacion[], ahora: Date = new Date()): Capacitacion | null {
+  if (!caps.length) return null;
+  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+  const parsed = caps
+    .map((c) => {
+      const inicio = new Date(`${c.fecha}T${c.hora || '00:00'}`);
+      let fin = c.horaFin ? new Date(`${c.fecha}T${c.horaFin}`) : null;
+      if (!fin || isNaN(fin.getTime()) || fin.getTime() <= inicio.getTime()) fin = new Date(inicio.getTime() + VENTANA_DESPUES_MS);
+      return { c, ini: inicio.getTime(), fin: fin.getTime() };
+    })
+    .filter((x) => !isNaN(x.ini));
+  if (!parsed.length) return caps[0];
+
+  const now = ahora.getTime();
+  const enCurso = parsed.filter((x) => now >= x.ini && now <= x.fin).sort((a, b) => b.ini - a.ini);
+  if (enCurso.length) return enCurso[0].c;
+
+  const deHoy = parsed.filter((x) => x.c.fecha === hoy);
+  const porVenir = deHoy.filter((x) => x.ini > now).sort((a, b) => a.ini - b.ini);
+  if (porVenir.length) return porVenir[0].c;
+  const terminadosHoy = deHoy.sort((a, b) => b.ini - a.ini);
+  if (terminadosHoy.length) return terminadosHoy[0].c;
+
+  const futuras = parsed.filter((x) => x.ini > now).sort((a, b) => a.ini - b.ini);
+  if (futuras.length) return futuras[0].c;
+  return parsed.sort((a, b) => b.ini - a.ini)[0].c;
+}

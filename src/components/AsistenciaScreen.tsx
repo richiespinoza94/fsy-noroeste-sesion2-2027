@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marcarAsistencia, quitarMarca, subscribeAsistencia } from '../services/asistenciaService';
-import { getNextCapacitacion } from '../services/capacitacionesService';
+import { getCapacitacionParaAsistencia } from '../services/capacitacionesService';
 import { subscribeFamilias } from '../services/familiasService';
 import { ejecutarReparto } from '../services/repartoFamiliasService';
 import { calcularCandidatosPorRol, calcularEstadoFamilia, calcularOActualizarPlanEnVivo, type CandidatoReparto } from '../utils/repartoFamilias';
@@ -52,7 +52,7 @@ export default function AsistenciaScreen({
 
   useEffect(() => {
     if (!capId && capacitaciones.length) {
-      setCapId(getNextCapacitacion(capacitaciones)?.id || capacitaciones[0].id);
+      setCapId(getCapacitacionParaAsistencia(capacitaciones)?.id || capacitaciones[0].id);
     }
   }, [capacitaciones, capId]);
 

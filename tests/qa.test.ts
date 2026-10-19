@@ -8,7 +8,7 @@ import {
   validateEmail,
   validatePhone,
 } from '../src/utils/validation';
-import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaAsistencia, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
 import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
 import { estacasSugeridas, fuzzyIncludes, matchesQuery, quitarPalabrasDeEstaca } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
@@ -2056,4 +2056,20 @@ test('215. restablecerContrasena — solo el Coordinador General, nunca la propi
 
 test('216. historial — describe el restablecimiento de contraseña dentro del grupo "usuarios"', () => {
   assert.strictEqual(grupoDeAccion('RESTABLECER_CONTRASENA_USUARIO'), 'usuarios');
+});
+
+test('217. Asistencia abre en el evento de hoy: baile del sábado en curso gana a la dominical', () => {
+  const baile = { id: 'b', fecha: '2027-01-09', hora: '09:00', horaFin: '13:00' } as any;
+  const domi = { id: 'd', fecha: '2027-01-10', hora: '10:00' } as any;
+  const d = (h: string) => new Date(`2027-01-09T${h}`);
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], d('11:00'))?.id, 'b'); // en curso (getNext habría dado 'd')
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], d('08:00'))?.id, 'b'); // aún no empieza, pero es hoy
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], d('20:00'))?.id, 'b'); // ya terminó, sigue siendo lo de hoy
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], new Date('2027-01-08T12:00'))?.id, 'b'); // víspera: la más cercana
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], new Date('2027-01-10T09:00'))?.id, 'd');
+  assert.strictEqual(getCapacitacionParaAsistencia([domi, baile], new Date('2027-02-01T09:00'))?.id, 'd'); // todo pasado: el más reciente
+  assert.strictEqual(getCapacitacionParaAsistencia([], new Date()), null);
+  const manana = { id: 'm', fecha: '2027-01-09', hora: '08:00', horaFin: '09:30' } as any;
+  const tarde = { id: 't', fecha: '2027-01-09', hora: '15:00', horaFin: '17:00' } as any;
+  assert.strictEqual(getCapacitacionParaAsistencia([manana, tarde], d('12:00'))?.id, 't'); // terminó la de la mañana → viene la de la tarde
 });
