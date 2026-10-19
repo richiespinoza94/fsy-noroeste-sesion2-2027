@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
 import InfoSheet, { BotonInfo } from './InfoSheet';
+import Plegable from './Plegable';
 import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../services/parejasService';
 import { nombreConInicialMaterna } from '../utils/nombreCorto';
 import {
@@ -60,12 +61,16 @@ export default function CompanerismosFamilia({
   parejas,
   correo,
   puedeEditar,
+  abierto,
+  onToggle,
 }: {
   fam: Familia;
   miembros: Participante[];
   parejas: ParejaTrabajo[];
   correo: string;
   puedeEditar: boolean;
+  abierto: boolean;
+  onToggle: () => void;
 }) {
   const vista = useMemo(() => vistaFamilia(fam, parejas, miembros), [fam, parejas, miembros]);
   // `editando`: null = cerrado; { id: null } = armando uno nuevo; { id } = cambiando uno existente.
@@ -239,6 +244,19 @@ export default function CompanerismosFamilia({
     </div>
   );
 
+  // Lo que se lee sin abrir: si falta gente por emparejar (en ámbar) o que todo está listo.
+  const sin = vista.sinCompanero.length;
+  const resumen =
+    miembros.length === 0 ? (
+      'Sin integrantes todavía'
+    ) : sin > 0 ? (
+      <span className="text-amber-700">{sin} sin compañero</span>
+    ) : vista.grupos.length > 0 ? (
+      'Todos con compañero'
+    ) : (
+      'Aún no hay compañerismos'
+    );
+
   const panelSugerencia = propuesta && (
     <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-2">
       <div className="flex items-center gap-2 mb-0.5">
@@ -295,30 +313,26 @@ export default function CompanerismosFamilia({
   );
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="text-xs font-bold text-slate-500 uppercase tracking-wide flex-1">
-          Compañerismos ({vista.grupos.length})
+    <>
+    <Plegable icono="🤝" titulo={`Compañerismos (${vista.grupos.length})`} resumen={resumen} abierto={abierto} onToggle={onToggle}>
+      {puedeEditar && !editando && !propuesta && (
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={abrirSugerencia}
+            disabled={vista.sinCompanero.length < MIN_PAREJA}
+            className="flex-1 min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
+          >
+            ✨ Sugerir
+          </button>
+          <button
+            onClick={() => abrir(null)}
+            disabled={vista.sinCompanero.length < MIN_PAREJA}
+            className="flex-1 min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
+          >
+            + Armar
+          </button>
         </div>
-        {puedeEditar && !editando && !propuesta && (
-          <>
-            <button
-              onClick={abrirSugerencia}
-              disabled={vista.sinCompanero.length < MIN_PAREJA}
-              className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
-            >
-              ✨ Sugerir
-            </button>
-            <button
-              onClick={() => abrir(null)}
-              disabled={vista.sinCompanero.length < MIN_PAREJA}
-              className="min-h-[44px] px-3 text-xs font-bold text-primary bg-primary/10 rounded-lg disabled:opacity-40"
-            >
-              + Armar
-            </button>
-          </>
-        )}
-      </div>
+      )}
       {puedeEditar && !editando && !propuesta && miembros.length > 0 && vista.sinCompanero.length < MIN_PAREJA && (
         <div className="text-xs text-slate-500 mb-2">
           {vista.sinCompanero.length === 0
@@ -369,6 +383,7 @@ export default function CompanerismosFamilia({
         </div>
       )}
 
+    </Plegable>
       {avisoNodo}
       {infoSugerir && (
         <InfoSheet titulo="¿Cómo se arma la propuesta?" onClose={() => setInfoSugerir(false)}>
@@ -381,7 +396,7 @@ export default function CompanerismosFamilia({
           </ul>
         </InfoSheet>
       )}
-    </div>
+    </>
   );
 }
 

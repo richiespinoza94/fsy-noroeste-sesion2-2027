@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
 import InfoSheet, { BotonInfo } from './InfoSheet';
+import Plegable from './Plegable';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
@@ -190,13 +191,15 @@ function FamiliasTab({
   // Para "Deshacer" tras quitar a alguien: se lee la compañía ACTUAL, no la de cuando se tocó.
   const familiasRef = useRef(familias);
   familiasRef.current = familias;
-  const [integrantesAbierto, setIntegrantesAbierto] = useState(false);
+  // Secciones plegables de la compañía: todas cerradas al entrar (Integrantes abre sola si está vacía, para poder añadir).
+  const [abiertas, setAbiertas] = useState<Record<string, boolean>>({});
+  const alternar = (k: string, porDefecto = false) => setAbiertas((a) => ({ ...a, [k]: !(a[k] ?? porDefecto) }));
   const [infoParticipa, setInfoParticipa] = useState(false);
   // Marcan: los Coordinadores Auxiliares (de su compañía) y el Coordinador General. El resto solo ve la marca.
   const puedeMarcar = user.canChangeRoles || user.isAuxiliar;
   const participan = famMembers.filter(participaRegular).length;
   useEffect(() => {
-    setIntegrantesAbierto(false);
+    setAbiertas({});
     setSearch('');
     setError('');
   }, [selId]);
@@ -372,93 +375,89 @@ function FamiliasTab({
             parejas={parejas}
             correo={user.correo}
             puedeEditar={user.canEditAll || user.isAuxiliar}
+            abierto={abiertas.companerismos ?? false}
+            onToggle={() => alternar('companerismos')}
           />
 
-          <NochesHogarCard fam={fam} miembros={famMembers} user={user} />
+          <NochesHogarCard fam={fam} miembros={famMembers} user={user} abierto={abiertas.noches ?? false} onToggle={() => alternar('noches')} />
 
-          <div className="bg-white rounded-2xl shadow-sm">
-            <button
-              onClick={() => setIntegrantesAbierto((v) => !v)}
-              aria-expanded={integrantesAbierto}
-              className="w-full min-h-[48px] px-4 flex items-center gap-2 text-left"
-            >
-              <span className="flex-1 text-xs font-bold text-slate-500 uppercase tracking-wide">Integrantes ({famMembers.length}){famMembers.length > 0 && ` · ${participan} participan`}</span>
-              <span className={`text-slate-400 transition-transform ${integrantesAbierto ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
-            </button>
-            {integrantesAbierto && (
-              <div className="px-4 pb-4">
-                <input className="input" placeholder="Añadir integrante…" value={search} onChange={(e) => setSearch(e.target.value)} />
-                {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
-                {search.length >= 2 && results.length === 0 && (
-                  <div className="text-xs text-slate-500 mt-1.5">Sin resultados. Solo aparecen Consejeros o Logísticos que aún no tienen compañía.</div>
-                )}
-                {results.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2 bg-primary/5 rounded-xl px-3 py-2 mt-1.5">
-                    <div className="flex-1 min-w-0 text-sm font-semibold">
-                      {nombreConInicialMaterna(p.nombres, p.apellidos)}
-                      {isLogistico(p) && (
-                        <span className="ml-1.5 text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">Logístico</span>
-                      )}
-                    </div>
-                    <button onClick={() => handleAdd(p)} className="min-h-[44px] px-3 bg-primary text-white text-xs font-bold rounded-lg">+ Añadir</button>
-                  </div>
-                ))}
-
-                <div className="mt-3 flex flex-col gap-1.5">
-                  {famMembers.length > 0 && (
-                    <div className="flex items-center gap-2 pl-1 pr-1">
-                      <div className="flex-1 text-xs text-slate-600">
-                        <strong>{participan} de {famMembers.length}</strong> participan con regularidad
-                      </div>
-                      <BotonInfo onClick={() => setInfoParticipa(true)} etiqueta="Qué significa Participa" />
-                    </div>
-                  )}
-                  {famMembers.map((p) => {
-                    const participa = participaRegular(p);
-                    const pastilla = (
-                      <span
-                        className={`h-8 px-2.5 rounded-full text-xs font-bold flex items-center whitespace-nowrap border ${
-                          participa ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-300'
-                        }`}
-                      >
-                        {participa ? '✓ Participa' : 'No participa'}
-                      </span>
-                    );
-                    return (
-                      <div key={p.id} className="flex items-center gap-1 bg-slate-50 rounded-xl pl-3">
-                        <button onClick={() => setDetail(p)} className="flex-1 min-w-0 text-left py-2">
-                          <span className="block text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</span>
-                          <span className="block text-xs text-slate-500 truncate">
-                            {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca].filter(Boolean).join(' · ')}
-                          </span>
-                        </button>
-                        {puedeMarcar ? (
-                          <button
-                            onClick={() => void handleParticipa(p)}
-                            aria-pressed={participa}
-                            aria-label={`${nombreCorto(p.nombres, p.apellidos)} participa con regularidad`}
-                            className="shrink-0 min-h-[44px] flex items-center"
-                          >
-                            {pastilla}
-                          </button>
-                        ) : (
-                          <div className="shrink-0 flex items-center">{pastilla}</div>
-                        )}
-                        <button
-                          onClick={() => handleQuitar(p)}
-                          aria-label={`Quitar a ${nombreCorto(p.nombres, p.apellidos)} de la compañía`}
-                          className="shrink-0 w-11 h-11 flex items-center justify-center text-red-500 font-bold"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes todavía</div>}
-                </div>
-              </div>
+          <Plegable
+            icono="👥"
+            titulo={`Integrantes (${famMembers.length})`}
+            resumen={famMembers.length === 0 ? 'Sin integrantes todavía' : participan === famMembers.length ? `${participan} participan` : `${participan} de ${famMembers.length} participan`}
+            abierto={abiertas.integrantes ?? famMembers.length === 0}
+            onToggle={() => alternar('integrantes', famMembers.length === 0)}
+          >
+            <input className="input" placeholder="Añadir integrante…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            {error && <div className="text-xs text-red-500 font-semibold mt-1.5">❌ {error}</div>}
+            {search.length >= 2 && results.length === 0 && (
+              <div className="text-xs text-slate-500 mt-1.5">Sin resultados. Solo aparecen Consejeros o Logísticos que aún no tienen compañía.</div>
             )}
-          </div>
+            {results.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 bg-primary/5 rounded-xl px-3 py-2 mt-1.5">
+                <div className="flex-1 min-w-0 text-sm font-semibold">
+                  {nombreConInicialMaterna(p.nombres, p.apellidos)}
+                  {isLogistico(p) && (
+                    <span className="ml-1.5 text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">Logístico</span>
+                  )}
+                </div>
+                <button onClick={() => handleAdd(p)} className="min-h-[44px] px-3 bg-primary text-white text-xs font-bold rounded-lg">+ Añadir</button>
+              </div>
+            ))}
+
+            <div className="mt-3 flex flex-col gap-1.5">
+              {famMembers.length > 0 && (
+                <div className="flex items-center gap-2 pl-1 pr-1">
+                  <div className="flex-1 text-xs text-slate-600">
+                    <strong>{participan} de {famMembers.length}</strong> participan con regularidad
+                  </div>
+                  <BotonInfo onClick={() => setInfoParticipa(true)} etiqueta="Qué significa Participa" />
+                </div>
+              )}
+              {famMembers.map((p) => {
+                const participa = participaRegular(p);
+                const pastilla = (
+                  <span
+                    className={`h-8 px-2.5 rounded-full text-xs font-bold flex items-center whitespace-nowrap border ${
+                      participa ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-300'
+                    }`}
+                  >
+                    {participa ? '✓ Participa' : 'No participa'}
+                  </span>
+                );
+                return (
+                  <div key={p.id} className="flex items-center gap-1 bg-slate-50 rounded-xl pl-3">
+                    <button onClick={() => setDetail(p)} className="flex-1 min-w-0 text-left py-2">
+                      <span className="block text-sm font-semibold truncate">{nombreConInicialMaterna(p.nombres, p.apellidos)}</span>
+                      <span className="block text-xs text-slate-500 truncate">
+                        {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca].filter(Boolean).join(' · ')}
+                      </span>
+                    </button>
+                    {puedeMarcar ? (
+                      <button
+                        onClick={() => void handleParticipa(p)}
+                        aria-pressed={participa}
+                        aria-label={`${nombreCorto(p.nombres, p.apellidos)} participa con regularidad`}
+                        className="shrink-0 min-h-[44px] flex items-center"
+                      >
+                        {pastilla}
+                      </button>
+                    ) : (
+                      <div className="shrink-0 flex items-center">{pastilla}</div>
+                    )}
+                    <button
+                      onClick={() => handleQuitar(p)}
+                      aria-label={`Quitar a ${nombreCorto(p.nombres, p.apellidos)} de la compañía`}
+                      className="shrink-0 w-11 h-11 flex items-center justify-center text-red-500 font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              {famMembers.length === 0 && <div className="text-xs text-slate-500 text-center py-2">Sin integrantes todavía</div>}
+            </div>
+          </Plegable>
 
           {user.canEditAll && (
             <button onClick={handleDelete} className="border-2 border-red-200 text-red-600 font-bold rounded-xl py-2.5 text-sm">
@@ -863,7 +862,7 @@ function FamiliaBalanceCard({
 const NOCHES_PAGINA = 5;
 const tituloVisible = (t: string) => t.replace(/\bFamilia\b/g, 'Compañía');
 
-function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Participante[]; user: SessionUser }) {
+function NochesHogarCard({ fam, miembros, user, abierto: seccionAbierta, onToggle }: { fam: Familia; miembros: Participante[]; user: SessionUser; abierto: boolean; onToggle: () => void }) {
   const [noches, setNoches] = useState<NocheHogar[]>([]);
   // `formulario`: null = cerrado · 'nueva' = planificar · id = editando esa noche.
   const [formulario, setFormulario] = useState<string | null>(null);
@@ -932,6 +931,21 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
     mostrarAviso('Noche de Hogar eliminada', () => void restaurarNocheHogar(noche, user.correo));
   }
 
+  // Lo que se lee sin abrir: la noche que toca (hoy / próxima) o cómo salió la última.
+  const prox = lista[0];
+  const rProx = prox ? resumenNoche(prox.asistencia, miembros) : null;
+  const resumenSeccion = !prox || !rProx ? (
+    'Aún no hay noches'
+  ) : prox.fecha === hoy ? (
+    rProx.presentes + rProx.justificados === 0 ? <span className="text-amber-700">Hoy · sin marcas</span> : `Hoy · ${rProx.pct}% presentes`
+  ) : prox.fecha > hoy ? (
+    `Próxima: ${fechaAmigable(prox.fecha, hoy)}`
+  ) : rProx.presentes + rProx.justificados === 0 ? (
+    'Última: sin marcas'
+  ) : (
+    `Última: ${rProx.pct}% presentes`
+  );
+
   const formularioNode = formulario && (
     <div className="flex flex-col gap-2 mb-3 bg-slate-50 rounded-xl p-3">
       <label className="text-xs font-bold text-slate-600" htmlFor="noche-fecha">Fecha</label>
@@ -952,14 +966,11 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
   );
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm">
+    <>
+    <Plegable icono="🏠" titulo={`Noches de Hogar${noches.length > 0 ? ` (${noches.length})` : ''}`} resumen={resumenSeccion} abierto={seccionAbierta} onToggle={onToggle}>
       <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-xl" aria-hidden="true">🏠</span>
-        <div className="flex-1">
-          <div className="text-sm font-extrabold">Noches de Hogar{noches.length > 0 ? ` (${noches.length})` : ''}</div>
-          <div className="text-xs text-slate-500">Registro interno de la compañía</div>
-        </div>
-        {formulario !== 'nueva' && (
+        <div className="flex-1 text-xs text-slate-500">Registro interno de la compañía</div>
+        {formulario !== 'nueva' && noches.length > 0 && (
           <button onClick={() => abrirFormulario('nueva')} className="min-h-[44px] text-xs font-bold text-primary bg-primary/10 rounded-lg px-3">
             + Planificar
           </button>
@@ -1091,8 +1102,9 @@ function NochesHogarCard({ fam, miembros, user }: { fam: Familia; miembros: Part
           </button>
         )}
       </div>
+    </Plegable>
       {avisoNodo}
-    </div>
+    </>
   );
 }
 
