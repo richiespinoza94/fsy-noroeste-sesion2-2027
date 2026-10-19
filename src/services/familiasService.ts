@@ -148,7 +148,8 @@ export async function addConsejeroToFamilia(familia: Familia, p: Participante, a
   }
   const updated = { ...familia, consejeros: [...familia.consejeros, p.id] };
   await saveFamilia(updated);
-  await updateParticipante(p.id, { familiaId: familia.id }, adminCorreo);
+  // Quien llega a una compañía llega marcado, aunque en una anterior le hubieran quitado la marca.
+  await updateParticipante(p.id, { familiaId: familia.id, ...(p.participaRegular === false ? { participaRegular: true } : {}) }, adminCorreo);
   await logAction(adminCorreo, 'AÑADIR_MIEMBRO_FAMILIA', p.id, { familiaId: familia.id });
 }
 

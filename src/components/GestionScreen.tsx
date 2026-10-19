@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
-import InfoSheet from './InfoSheet';
+import InfoSheet, { BotonInfo } from './InfoSheet';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
@@ -26,6 +26,7 @@ import {
   calcularEdad,
   calcularEstadisticas,
   calcularEstadoFamilia,
+  participaRegular,
   repartoCompleto,
   type CandidatoReparto,
   type EstadoFamilia,
@@ -190,6 +191,10 @@ function FamiliasTab({
   const familiasRef = useRef(familias);
   familiasRef.current = familias;
   const [integrantesAbierto, setIntegrantesAbierto] = useState(false);
+  const [infoParticipa, setInfoParticipa] = useState(false);
+  // Marcan: los Coordinadores Auxiliares (de su compañía) y el Coordinador General. El resto solo ve la marca.
+  const puedeMarcar = user.canChangeRoles || user.isAuxiliar;
+  const participan = famMembers.filter(participaRegular).length;
   useEffect(() => {
     setIntegrantesAbierto(false);
     setSearch('');
@@ -227,6 +232,18 @@ function FamiliasTab({
       const actual = familiasRef.current.find((x) => x.id === f.id) ?? f;
       if (!actual.consejeros.includes(p.id)) void addConsejeroToFamilia(actual, p, user.correo);
     });
+  }
+
+  async function handleParticipa(p: Participante) {
+    const nuevo = !participaRegular(p);
+    const guardar = (valor: boolean) => updateParticipante(p.id, { participaRegular: valor }, user.correo);
+    try {
+      await guardar(nuevo);
+      setError('');
+      mostrarAviso(`${nombreCorto(p.nombres, p.apellidos)} ${nuevo ? 'vuelve a contar para el reparto' : 'ya no cuenta para el reparto'}`, () => void guardar(!nuevo));
+    } catch {
+      setError('No se pudo guardar. Revisa tu conexión e inténtalo otra vez.');
+    }
   }
 
   async function handleAdd(p: Participante) {
@@ -365,7 +382,7 @@ function FamiliasTab({
               aria-expanded={integrantesAbierto}
               className="w-full min-h-[48px] px-4 flex items-center gap-2 text-left"
             >
-              <span className="flex-1 text-xs font-bold text-slate-500 uppercase tracking-wide">Integrantes ({famMembers.length})</span>
+              <span className="flex-1 text-xs font-bold text-slate-500 uppercase tracking-wide">Integrantes ({famMembers.length}){famMembers.length > 0 && ` · ${participan} participan`}</span>
               <span className={`text-slate-400 transition-transform ${integrantesAbierto ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
             </button>
             {integrantesAbierto && (
@@ -388,7 +405,25 @@ function FamiliasTab({
                 ))}
 
                 <div className="mt-3 flex flex-col gap-1.5">
+                  {famMembers.length > 0 && (
+                    <div className="flex items-center gap-2 pl-1 pr-1">
+                      <div className="flex-1 text-xs text-slate-600">
+                        <strong>{participan} de {famMembers.length}</strong> participan con regularidad
+                      </div>
+                      <BotonInfo onClick={() => setInfoParticipa(true)} etiqueta="Qué significa Participa" />
+                    </div>
+                  )}
                   {famMembers.map((p) => {
+                    const participa = participaRegular(p);
+                    const pastilla = (
+                      <span
+                        className={`h-8 px-2.5 rounded-full text-xs font-bold flex items-center whitespace-nowrap border ${
+                          participa ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-300'
+                        }`}
+                      >
+                        {participa ? '✓ Participa' : 'No participa'}
+                      </span>
+                    );
                     return (
                       <div key={p.id} className="flex items-center gap-1 bg-slate-50 rounded-xl pl-3">
                         <button onClick={() => setDetail(p)} className="flex-1 min-w-0 text-left py-2">
@@ -397,6 +432,18 @@ function FamiliasTab({
                             {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca].filter(Boolean).join(' · ')}
                           </span>
                         </button>
+                        {puedeMarcar ? (
+                          <button
+                            onClick={() => void handleParticipa(p)}
+                            aria-pressed={participa}
+                            aria-label={`${nombreCorto(p.nombres, p.apellidos)} participa con regularidad`}
+                            className="shrink-0 min-h-[44px] flex items-center"
+                          >
+                            {pastilla}
+                          </button>
+                        ) : (
+                          <div className="shrink-0 flex items-center">{pastilla}</div>
+                        )}
                         <button
                           onClick={() => handleQuitar(p)}
                           aria-label={`Quitar a ${nombreCorto(p.nombres, p.apellidos)} de la compañía`}
@@ -429,6 +476,17 @@ function FamiliasTab({
       )}
 
       {avisoNodo}
+
+      {infoParticipa && (
+        <InfoSheet titulo="¿Quién cuenta para el reparto?" onClose={() => setInfoParticipa(false)}>
+          <ul className="text-sm text-slate-600 space-y-2 list-disc pl-5">
+            <li>Marcan con <strong>✓ Participa</strong> a quienes vienen con regularidad. Solo ellos cuentan cuando se reparte a la gente nueva: cada persona va a la compañía que tiene menos participantes, cuidando que haya parejo de hombres y mujeres.</li>
+            <li>Quien llega nuevo a una compañía entra marcado, sin que hagas nada.</li>
+            <li>Si alguien dejó de venir, toca su botón: sigue en la compañía, solo deja de contar. Si vuelve, tócalo otra vez.</li>
+            <li>Justo después de tocar puedes deshacerlo.</li>
+          </ul>
+        </InfoSheet>
+      )}
 
       {detail && (
         <div className="fixed inset-0 bg-black/40 flex items-end z-50" onClick={(e) => e.target === e.currentTarget && setDetail(null)}>
@@ -633,7 +691,7 @@ function RepartoTab({
           Reparte a los Consejeros (prioridad: sexo parejo → estaca no concentrada → edad distribuida) y luego a los
           Logísticos como relleno, sobre las mismas 4 compañías — siempre tomando en cuenta lo que cada compañía YA
           tiene (de corridas anteriores o asignado a mano), no desde cero. Quien ya tenga una compañía asignada queda
-          fuera — no se le mueve. <strong>No incluye</strong> Coordinador General, Coordinador Auxiliar, Coordinador
+          fuera — no se le mueve. Para saber cuántas personas tiene cada compañía solo se cuenta a quienes tienen <strong>✓ Participa</strong> (lo marcan los Coordinadores Auxiliares en Integrantes). <strong>No incluye</strong> Coordinador General, Coordinador Auxiliar, Coordinador
           Logístico, Matrimonio Logístico, Audiovisuales ni Comité de Bienvenida — esos roles no entran al reparto
           automático aunque el nombre se parezca.
         </div>

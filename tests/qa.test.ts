@@ -9,7 +9,8 @@ import {
   validatePhone,
 } from '../src/utils/validation';
 import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaAsistencia, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
-import { familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
+import { addConsejeroToFamilia, addFamilia, familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
+import { registrarParticipante, subscribeParticipantes, updateParticipante } from '../src/services/participantsService';
 import { estacasSugeridas, fuzzyIncludes, matchesQuery, quitarPalabrasDeEstaca } from '../src/utils/search';
 import { calcularCompromiso } from '../src/utils/compromiso';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia, soloOcurridas, variacionesPorEvento } from '../src/utils/asistenciaStats';
@@ -31,6 +32,7 @@ import {
   calcularEdad,
   calcularEstadisticas,
   calcularEstadoFamilia,
+  participaRegular,
   esElegibleReparto,
   grupoEstacaReparto,
   repartirConBalance,
@@ -2072,4 +2074,55 @@ test('217. Asistencia abre en el evento de hoy: baile del sábado en curso gana 
   const manana = { id: 'm', fecha: '2027-01-09', hora: '08:00', horaFin: '09:30' } as any;
   const tarde = { id: 't', fecha: '2027-01-09', hora: '15:00', horaFin: '17:00' } as any;
   assert.strictEqual(getCapacitacionParaAsistencia([manana, tarde], d('12:00'))?.id, 't'); // terminó la de la mañana → viene la de la tarde
+});
+
+test('218. participaRegular — sin la marca cuenta (llegar nuevo = marcado); solo false deja fuera', () => {
+  assert.strictEqual(participaRegular({} as any), true);
+  assert.strictEqual(participaRegular({ participaRegular: true } as any), true);
+  assert.strictEqual(participaRegular({ participaRegular: false } as any), false);
+});
+
+test('219. calcularEstadoFamilia — los sin marca no cuentan para sexo, estaca ni total', () => {
+  const mk = (id: string, genero: 'H' | 'M', estaca: string, participaRegular?: boolean) => ({ id, genero, estaca, participaRegular }) as any;
+  const e = calcularEstadoFamilia('f', [mk('1', 'H', 'Estaca Ventanilla'), mk('2', 'M', 'Estaca Ventanilla', false), mk('3', 'M', 'Estaca Ventanilla', true), mk('4', 'H', 'Estaca Ventanilla', false)]);
+  assert.strictEqual(e.total, 2);
+  assert.strictEqual(e.hombres, 1);
+  assert.strictEqual(e.mujeres, 1);
+});
+
+test('220. reparto — con 17 inscritos por compañía pero distinta participación, la que tiene menos participantes recibe más (H/M parejo)', () => {
+  const mkFam = (n: number, activos: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `${n}-${activos}-${i}`, genero: i % 2 ? 'M' : 'H', estaca: 'Estaca Ventanilla', participaRegular: i < activos ? undefined : false }) as any);
+  const fams = [mkFam(17, 6), mkFam(17, 13), mkFam(17, 10), mkFam(17, 9)];
+  const estados = fams.map((m, i) => calcularEstadoFamilia(`C${i + 1}`, m));
+  const nuevos = ['M', 'M', 'H', 'H', 'M', 'H', 'M', 'H'].map((g, i) => ({ participante: { id: 'n' + i, genero: g, estaca: 'Estaca Ventanilla' } as any, edad: 16 }));
+  const { estadosFinales } = repartirConBalance(nuevos, estados);
+  const total = (id: string) => estadosFinales.find((e) => e.id === id)!.total;
+  assert.ok(total('C1') > estados[0].total + 2, 'la de 6 participantes recibe la mayoría');
+  assert.strictEqual(total('C2'), estados[1].total, 'la de 13 no recibe a nadie');
+  for (const e of estadosFinales) assert.ok(Math.abs(e.hombres - e.mujeres) <= 1, `H/M parejo en ${e.id}`);
+});
+
+test('221. historial — la marca de participación tiene su propia frase', () => {
+  const mov = (v: boolean) => logH('ACTUALIZAR_PARTICIPANTE', { participaRegular: v, _antes: { participaRegular: !v } }, 'juan');
+  assert.match(describirEntrada(mov(false), CTX_H).texto, /quitó la marca.*Juan/);
+  assert.match(describirEntrada(mov(true), CTX_H).texto, /marcó que.*Juan.*participa con regularidad/);
+});
+
+test('222. quien entra a una compañía llega marcado, aunque antes le hubieran quitado la marca', async () => {
+  const r = await registrarParticipante({
+    nombres: 'Rosa', apellidos: 'Marca Prueba', fechaNacimiento: '2005-05-05', telefono: '987654321', correo: 'rosa222@x.pe', estaca: 'Estaca Ventanilla', barrio: 'B',
+    genero: 'M', experienciaPrevia: 'ninguna', asignacionAnterior: '', disponibilidad: 'si', audiovisualHabilidades: [], audiovisualEquipo: 'no', consentimientoDatosFecha: new Date().toISOString(),
+  });
+  assert.ok(r.ok);
+  const id = (r as { id: string }).id;
+  await updateParticipante(id, { asignacion: 'Consejero', participaRegular: false }, 'sistema');
+  const leer = () => { let p: Participante | undefined; subscribeParticipantes((l) => (p = l.find((x) => x.id === id)))(); return p!; };
+  assert.strictEqual(participaRegular(leer()), false);
+  await addFamilia('Prueba 222', '', [], 'sistema');
+  let fam: Familia | undefined;
+  const { subscribeFamilias } = await import('../src/services/familiasService');
+  subscribeFamilias((l) => (fam = l.find((f) => f.customName === 'Prueba 222')))();
+  await addConsejeroToFamilia(fam!, leer(), 'sistema');
+  assert.strictEqual(participaRegular(leer()), true);
 });

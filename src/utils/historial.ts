@@ -46,6 +46,7 @@ const ETIQUETA_CAMPO: Record<string, string> = {
   apellidos: 'apellidos',
   fechaNacimiento: 'fecha de nacimiento',
   genero: 'género',
+  participaRegular: 'participa con regularidad',
 };
 
 function parse(detalles: string): Record<string, unknown> {
@@ -111,7 +112,7 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
   const familia = (id: unknown) => (s(id) ? idx.familiaPorId.get(s(id)) ?? 'una compañía' : 'sin compañía');
   const nombresDe = (ids: unknown) => (Array.isArray(ids) ? ids.map(persona).join(', ') : 'personas');
   const evento = (id: unknown) => idx.eventoPorId.get(s(id)) ?? 'un evento';
-  const valor = (campo: string, v: unknown) => (campo === 'familiaId' ? familia(v) : s(v) || '—');
+  const valor = (campo: string, v: unknown) => (campo === 'familiaId' ? familia(v) : campo === 'participaRegular' ? (v === false ? 'no' : 'sí') : s(v) || '—');
 
   // Quién lo hizo: si el correo es de una persona registrada, su nombre; si no, el correo/etiqueta tal cual.
   const correo = normalizeEmail(log.admin || '');
@@ -145,6 +146,10 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
     case 'ACTUALIZAR_PARTICIPANTE': {
       const antes = (d._antes && typeof d._antes === 'object' ? d._antes : {}) as Record<string, unknown>;
       const cambios = Object.keys(d).filter((k) => k !== '_antes');
+      if (cambios.length === 1 && cambios[0] === 'participaRegular') {
+        texto = d.participaRegular === false ? `quitó la marca "participa con regularidad" a ${sujeto}` : `marcó que ${sujeto} participa con regularidad`;
+        break;
+      }
       const partes = cambios.map((k) => {
         const et = ETIQUETA_CAMPO[k] ?? k;
         return k in antes ? `${et}: ${valor(k, antes[k])} → ${valor(k, d[k])}` : `${et}: ${valor(k, d[k])}`;

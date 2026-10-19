@@ -20,6 +20,11 @@ function esConsejero(p: Participante): boolean {
 function esLogistico(p: Participante): boolean {
   return p.asignacion === 'Logístico';
 }
+/** ¿Cuenta para el reparto? Sin la marca escrita cuenta (llegar nuevo = marcado); solo `false` lo deja fuera. */
+export function participaRegular(p: Participante): boolean {
+  return p.participaRegular !== false;
+}
+
 /** Conveniencia para un conteo rápido en la UI ("cuántos elegibles hay en total") — la distribución real usa los 2 roles por separado, no esto. */
 export function esElegibleReparto(p: Participante): boolean {
   return esConsejero(p) || esLogistico(p);
@@ -94,7 +99,10 @@ export interface EstadoFamilia {
   porEstaca: Record<GrupoEstacaReparto, number>;
 }
 
-export function calcularEstadoFamilia(familiaId: string, miembrosActuales: Participante[]): EstadoFamilia {
+export function calcularEstadoFamilia(familiaId: string, todosLosMiembros: Participante[]): EstadoFamilia {
+  // Solo cuentan los que participan con regularidad: una compañía con 17 inscritos
+  // pero 6 activos se ve como de 6, y es la que más necesita gente nueva.
+  const miembrosActuales = todosLosMiembros.filter(participaRegular);
   const porEstaca: Record<GrupoEstacaReparto, number> = { Ventanilla: 0, 'Puente Piedra': 0, 'Pro Lima': 0, Otros: 0 };
   miembrosActuales.forEach((p) => {
     porEstaca[grupoEstacaReparto(p.estaca)] += 1;

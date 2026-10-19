@@ -68,6 +68,11 @@ export interface Participante {
   disponibilidad: Disponibilidad; // disponibilidad para las fechas específicas del evento
   asignacion: Asignacion | '';
   familiaId: string;
+  // Marca que ponen los Coordinadores Auxiliares (o el General): "participa con
+  // regularidad". Solo los marcados cuentan para el reparto de compañías.
+  // Ausente (undefined) = marcado: quien llega nuevo cuenta desde el primer
+  // momento sin escribir nada, y no hizo falta migrar a los ya existentes.
+  participaRegular?: boolean;
   // Para identificar candidatos al equipo audiovisual — los dos opcionales,
   // a propósito. `audiovisualEquipo === ''` (string vacío) es la señal de
   // "todavía no se le preguntó" — distinto de "no tiene equipo" ('no') —

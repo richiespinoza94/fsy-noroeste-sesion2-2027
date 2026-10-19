@@ -52,7 +52,13 @@ export async function ejecutarReparto(
 
   // En paralelo: cada update es independiente, así que repartir a 100 personas
   // tarda lo de UNA ida y vuelta, no 100 una tras otra (async-parallel).
-  await Promise.all(asignados.map(({ participanteId, familiaId }) => updateParticipante(participanteId, { familiaId }, adminCorreo)));
+  const sinMarca = new Set(Object.values(porFamilia).flat().filter((p) => p.participaRegular === false).map((p) => p.id));
+  await Promise.all(
+    asignados.map(({ participanteId, familiaId }) =>
+      // Quien llega a una compañía llega marcado, aunque en una anterior le hubieran quitado la marca.
+      updateParticipante(participanteId, { familiaId, ...(sinMarca.has(participanteId) ? { participaRegular: true } : {}) }, adminCorreo)
+    )
+  );
 
   await Promise.all(
     Object.entries(porFamilia).flatMap(([familiaId, miembros]) => {
