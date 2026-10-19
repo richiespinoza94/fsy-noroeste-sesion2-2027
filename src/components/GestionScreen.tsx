@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
+import InfoSheet from './InfoSheet';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
@@ -40,7 +41,7 @@ import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
 import { hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { fechaAmigable, partesFecha, rangoHora } from '../utils/fechaAmigable';
-import { createStaffAccount, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
+import { createStaffAccount, restablecerContrasena, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
 import { ASIGNACIONES, TIPOS_EVENTO, type Asignacion, type Asistencia, type Capacitacion, type Companerismo, type EstadoAsistencia, type Familia, type NocheHogar, type ParejaTrabajo, type Participante, type RepartoFamiliasRegistro, type SessionUser, type TipoEvento, type Usuario } from '../types';
 import { validateEmail } from '../utils/validation';
@@ -1422,6 +1423,31 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { mostrar: mostrarAviso, nodo: avisoNodo } = useAvisoDeshacer();
+  // Hoja de acciones de una cuenta: se abre al tocar su fila. paso: menu → confirmar → listo.
+  const [abierta, setAbierta] = useState('');
+  const [paso, setPaso] = useState<'menu' | 'confirmar' | 'listo'>('menu');
+  const [trabajando, setTrabajando] = useState(false);
+  const [errorAccion, setErrorAccion] = useState('');
+  const puedeRestablecer = user.rol.toLowerCase().trim() === 'coordinador general';
+  const cuenta = usuarios.find((x) => x.correo === abierta);
+  const cerrarHoja = () => {
+    setAbierta('');
+    setPaso('menu');
+    setErrorAccion('');
+  };
+
+  async function restablecer(u: Usuario) {
+    setTrabajando(true);
+    setErrorAccion('');
+    try {
+      await restablecerContrasena(u.correo, user.correo);
+      setPaso('listo');
+    } catch (e) {
+      setErrorAccion(e instanceof Error ? e.message : 'No se pudo restablecer. Intenta de nuevo.');
+    } finally {
+      setTrabajando(false);
+    }
+  }
 
   useEffect(() => subscribeUsuarios(setUsuarios), []);
 
@@ -1509,35 +1535,115 @@ function UsuariosTab({ user, participantes }: { user: SessionUser; participantes
         </div>
       )}
 
-      {usuarios.map((u) => (
-        <div key={u.correo} className="bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">
-            {u.correo[0]?.toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold break-all">{u.correo}</div>
-            <div className="text-xs text-slate-500">
-              {u.rol}
-              {u.estaca && ` · ${u.estaca}`}
-              {!u.passwordHash && ' · aún no entró'}
+      {usuarios.map((u) => {
+        const propia = u.correo === user.correo;
+        const contenido = (
+          <>
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">
+              {u.correo[0]?.toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold break-all">{u.correo}</div>
+              <div className="text-xs text-slate-500">
+                {u.rol}
+                {u.estaca && ` · ${u.estaca}`}
+                {!u.passwordHash && ' · aún no entró'}
+              </div>
+            </div>
+            {propia ? (
+              <span className="shrink-0 text-xs font-bold text-primary bg-primary/10 rounded-full px-2.5 py-1">Tú</span>
+            ) : (
+              <>
+                {!u.activo && <span className="shrink-0 text-xs font-bold text-slate-600 bg-slate-200 rounded-full px-2.5 py-1">Desactivada</span>}
+                <span className="shrink-0 text-slate-500" aria-hidden="true">›</span>
+              </>
+            )}
+          </>
+        );
+        return propia ? (
+          <div key={u.correo} className="bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3">{contenido}</div>
+        ) : (
+          <button
+            key={u.correo}
+            onClick={() => { setAbierta(u.correo); setPaso('menu'); setErrorAccion(''); }}
+            aria-label={`Opciones de la cuenta ${u.correo}`}
+            className="bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 text-left w-full min-h-[64px]"
+          >
+            {contenido}
+          </button>
+        );
+      })}
+
+      {cuenta && (
+        <InfoSheet titulo="Cuenta de staff" onClose={cerrarHoja} cerrar={paso === 'listo' ? 'Listo' : 'Cerrar'}>
+          <div className="bg-slate-50 rounded-xl p-3 mb-3">
+            <div className="text-sm font-bold break-all">{cuenta.correo}</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {cuenta.rol}
+              {cuenta.estaca && ` · ${cuenta.estaca}`} · {cuenta.activo ? 'Activa' : 'Desactivada'}
             </div>
           </div>
-          {u.correo !== user.correo && (
-            <button
-              onClick={() => {
-                const activar = !u.activo;
-                void setUsuarioActivo(u.correo, activar, user.correo);
-                mostrarAviso(activar ? `Cuenta activada: ${u.correo}` : `Cuenta desactivada: ${u.correo}`, () => void setUsuarioActivo(u.correo, !activar, user.correo));
-              }}
-              className={`text-xs font-bold rounded-lg px-3 min-h-[44px] shrink-0 ${
-                u.activo ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'
-              }`}
-            >
-              {u.activo ? 'Desactivar' : 'Activar'}
-            </button>
+
+          {paso === 'menu' && (
+            <div className="flex flex-col gap-2">
+              {puedeRestablecer && (
+                cuenta.passwordHash ? (
+                  <button onClick={() => setPaso('confirmar')} className="min-h-[56px] rounded-xl bg-primary/5 px-4 text-left">
+                    <span className="block text-sm font-bold text-primary">🔑 Restablecer contraseña</span>
+                    <span className="block text-xs text-slate-500">Borra la actual; la persona crea una nueva al entrar.</span>
+                  </button>
+                ) : (
+                  <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                    🔑 Aún no ha creado su contraseña, así que no hay nada que restablecer.
+                  </div>
+                )
+              )}
+              <button
+                onClick={() => {
+                  const activar = !cuenta.activo;
+                  void setUsuarioActivo(cuenta.correo, activar, user.correo);
+                  mostrarAviso(activar ? `Cuenta activada: ${cuenta.correo}` : `Cuenta desactivada: ${cuenta.correo}`, () => void setUsuarioActivo(cuenta.correo, !activar, user.correo));
+                  cerrarHoja();
+                }}
+                className={`min-h-[56px] rounded-xl px-4 text-left text-sm font-bold ${cuenta.activo ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}
+              >
+                {cuenta.activo ? 'Desactivar cuenta' : 'Activar cuenta'}
+                <span className="block text-xs font-normal text-slate-500">
+                  {cuenta.activo ? 'No podrá entrar hasta que la actives de nuevo.' : 'Podrá volver a entrar con su contraseña.'}
+                </span>
+              </button>
+            </div>
           )}
-        </div>
-      ))}
+
+          {paso === 'confirmar' && (
+            <div className="flex flex-col gap-3">
+              <div className="text-sm text-slate-700">
+                ¿Restablecer la contraseña de <strong className="break-all">{cuenta.correo}</strong>? Su contraseña actual dejará de funcionar y podrá crear una nueva al entrar con su correo.
+              </div>
+              {errorAccion && <div className="text-xs text-red-600 font-semibold">❌ {errorAccion}</div>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void restablecer(cuenta)}
+                  disabled={trabajando}
+                  className="flex-1 min-h-[48px] bg-red-600 text-white font-bold rounded-xl text-sm disabled:opacity-50"
+                >
+                  {trabajando ? 'Restableciendo…' : 'Sí, restablecer'}
+                </button>
+                <button onClick={() => { setPaso('menu'); setErrorAccion(''); }} disabled={trabajando} className="min-h-[48px] px-4 bg-slate-100 text-slate-700 font-bold rounded-xl text-sm">
+                  Volver
+                </button>
+              </div>
+            </div>
+          )}
+
+          {paso === 'listo' && (
+            <div role="status" className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800">
+              ✅ <strong>Contraseña restablecida.</strong> Pídele que entre ahora con su correo y cree una nueva. Hasta que lo haga, la cuenta queda sin contraseña.
+            </div>
+          )}
+        </InfoSheet>
+      )}
+
       {avisoNodo}
     </div>
   );

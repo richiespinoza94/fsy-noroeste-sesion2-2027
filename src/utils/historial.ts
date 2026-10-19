@@ -212,6 +212,9 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
     case 'CREAR_USUARIO':
       texto = `creó la cuenta de ${s(d.correo)} (${s(d.rol)})`;
       break;
+    case 'RESTABLECER_CONTRASENA_USUARIO':
+      texto = `restableció la contraseña de ${s(d.correo)}`;
+      break;
     case 'ACTIVAR_USUARIO':
       texto = `activó la cuenta de ${s(d.correo)}`;
       break;

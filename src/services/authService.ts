@@ -59,7 +59,7 @@ export async function loginStaff(correoRaw: string, password: string): Promise<L
     return { ok: false, code: 'INACTIVE', message: 'Tu acceso está desactivado. Contacta al coordinador general.' };
   }
   if (!usuario.passwordHash) {
-    return { ok: false, code: 'NEEDS_SETUP', message: 'Este es tu primer acceso. Crea una contraseña.' };
+    return { ok: false, code: 'NEEDS_SETUP', message: 'Crea tu contraseña de acceso.' };
   }
   const hash = await hashPassword(password);
   if (hash !== usuario.passwordHash) {
@@ -178,4 +178,23 @@ export async function setUsuarioActivo(correo: string, activo: boolean, adminCor
   if (!usuario) return;
   await saveUsuario(email, { ...usuario, activo });
   await logAction(adminCorreo, activo ? 'ACTIVAR_USUARIO' : 'DESACTIVAR_USUARIO', '', { correo: email });
+}
+
+/**
+ * El Coordinador General borra la contraseña de OTRA cuenta: la persona entra con su correo y la
+ * pantalla de "crear contraseña" (la misma del primer acceso) le deja poner una nueva.
+ * Nadie puede restablecer la suya propia, y solo el Coordinador General puede hacerlo.
+ */
+export async function restablecerContrasena(correo: string, adminCorreo: string) {
+  const email = normalizeEmail(correo);
+  const admin = normalizeEmail(adminCorreo);
+  if (email === admin) throw new Error('No puedes restablecer tu propia contraseña.');
+  const quien = await getUsuario(admin);
+  if ((quien?.rol || '').toLowerCase().trim() !== 'coordinador general') {
+    throw new Error('Solo el Coordinador General puede restablecer contraseñas.');
+  }
+  const usuario = await getUsuario(email);
+  if (!usuario) throw new Error('No se encontró la cuenta.');
+  await saveUsuario(email, { ...usuario, passwordHash: '' });
+  await logAction(adminCorreo, 'RESTABLECER_CONTRASENA_USUARIO', '', { correo: email });
 }

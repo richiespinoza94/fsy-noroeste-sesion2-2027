@@ -21,6 +21,7 @@ import { MAX_SUGERIR, companerosDe, estacasDistintas, firmaPropuesta, otraPropue
 import { deshacerPareja, deshacerParejasLote, guardarPareja, guardarParejasLote, subscribeParejas } from '../src/services/parejasService';
 import { crearNocheHogar, editarNocheHogar, eliminarNocheHogar, marcarVariosNocheHogar, ordenarNoches, restaurarNocheHogar, subscribeNochesHogar } from '../src/services/nochesHogarService';
 import { ordenarParaVista, resumenNoche, sumarDias } from '../src/utils/nochesHogar';
+import { createStaffAccount, loginStaff, restablecerContrasena, setupPasswordFirstTime } from '../src/services/authService';
 import { suscripcionCompartida } from '../src/utils/suscripcionCompartida';
 import { describirEntrada, describirEntradas, etiquetaDia, filtrarHistorial, grupoDeAccion } from '../src/utils/historial';
 import { formatAuditDetails } from '../src/services/auditService';
@@ -2020,4 +2021,39 @@ test('214. marcarVariosNocheHogar / editar / eliminar / restaurar (modo local) �
   await restaurarNocheHogar(antes, 'x@y.z');
   assert.deepStrictEqual(actual[0].asistencia, { a: 'ausente', b: 'presente' });
   off();
+});
+
+test('215. restablecerContrasena — solo el Coordinador General, nunca la propia; la persona vuelve a crear contraseña y la vieja deja de servir', async () => {
+  const g = globalThis as Record<string, unknown>;
+  const tenia = { window: g.window, sessionStorage: g.sessionStorage };
+  g.window = globalThis; // hashPassword usa window.crypto
+  g.sessionStorage = { setItem() {}, getItem: () => null, removeItem() {} };
+  try {
+    await createStaffAccount('cg215@x.pe', 'Coordinador General', '', 'sistema');
+    await createStaffAccount('log215@x.pe', 'Logística', '', 'sistema');
+    await createStaffAccount('ana215@x.pe', 'Coordinador General', '', 'sistema');
+    for (const c of ['cg215@x.pe', 'log215@x.pe', 'ana215@x.pe']) assert.ok((await setupPasswordFirstTime(c, 'clave-vieja-1')).ok);
+
+    await assert.rejects(restablecerContrasena('cg215@x.pe', 'cg215@x.pe'), /propia/); // ni la suya
+    await assert.rejects(restablecerContrasena('ana215@x.pe', 'log215@x.pe'), /Solo el Coordinador General/); // Logística no puede
+    assert.ok((await loginStaff('ana215@x.pe', 'clave-vieja-1')).ok); // lo rechazado no tocó nada
+
+    await restablecerContrasena('ana215@x.pe', 'cg215@x.pe'); // otro Coordinador General sí es restablecible
+    const sinClave = await loginStaff('ana215@x.pe', 'clave-vieja-1');
+    assert.ok(!sinClave.ok && sinClave.code === 'NEEDS_SETUP'); // cae en la pantalla de crear contraseña
+    assert.ok((await setupPasswordFirstTime('ana215@x.pe', 'clave-nueva-2')).ok);
+    const vieja = await loginStaff('ana215@x.pe', 'clave-vieja-1');
+    assert.ok(!vieja.ok && vieja.code === 'INVALID');
+    assert.ok((await loginStaff('ana215@x.pe', 'clave-nueva-2')).ok);
+    await assert.rejects(restablecerContrasena('no-existe@x.pe', 'cg215@x.pe'), /No se encontró/);
+  } finally {
+    g.window = tenia.window;
+    g.sessionStorage = tenia.sessionStorage;
+    if (tenia.window === undefined) delete g.window;
+    if (tenia.sessionStorage === undefined) delete g.sessionStorage;
+  }
+});
+
+test('216. historial — describe el restablecimiento de contraseña dentro del grupo "usuarios"', () => {
+  assert.strictEqual(grupoDeAccion('RESTABLECER_CONTRASENA_USUARIO'), 'usuarios');
 });

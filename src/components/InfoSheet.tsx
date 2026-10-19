@@ -20,7 +20,7 @@ export function BotonInfo({ onClick, etiqueta }: { onClick: () => void; etiqueta
   );
 }
 
-export default function InfoSheet({ titulo, onClose, children }: { titulo: string; onClose: () => void; children: ReactNode }) {
+export default function InfoSheet({ titulo, onClose, children, cerrar: etiquetaCerrar = 'Entendido' }: { titulo: string; onClose: () => void; children: ReactNode; cerrar?: string }) {
   const cerrar = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     cerrar.current?.focus();
@@ -35,7 +35,7 @@ export default function InfoSheet({ titulo, onClose, children }: { titulo: strin
         <div className="font-extrabold text-lg mb-3">{titulo}</div>
         {children}
         <button ref={cerrar} onClick={onClose} className="w-full mt-4 min-h-[44px] bg-slate-100 text-slate-700 font-bold rounded-xl text-sm">
-          Entendido
+          {etiquetaCerrar}
         </button>
       </div>
     </div>

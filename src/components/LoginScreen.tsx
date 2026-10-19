@@ -81,7 +81,7 @@ export default function LoginScreen({ onSuccess }: { onSuccess: (u: SessionUser)
 
           {needsSetup && (
             <div className="bg-sky-50 border border-sky-200 text-sky-800 text-xs rounded-xl px-3 py-2">
-              ✨ Primer acceso — crea una contraseña de al menos 8 caracteres.
+              ✨ Crea tu contraseña de acceso (mínimo 8 caracteres).
             </div>
           )}
 
