@@ -912,7 +912,7 @@ function FamiliaBalanceCard({
             🤝 {comp.sinCompanero > 0 ? `${comp.sinCompanero} sin compañero` : 'Todos con compañero'}
           </div>
         )}
-        <div className="pt-1 flex flex-wrap gap-x-2 text-slate-500">
+        <div className="pt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-500">
           <span className="whitespace-nowrap">Ventanilla {stats.porEstaca.Ventanilla}</span>
           <span className="whitespace-nowrap">P. Piedra {stats.porEstaca['Puente Piedra']}</span>
           <span className="whitespace-nowrap">Pro Lima {stats.porEstaca['Pro Lima']}</span>
