@@ -25,6 +25,9 @@ export function participaRegular(p: Participante): boolean {
   return p.participaRegular !== false;
 }
 
+/** Bajo este porcentaje de participantes sobre inscritos, la tarjeta de la compañía se marca en ámbar. */
+export const UMBRAL_PARTICIPACION = 0.6;
+
 /** Conveniencia para un conteo rápido en la UI ("cuántos elegibles hay en total") — la distribución real usa los 2 roles por separado, no esto. */
 export function esElegibleReparto(p: Participante): boolean {
   return esConsejero(p) || esLogistico(p);

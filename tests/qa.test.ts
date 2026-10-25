@@ -33,6 +33,7 @@ import {
   calcularEstadisticas,
   calcularEstadoFamilia,
   participaRegular,
+  UMBRAL_PARTICIPACION,
   esElegibleReparto,
   grupoEstacaReparto,
   repartirConBalance,
@@ -2149,4 +2150,9 @@ test('223. resumen de compañías — solo números (sin nombres), con inscritos
   assert.ok(t.includes('1/3 +1J'));
   assert.ok(t.includes('Logísticos: 1 (1H/0M)'));
   assert.ok(!/Nom|Ape/.test(t), 'no debe filtrar nombres');
+});
+
+test('224. umbral de participación — 60%: 10 de 17 (59%) se marca, 11 de 17 (65%) no', () => {
+  assert.ok(10 / 17 < UMBRAL_PARTICIPACION);
+  assert.ok(!(11 / 17 < UMBRAL_PARTICIPACION));
 });

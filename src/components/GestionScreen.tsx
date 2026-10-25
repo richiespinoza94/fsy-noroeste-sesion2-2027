@@ -30,6 +30,7 @@ import {
   calcularEstadoFamilia,
   participaRegular,
   repartoCompleto,
+  UMBRAL_PARTICIPACION,
   type CandidatoReparto,
   type EstadoFamilia,
   type FuenteReparto,
@@ -861,9 +862,14 @@ function FamiliaBalanceCard({
   parejas?: ParejaTrabajo[];
   onOpen?: () => void;
 }) {
-  const miembros = participantes.filter((p) => familia.consejeros.includes(p.id));
-  const cands: CandidatoReparto[] = miembros.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, new Date()) }));
+  const ids = new Set(familia.consejeros);
+  const miembros = participantes.filter((p) => ids.has(p.id));
+  // Lo que cuenta es lo que ve el algoritmo: solo quienes participan con regularidad.
+  const participan = miembros.filter(participaRegular);
+  const ahora = new Date();
+  const cands: CandidatoReparto[] = participan.map((p) => ({ participante: p, edad: calcularEdad(p.fechaNacimiento, ahora) }));
   const stats = calcularEstadisticas(cands);
+  const bajo = miembros.length > 0 && participan.length / miembros.length < UMBRAL_PARTICIPACION;
   const comp = parejas ? resumenCompaneros(familia, parejas, miembros) : null;
   const clases = 'bg-white rounded-2xl p-3.5 shadow-sm border-t-[3px] text-left w-full flex flex-col justify-start'; // un <button> centra su contenido en vertical: sin esto, la tarjeta más baja de la fila queda desalineada
   const cuerpo = (
@@ -873,7 +879,14 @@ function FamiliaBalanceCard({
         {onOpen && <span className="text-slate-400" aria-hidden="true">›</span>}
       </div>
       <div className="text-xs text-slate-600 space-y-0.5">
-        <div>Total: <strong>{stats.total}</strong> · H: {stats.hombres} · M: {stats.mujeres}</div>
+        <div>
+          {participan.length === miembros.length ? (
+            <>Total: <strong>{stats.total}</strong></>
+          ) : (
+            <span className={bajo ? 'text-amber-700 font-semibold' : ''}>Participan: <strong>{participan.length}</strong> de {miembros.length}</span>
+          )}{' '}
+          · H: {stats.hombres} · M: {stats.mujeres}
+        </div>
         {comp && miembros.length > 0 && (
           <div>
             Compañerismos: <strong>{comp.grupos}</strong>
