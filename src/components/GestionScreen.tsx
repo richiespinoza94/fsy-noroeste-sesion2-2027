@@ -901,24 +901,22 @@ function FamiliaBalanceCard({
         <span className="flex-1 font-extrabold text-sm">{nombreCompania(familia)}</span>
         {onOpen && <span className="text-slate-400" aria-hidden="true">›</span>}
       </div>
-      <div className="text-xs text-slate-600 space-y-0.5">
-        <div>
-          {participan.length === miembros.length ? (
-            <>Total: <strong>{stats.total}</strong></>
-          ) : (
-            <span className={bajo ? 'text-amber-700 font-semibold' : ''}>Participan: <strong>{participan.length}</strong> de {miembros.length}</span>
-          )}{' '}
-          · H: {stats.hombres} · M: {stats.mujeres}
+      <div className="text-xs text-slate-600 space-y-1">
+        <div className={bajo ? 'text-amber-700 font-semibold' : ''}>
+          <strong className="text-base text-slate-900">{participan.length}</strong>
+          {participan.length === miembros.length ? ' integrantes' : ` de ${miembros.length} participan`}
         </div>
+        <div className="whitespace-nowrap">H {stats.hombres} · M {stats.mujeres}</div>
         {comp && miembros.length > 0 && (
-          <div>
-            Compañerismos: <strong>{comp.grupos}</strong>
-            {comp.sinCompanero > 0 && <span className="text-amber-700 font-semibold"> · {comp.sinCompanero} sin compañero</span>}
+          <div className={comp.sinCompanero > 0 ? 'text-amber-700 font-semibold' : 'text-slate-500'}>
+            🤝 {comp.sinCompanero > 0 ? `${comp.sinCompanero} sin compañero` : 'Todos con compañero'}
           </div>
         )}
-        <div className="pt-1 text-slate-500">
-          Ventanilla {stats.porEstaca.Ventanilla} · P. Piedra {stats.porEstaca['Puente Piedra']} · Pro Lima{' '}
-          {stats.porEstaca['Pro Lima']} · Otros {stats.porEstaca.Otros}
+        <div className="pt-1 flex flex-wrap gap-x-2 text-slate-500">
+          <span className="whitespace-nowrap">Ventanilla {stats.porEstaca.Ventanilla}</span>
+          <span className="whitespace-nowrap">P. Piedra {stats.porEstaca['Puente Piedra']}</span>
+          <span className="whitespace-nowrap">Pro Lima {stats.porEstaca['Pro Lima']}</span>
+          {stats.porEstaca.Otros > 0 && <span className="whitespace-nowrap">Otros {stats.porEstaca.Otros}</span>}
         </div>
       </div>
     </>
