@@ -46,6 +46,7 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
+import { sinVenirRecientes } from '../src/utils/sinVenir';
 import { resumenCompaniasTexto } from '../src/utils/resumenCompanias';
 import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, NocheHogar, ParejaTrabajo, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
@@ -2155,4 +2156,31 @@ test('223. resumen de compañías — solo números (sin nombres), con inscritos
 test('224. umbral de participación — 60%: 10 de 17 (59%) se marca, 11 de 17 (65%) no', () => {
   assert.ok(10 / 17 < UMBRAL_PARTICIPACION);
   assert.ok(!(11 / 17 < UMBRAL_PARTICIPACION));
+});
+
+test('225. sinVenirRecientes — avisa a los marcados que no vinieron a ninguna de las últimas 3 capacitaciones', () => {
+  const caps = [capFake('e1', '2027-02-01'), capFake('e2', '2027-02-08'), capFake('e3', '2027-02-15'), capFake('e4', '2027-02-22')];
+  const mk = (id: string, extra: Partial<Participante> = {}) => ({ ...personaFake(id), timestamp: '2027-01-01T00:00:00.000Z', ...extra }) as Participante;
+  const gente = [
+    mk('viene'),                                            // vino a e3 y e4
+    mk('nunca'),                                            // no vino a nada
+    mk('justifico'),                                        // justificó e2: cuenta como que vino
+    mk('apagado', { participaRegular: false }),             // ya no está marcado: no se avisa
+    mk('nuevo', { timestamp: '2027-02-20T00:00:00.000Z' }), // se registró después de e2: no pudo venir
+    mk('solo-viejo'),                                       // solo vino a e1 (fuera de las últimas 3)
+  ];
+  const a = (cap: string, p: string, estado: 'presente' | 'justificado' | 'ausente') => ({ capacitacionId: cap, participanteId: p, estado, timestamp: '' }) as Asistencia;
+  const asis = [a('e1', 'solo-viejo', 'presente'), a('e2', 'justifico', 'justificado'), a('e2', 'viene', 'presente'), a('e3', 'viene', 'presente'), a('e4', 'viene', 'presente')];
+  const ids = (x: Set<string>) => [...x].sort();
+  // con e4 ya pasado, las últimas 3 son e2, e3, e4
+  assert.deepStrictEqual(ids(sinVenirRecientes(gente, caps, asis, '2027-03-01')), ['nunca', 'solo-viejo']);
+  // el evento de hoy no cuenta: con hoy = e4 las últimas 3 son e1, e2, e3 (solo-viejo vino a e1; 'nuevo' se registró después de e1)
+  assert.deepStrictEqual(ids(sinVenirRecientes(gente, caps, asis, '2027-02-22')), ['nunca']);
+  // un evento donde nadie pasó lista todavía no se usa
+  assert.deepStrictEqual(ids(sinVenirRecientes(gente, [...caps, capFake('e5', '2027-02-27')], asis, '2027-03-01')), ['nunca', 'solo-viejo']);
+  // un baile no cuenta aunque haya venido
+  const conBaile = [...caps, { ...capFake('b1', '2027-02-26'), tipo: 'baile' as const }];
+  assert.deepStrictEqual(ids(sinVenirRecientes(gente, conBaile, [...asis, a('b1', 'nunca', 'presente')], '2027-03-01')), ['nunca', 'solo-viejo']);
+  // con menos de 3 capacitaciones no hay aviso
+  assert.strictEqual(sinVenirRecientes(gente, caps.slice(0, 2), asis, '2027-03-01').size, 0);
 });

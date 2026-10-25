@@ -4,6 +4,7 @@ import AuditTimeline from './AuditTimeline';
 import InfoSheet, { BotonInfo } from './InfoSheet';
 import Plegable from './Plegable';
 import { resumenCompaniasTexto } from '../utils/resumenCompanias';
+import { sinVenirRecientes } from '../utils/sinVenir';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
@@ -57,6 +58,7 @@ import ScrollX from './ScrollX';
 // Reparto automático de compañías: ya no se va a usar. La sección queda oculta (no
 // borrada) por si hiciera falta de nuevo — basta poner esto en `true`.
 const REPARTO_VISIBLE = false;
+const SIN_AVISOS: ReadonlySet<string> = new Set();
 
 type SubTab = 'familias' | 'reparto' | 'roles' | 'capacitaciones' | 'usuarios' | 'historial';
 
@@ -201,7 +203,12 @@ function FamiliasTab({
     () => (search.length >= 2 ? eligibles.filter((p) => `${p.nombres} ${p.apellidos}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6) : []),
     [search, eligibles]
   );
-  const famMembers = fam ? participantes.filter((p) => fam.consejeros.includes(p.id)) : [];
+  // Memoizado (y con Set): se usa para los avisos de abajo y no debe recalcularse en cada render.
+  const famMembers = useMemo(() => {
+    if (!fam) return [];
+    const ids = new Set(fam.consejeros);
+    return participantes.filter((p) => ids.has(p.id));
+  }, [fam, participantes]);
   const famCp = fam ? companerismo.filter((c) => c.familiaId === fam.id) : [];
   const coordAux = participantes.filter(isCoordAux);
   const [detail, setDetail] = useState<Participante | null>(null);
@@ -217,6 +224,12 @@ function FamiliasTab({
   // Marcan: los Coordinadores Auxiliares (de su compañía) y el Coordinador General. El resto solo ve la marca.
   const puedeMarcar = user.canChangeRoles || user.isAuxiliar;
   const participan = famMembers.filter(participaRegular).length;
+  // Aviso (no cambia nada solo): marcados que no vinieron a ninguna de las últimas 3 capacitaciones. Solo lo ve quien puede marcar.
+  const hoy = hoyLocalISO();
+  const sinVenir = useMemo(
+    () => (puedeMarcar && fam ? sinVenirRecientes(famMembers, capacitaciones, asistencia, hoy) : SIN_AVISOS),
+    [puedeMarcar, fam, famMembers, capacitaciones, asistencia, hoy]
+  );
   useEffect(() => {
     setAbiertas({});
     setSearch('');
@@ -424,7 +437,12 @@ function FamiliasTab({
           <Plegable
             icono="👥"
             titulo={`Integrantes (${famMembers.length})`}
-            resumen={famMembers.length === 0 ? 'Sin integrantes todavía' : participan === famMembers.length ? `${participan} participan` : `${participan} de ${famMembers.length} participan`}
+            resumen={
+              <>
+                {famMembers.length === 0 ? 'Sin integrantes todavía' : participan === famMembers.length ? `${participan} participan` : `${participan} de ${famMembers.length} participan`}
+                {sinVenir.size > 0 && <span className="text-amber-700"> · {sinVenir.size} por revisar</span>}
+              </>
+            }
             abierto={abiertas.integrantes ?? famMembers.length === 0}
             onToggle={() => alternar('integrantes', famMembers.length === 0)}
           >
@@ -448,10 +466,13 @@ function FamiliasTab({
             <div className="mt-3 flex flex-col gap-1.5">
               {famMembers.length > 0 && (
                 <div className="flex items-center gap-2 pl-1 pr-1">
-                  <div className="flex-1 text-xs text-slate-600">
-                    <strong>{participan} de {famMembers.length}</strong> participan con regularidad
-                  </div>
+                  <div className="flex-1 text-xs text-slate-600">Solo los que participan cuentan para el reparto</div>
                   <BotonInfo onClick={() => setInfoParticipa(true)} etiqueta="Qué significa Participa" />
+                </div>
+              )}
+              {sinVenir.size > 0 && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <strong>{sinVenir.size}</strong> {sinVenir.size === 1 ? 'no vino' : 'no vinieron'} a ninguna de las últimas 3 capacitaciones. Si ya no participan, toca su botón.
                 </div>
               )}
               {famMembers.map((p) => {
@@ -472,6 +493,7 @@ function FamiliasTab({
                       <span className="block text-xs text-slate-500 truncate">
                         {[p.asignacion !== 'Consejero' ? p.asignacion || 'Sin rol' : '', p.estaca].filter(Boolean).join(' · ')}
                       </span>
+                      {sinVenir.has(p.id) && <span className="block text-xs font-semibold text-amber-700 truncate">No vino en las últimas 3</span>}
                     </button>
                     {puedeMarcar ? (
                       <button
@@ -522,6 +544,7 @@ function FamiliasTab({
             <li>Marcan con <strong>✓ Participa</strong> a quienes vienen con regularidad. Solo ellos cuentan cuando se reparte a la gente nueva: cada persona va a la compañía que tiene menos participantes, cuidando que haya parejo de hombres y mujeres.</li>
             <li>Quien llega nuevo a una compañía entra marcado, sin que hagas nada.</li>
             <li>Si alguien dejó de venir, toca su botón: sigue en la compañía, solo deja de contar. Si vuelve, tócalo otra vez.</li>
+            <li>Te avisamos en ámbar de quien no vino a ninguna de las últimas 3 capacitaciones (quien justificó cuenta como que vino). Es solo un aviso: la marca la cambias tú. No cuentan los Bailes ni las Noches de Hogar.</li>
             <li>Justo después de tocar puedes deshacerlo.</li>
           </ul>
         </InfoSheet>
