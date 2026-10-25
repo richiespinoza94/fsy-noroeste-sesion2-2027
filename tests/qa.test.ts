@@ -45,6 +45,7 @@ import {
 import { nombreConInicialMaterna, nombreCorto, primerApellido, primerNombre } from '../src/utils/nombreCorto';
 import { habilidadesParaMostrar, tieneExperienciaAudiovisual } from '../src/utils/audiovisual';
 import { calcularCumpleanosProximos, diasHastaProximoCumple } from '../src/utils/cumpleanos';
+import { resumenCompaniasTexto } from '../src/utils/resumenCompanias';
 import type { Asistencia, AuditLog, Capacitacion, Companerismo, Familia, NocheHogar, ParejaTrabajo, Participante } from '../src/types';
 import { ESTACAS_DATA, ESTACAS_PRINCIPALES, ESTACAS_SECUNDARIAS, FILTRO_OTRAS, TODAS_LAS_ESTACAS, estacaEnFiltro } from '../src/data/estacas';
 
@@ -2125,4 +2126,27 @@ test('222. quien entra a una compañía llega marcado, aunque antes le hubieran 
   subscribeFamilias((l) => (fam = l.find((f) => f.customName === 'Prueba 222')))();
   await addConsejeroToFamilia(fam!, leer(), 'sistema');
   assert.strictEqual(participaRegular(leer()), true);
+});
+
+test('223. resumen de compañías — solo números (sin nombres), con inscritos, participan, edades y asistencia', () => {
+  const mk = (id: string, genero: 'H' | 'M', nac: string, extra: Partial<Participante> = {}) =>
+    ({ ...personaFake(id), nombres: `Nom${id}`, apellidos: `Ape${id}`, genero, fechaNacimiento: nac, estaca: 'Ventanilla', asignacion: 'Consejero', ...extra }) as Participante;
+  const gente = [
+    mk('a', 'H', '2010-01-01'), mk('b', 'M', '2009-01-01'), mk('c', 'M', '2008-01-01', { participaRegular: false }),
+    mk('d', 'H', '2010-06-01', { asignacion: 'Logístico' }), // sin compañía
+  ];
+  const fam = { id: 'f1', nombre: 'Familia 1', customName: '', colorId: 'x', consejeros: ['a', 'b', 'c'] } as Familia;
+  const cap = capFake('e1', '2027-02-02');
+  const asis = [
+    { capacitacionId: 'e1', participanteId: 'a', estado: 'presente', timestamp: '' },
+    { capacitacionId: 'e1', participanteId: 'b', estado: 'justificado', timestamp: '' },
+    { capacitacionId: 'e1', participanteId: 'd', estado: 'presente', timestamp: '' },
+  ] as Asistencia[];
+  const t = resumenCompaniasTexto({ familias: [fam], participantes: gente, capacitaciones: [cap], asistencia: asis, ahora: new Date('2027-02-10T12:00:00') });
+  assert.ok(t.includes('Compañía 1'));
+  assert.ok(t.includes('Inscritos: 3 (1H/2M) · Participan: 2 (1H/1M) · 67% de los inscritos'));
+  assert.ok(t.includes('Ventanilla 2'));
+  assert.ok(t.includes('1/3 +1J'));
+  assert.ok(t.includes('Logísticos: 1 (1H/0M)'));
+  assert.ok(!/Nom|Ape/.test(t), 'no debe filtrar nombres');
 });

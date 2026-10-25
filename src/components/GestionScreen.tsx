@@ -3,6 +3,7 @@ import { useAvisoDeshacer } from './AvisoDeshacer';
 import AuditTimeline from './AuditTimeline';
 import InfoSheet, { BotonInfo } from './InfoSheet';
 import Plegable from './Plegable';
+import { resumenCompaniasTexto } from '../utils/resumenCompanias';
 import HistorialTab from './HistorialTab';
 import CompanerismosFamilia, { useParejas } from './CompanerismosFamilia';
 import { FAMILY_COLORS } from '../data/colors';
@@ -123,7 +124,7 @@ export default function GestionScreen({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24" onScroll={handleScroll}>
         {sub === 'familias' && (
-          <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} ocultarFranja={bajando} />
+          <FamiliasTab user={user} participantes={participantes} familias={familias} companerismo={companerismo} capacitaciones={capacitaciones} asistencia={asistencia} ocultarFranja={bajando} />
         )}
         {sub === 'reparto' && REPARTO_VISIBLE && user.canRepartirFamilias && (
           <RepartoTab
@@ -150,12 +151,16 @@ function FamiliasTab({
   participantes,
   familias,
   companerismo,
+  capacitaciones,
+  asistencia,
   ocultarFranja,
 }: {
   user: SessionUser;
   participantes: Participante[];
   familias: Familia[];
   companerismo: Companerismo[];
+  capacitaciones: Capacitacion[];
+  asistencia: Asistencia[];
   /** Bajando por la lista: la franja de compañías se esconde y deja solo una línea del color de la compañía. */
   ocultarFranja: boolean;
 }) {
@@ -165,6 +170,19 @@ function FamiliasTab({
   const [newColor, setNewColor] = useState('');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  // Resumen de números para pegar en un chat (solo Coordinador General). null = cerrado.
+  const [resumen, setResumen] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState<'si' | 'manual' | ''>('');
+  const resumenRef = useRef<HTMLTextAreaElement>(null);
+  async function copiarResumen() {
+    try {
+      await navigator.clipboard.writeText(resumen ?? '');
+      setCopiado('si');
+    } catch {
+      resumenRef.current?.select();
+      setCopiado('manual');
+    }
+  }
 
   // Un Coordinador Auxiliar solo ve las familias donde está en un compañerismo
   // (ver familiasDeAuxiliar). Para él, `visibles` reemplaza a `familias` en
@@ -283,6 +301,27 @@ function FamiliasTab({
         <button onClick={() => setCreating(true)} className="min-h-[44px] bg-primary text-white text-sm font-bold rounded-xl">
           + Nueva compañía
         </button>
+      )}
+      {!fam && user.canRepartirFamilias && !creating && familias.length > 0 && (
+        <button
+          onClick={() => {
+            setCopiado('');
+            setResumen(resumenCompaniasTexto({ familias, participantes, capacitaciones, asistencia }));
+          }}
+          className="min-h-[44px] bg-white border border-slate-200 text-primary text-sm font-bold rounded-xl"
+        >
+          📋 Resumen en números
+        </button>
+      )}
+      {resumen !== null && (
+        <InfoSheet titulo="Resumen de compañías" onClose={() => setResumen(null)} cerrar="Cerrar">
+          <p className="text-sm text-slate-600 mb-2">Solo números por compañía, sin nombres de personas. Cópialo y pégalo donde lo necesites.</p>
+          <textarea ref={resumenRef} readOnly value={resumen} rows={12} onFocus={(e) => e.currentTarget.select()} className="input w-full font-mono text-xs leading-relaxed" />
+          <button onClick={() => void copiarResumen()} className="mt-2 w-full min-h-[44px] bg-primary text-white font-bold rounded-xl text-sm">
+            {copiado === 'si' ? '✓ Copiado' : '📋 Copiar resumen'}
+          </button>
+          {copiado === 'manual' && <div className="text-xs text-slate-500 mt-1.5">No se pudo copiar solo: el texto quedó seleccionado, cópialo con tu teclado o mantén pulsado.</div>}
+        </InfoSheet>
       )}
 
       {fam && !unicaDelAuxiliar && (
