@@ -200,6 +200,21 @@ export function getNextCapacitacion(caps: Capacitacion[]): Capacitacion | null {
 }
 
 /**
+ * Tarjeta "Próxima…" del Home: solo lo que AÚN no empieza (el más cercano) o lo que
+ * está en curso. Si todo ya pasó devuelve null — antes caía al pasado más reciente
+ * y seguía diciendo "Próxima" sobre un evento que ya había ocurrido.
+ */
+export function getProximaParaHome(caps: Capacitacion[], ahora: Date = new Date()): { cap: Capacitacion; enCurso: boolean } | null {
+  const vivo = getCapacitacionParaHome(caps, ahora);
+  if (vivo?.enCurso) return vivo;
+  const futuras = caps
+    .map((c) => ({ c, d: new Date(`${c.fecha}T${c.hora || '00:00'}`) }))
+    .filter((x) => !isNaN(x.d.getTime()) && x.d.getTime() > ahora.getTime())
+    .sort((a, b) => a.d.getTime() - b.d.getTime());
+  return futuras.length ? { cap: futuras[0].c, enCurso: false } : null;
+}
+
+/**
  * Qué evento abre por defecto la pantalla Asistencia. getNextCapacitacion solo
  * mira eventos que aún no empezaron, así que con el baile del sábado YA en
  * marcha saltaba a la dominical del domingo. Aquí manda "lo de hoy":

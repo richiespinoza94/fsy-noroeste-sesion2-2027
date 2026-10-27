@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Asistencia, Capacitacion, Companerismo, Familia, Participante, SessionUser } from '../types';
 import { familiasDeAuxiliar, subscribeCompanerismo, subscribeFamilias } from '../services/familiasService';
-import { getCapacitacionParaHome, getNextCapacitacion } from '../services/capacitacionesService';
+import { getCapacitacionParaHome, getProximaParaHome } from '../services/capacitacionesService';
 import { subscribeAllAsistencia } from '../services/asistenciaService';
 import { calcularAsistenciaPorCapacitacion, medianaAsistencia, promedioAsistencia } from '../utils/asistenciaStats';
 import { fechaAmigable, rangoHora } from '../utils/fechaAmigable';
-import { hoyLocalISO, tipoDe } from '../utils/tiposEvento';
+import { hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { calcularCumpleanosProximos } from '../utils/cumpleanos';
 import { calcularSeguimiento } from '../utils/seguimiento';
 import { useScrollDirection } from '../utils/useScrollDirection';
@@ -55,7 +55,8 @@ export default function HomeScreen({
   // CONFEJAS (CONTEXTO.md, "cálculos sin memoizar" sobre 500 personas):
   // mejor aplicarla desde ahora que es gratis, que esperar a redescubrirla
   // cuando el roster crezca.
-  const next = useMemo(() => getNextCapacitacion(capacitaciones), [capacitaciones]);
+  const proxima = useMemo(() => getProximaParaHome(capacitaciones), [capacitaciones]);
+  const next = proxima?.cap ?? null;
   const confirmados = useMemo(() => participantes.filter((p) => p.disponibilidad === 'si').length, [participantes]);
 
   const capsOrdenadas = useMemo(
@@ -107,12 +108,14 @@ export default function HomeScreen({
       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-primary/20 min-h-[92px]">
         <div className="absolute -top-8 -right-10 w-36 h-36 rounded-full bg-accent/10" />
         <div className="relative">
-          <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">📅 Próxima capacitación</div>
+          <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">
+            {proxima?.enCurso ? '🔴 En curso ahora' : next && tipoDe(next) !== 'capacitacion' ? `${infoTipo(tipoDe(next)).icon} Próximo evento` : '📅 Próxima capacitación'}
+          </div>
           {cargando ? (
             <div className="text-sm opacity-70 mt-1">Cargando…</div>
           ) : (
             <>
-              <div className="text-lg font-extrabold">{next?.label || 'Sin capacitaciones programadas'}</div>
+              <div className="text-lg font-extrabold">{next?.label || 'Aún no hay otra programada'}</div>
               {next && (
                 <div className="text-sm opacity-80 mt-1">
                   {[fechaAmigable(next.fecha, hoyLocalISO()), next.hora && rangoHora(next.hora, next.horaFin), next.lugar].filter(Boolean).join(' · ')}
@@ -142,7 +145,7 @@ export default function HomeScreen({
             icon={relevante.enCurso ? '🔴' : '📋'}
             cargando={cargando}
             badge={relevante.enCurso ? 'EN VIVO' : undefined}
-            sub={`${relevante.cap.label} · ${statsRelevante.pct}%`}
+            sub={`${statsRelevante.pct}% · ${relevante.cap.label}`}
           />
         ) : (
           <MetricCard

@@ -8,7 +8,7 @@ import {
   validateEmail,
   validatePhone,
 } from '../src/utils/validation';
-import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaAsistencia, getCapacitacionParaHome, getNextCapacitacion } from '../src/services/capacitacionesService';
+import { estadoVentanaCheckIn, getCapacitacionParaAutoMarcar, getCapacitacionParaCheckIn, getCapacitacionParaAsistencia, getCapacitacionParaHome, getNextCapacitacion, getProximaParaHome } from '../src/services/capacitacionesService';
 import { addConsejeroToFamilia, addFamilia, familiasDeAuxiliar, ordenarFamilias } from '../src/services/familiasService';
 import { registrarParticipante, subscribeParticipantes, updateParticipante } from '../src/services/participantsService';
 import { estacasSugeridas, fuzzyIncludes, matchesQuery, quitarPalabrasDeEstaca } from '../src/utils/search';
@@ -2183,4 +2183,13 @@ test('225. sinVenirRecientes — avisa a los marcados que no vinieron a ninguna 
   assert.deepStrictEqual(ids(sinVenirRecientes(gente, conBaile, [...asis, a('b1', 'nunca', 'presente')], '2027-03-01')), ['nunca', 'solo-viejo']);
   // con menos de 3 capacitaciones no hay aviso
   assert.strictEqual(sinVenirRecientes(gente, caps.slice(0, 2), asis, '2027-03-01').size, 0);
+});
+
+test('226. getProximaParaHome — nada de "próxima" sobre un evento que ya pasó', () => {
+  const caps = [{ id: 'a', label: '4ta', fecha: '2026-10-25', hora: '17:30', horaFin: '19:30', lugar: '', oficial: true }] as any[];
+  assert.strictEqual(getProximaParaHome(caps, new Date('2026-10-27T17:30:00')), null);
+  assert.strictEqual(getProximaParaHome(caps, new Date('2026-10-25T18:00:00'))?.enCurso, true);
+  assert.strictEqual(getProximaParaHome(caps, new Date('2026-10-25T10:00:00'))?.cap.id, 'a');
+  const dos = [...caps, { id: 'b', label: '5ta', fecha: '2026-11-01', hora: '17:30', lugar: '', oficial: true }] as any[];
+  assert.strictEqual(getProximaParaHome(dos, new Date('2026-10-27T12:00:00'))?.cap.id, 'b');
 });
