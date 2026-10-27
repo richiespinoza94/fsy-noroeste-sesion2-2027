@@ -44,7 +44,7 @@ import { crearNocheHogar, editarNocheHogar, eliminarNocheHogar, marcarAsistencia
 import { ordenarParaVista, resumenNoche, sumarDias } from '../utils/nochesHogar';
 import { updateParticipante } from '../services/participantsService';
 import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
-import { hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
+import { agruparEventosParaSelector, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { fechaAmigable, partesFecha, rangoHora } from '../utils/fechaAmigable';
 import { createStaffAccount, restablecerContrasena, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
 import { useScrollDirection } from '../utils/useScrollDirection';
@@ -1406,13 +1406,11 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
   const [tipo, setTipo] = useState<TipoEvento>('capacitacion');
   const [armedId, setArmedId] = useState<string | null>(null);
 
-  // Próximas primero — antes se mostraban en el orden en que Firestore las
-  // devuelve (no garantizado, en la práctica se veía como alfabético por
-  // label), lo que no ayuda a ubicar rápido "la de este sábado".
-  const ordenadas = useMemo(
-    () => [...capacitaciones].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`)),
-    [capacitaciones]
-  );
+  // Lo que viene primero (el más cercano arriba) y, aparte, lo ya pasado (el más
+  // reciente arriba, plegado). Antes salía todo del más antiguo al más nuevo y
+  // lo de hoy quedaba al fondo de la lista.
+  const [verPasadas, setVerPasadas] = useState(false);
+  const { proximos, pasados } = useMemo(() => agruparEventosParaSelector(capacitaciones, hoyLocalISO()), [capacitaciones]);
 
   useEffect(() => {
     if (!armedId) return;
@@ -1448,6 +1446,56 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
     setLugar('');
     setTipo('capacitacion');
   }
+
+  const fila = (c: Capacitacion) => {
+        const armed = armedId === c.id;
+        return (
+          <div
+            key={c.id}
+            className={`bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 border ${armed ? 'border-red-200' : 'border-transparent'}`}
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">{infoTipo(tipoDe(c)).icon}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold truncate">{c.label}</div>
+              <div className="text-xs text-slate-500">{fechaAmigable(c.fecha, hoyLocalISO())} · {rangoHora(c.hora, c.horaFin)} · {c.lugar}</div>
+              {/* Tipo editable en el lugar: select nativo (en celular abre el
+                  selector del sistema, sin armar un modal propio). Los eventos
+                  viejos sin tipo aparecen como Capacitación. */}
+              {user.canEditAll ? (
+                <select
+                  className="input !py-1 !px-2 mt-1.5 !w-auto !text-xs font-semibold"
+                  value={tipoDe(c)}
+                  onChange={(e) => setTipoCapacitacion(c.id, e.target.value as TipoEvento, user.correo)}
+                  aria-label={`Tipo de ${c.label}`}
+                >
+                  {TIPOS_EVENTO.map((t) => (
+                    <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-[11px] font-semibold text-primary mt-0.5">{infoTipo(tipoDe(c)).label}</div>
+              )}
+            </div>
+            {user.canEditAll && (
+              armed ? (
+                <button
+                  onClick={() => handleDeleteClick(c)}
+                  className="shrink-0 text-red-700 text-[11px] font-bold bg-red-100 rounded-lg px-2.5 py-1.5 max-w-[130px] text-right leading-tight"
+                >
+                  ¿Eliminar y perder su asistencia registrada?
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleDeleteClick(c)}
+                  className="shrink-0 text-red-500 text-xs font-bold bg-red-50 rounded-lg w-11 h-11"
+                >
+                  ✕
+                </button>
+              )
+            )}
+          </div>
+        );
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -1501,55 +1549,21 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
         </div>
       )}
 
-      {ordenadas.map((c) => {
-        const armed = armedId === c.id;
-        return (
-          <div
-            key={c.id}
-            className={`bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 border ${armed ? 'border-red-200' : 'border-transparent'}`}
+      {proximos.length > 0 && <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mt-1">Próximas · {proximos.length}</div>}
+      {proximos.map(fila)}
+      {pasados.length > 0 && (
+        <>
+          <button
+            onClick={() => setVerPasadas((v) => !v)}
+            aria-expanded={verPasadas}
+            className="min-h-[44px] flex items-center justify-between rounded-xl bg-white/70 px-3.5 text-xs font-bold text-slate-600 mt-1"
           >
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">{infoTipo(tipoDe(c)).icon}</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold truncate">{c.label}</div>
-              <div className="text-xs text-slate-500">{fechaAmigable(c.fecha, hoyLocalISO())} · {rangoHora(c.hora, c.horaFin)} · {c.lugar}</div>
-              {/* Tipo editable en el lugar: select nativo (en celular abre el
-                  selector del sistema, sin armar un modal propio). Los eventos
-                  viejos sin tipo aparecen como Capacitación. */}
-              {user.canEditAll ? (
-                <select
-                  className="input !py-1.5 !px-2 mt-1.5 !w-auto font-semibold"
-                  value={tipoDe(c)}
-                  onChange={(e) => setTipoCapacitacion(c.id, e.target.value as TipoEvento, user.correo)}
-                  aria-label={`Tipo de ${c.label}`}
-                >
-                  {TIPOS_EVENTO.map((t) => (
-                    <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="text-[11px] font-semibold text-primary mt-0.5">{infoTipo(tipoDe(c)).label}</div>
-              )}
-            </div>
-            {user.canEditAll && (
-              armed ? (
-                <button
-                  onClick={() => handleDeleteClick(c)}
-                  className="shrink-0 text-red-700 text-[11px] font-bold bg-red-100 rounded-lg px-2.5 py-1.5 max-w-[130px] text-right leading-tight"
-                >
-                  ¿Eliminar y perder su asistencia registrada?
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleDeleteClick(c)}
-                  className="shrink-0 text-red-500 text-xs font-bold bg-red-50 rounded-lg px-2 py-1.5"
-                >
-                  ✕
-                </button>
-              )
-            )}
-          </div>
-        );
-      })}
+            <span>Pasadas · {pasados.length}</span>
+            <span aria-hidden="true">{verPasadas ? '▴' : '▾'}</span>
+          </button>
+          {(verPasadas || proximos.length === 0) && pasados.map(fila)}
+        </>
+      )}
     </div>
   );
 }
