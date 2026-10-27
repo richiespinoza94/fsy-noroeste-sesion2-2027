@@ -43,7 +43,7 @@ import { EVENTO_NOMBRE } from '../data/evento';
 import { crearNocheHogar, editarNocheHogar, eliminarNocheHogar, marcarAsistenciaNocheHogar, marcarVariosNocheHogar, restaurarNocheHogar, subscribeNochesHogar } from '../services/nochesHogarService';
 import { ordenarParaVista, resumenNoche, sumarDias } from '../utils/nochesHogar';
 import { updateParticipante } from '../services/participantsService';
-import { addCapacitacion, deleteCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
+import { addCapacitacion, deleteCapacitacion, editarCapacitacion, setTipoCapacitacion } from '../services/capacitacionesService';
 import { agruparEventosParaSelector, hoyLocalISO, infoTipo, tipoDe } from '../utils/tiposEvento';
 import { fechaAmigable, partesFecha, rangoHora } from '../utils/fechaAmigable';
 import { createStaffAccount, restablecerContrasena, setUsuarioActivo, subscribeUsuarios } from '../services/authService';
@@ -1405,6 +1405,7 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
   const [lugar, setLugar] = useState('');
   const [tipo, setTipo] = useState<TipoEvento>('capacitacion');
   const [armedId, setArmedId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   // Lo que viene primero (el más cercano arriba) y, aparte, lo ya pasado (el más
   // reciente arriba, plegado). Antes salía todo del más antiguo al más nuevo y
@@ -1427,6 +1428,28 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
     }
   }
 
+  function abrirEditar(c: Capacitacion) {
+    setEditId(c.id);
+    setLabel(c.label);
+    setTipo(tipoDe(c));
+    setFecha(c.fecha);
+    setHora(c.hora || '09:00');
+    setHoraFin(c.horaFin || '');
+    setLugar(c.lugar === 'Por confirmar' ? '' : c.lugar);
+    setAdding(true);
+    window.scrollTo?.({ top: 0 });
+  }
+
+  function cerrarForm() {
+    setAdding(false);
+    setEditId(null);
+    setLabel('');
+    setFecha('');
+    setHoraFin('');
+    setLugar('');
+    setTipo('capacitacion');
+  }
+
   async function submit() {
     if (!fecha) return;
     // horaFin: cadena vacía si se deja en blanco, NUNCA `undefined` — a
@@ -1435,10 +1458,15 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
     // campo con valor `undefined` con un error genérico. Como el resto del
     // modelo (asignacionAnterior, familiaId) ya usa '' como "sin dato", se
     // sigue el mismo patrón acá en vez de portar ese helper para un solo campo.
-    await addCapacitacion(
-      { label: label || `${infoTipo(tipo).label} — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar', oficial: true, tipo },
-      user.correo
-    );
+    if (editId) {
+      await editarCapacitacion(editId, { label: label || `${infoTipo(tipo).label} — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar' }, user.correo);
+    } else {
+      await addCapacitacion(
+        { label: label || `${infoTipo(tipo).label} — ${fecha}`, fecha, hora, horaFin, lugar: lugar || 'Por confirmar', oficial: true, tipo },
+        user.correo
+      );
+    }
+    setEditId(null);
     setAdding(false);
     setLabel('');
     setFecha('');
@@ -1457,7 +1485,8 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">{infoTipo(tipoDe(c)).icon}</div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold truncate">{c.label}</div>
-              <div className="text-xs text-slate-500">{fechaAmigable(c.fecha, hoyLocalISO())} · {rangoHora(c.hora, c.horaFin)} · {c.lugar}</div>
+              <div className="text-xs text-slate-500">{fechaAmigable(c.fecha, hoyLocalISO())} · {rangoHora(c.hora, c.horaFin)}</div>
+              <div className="text-xs text-slate-500 truncate">📍 {c.lugar}</div>
               {/* Tipo editable en el lugar: select nativo (en celular abre el
                   selector del sistema, sin armar un modal propio). Los eventos
                   viejos sin tipo aparecen como Capacitación. */}
@@ -1477,7 +1506,13 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
               )}
             </div>
             {user.canEditAll && (
-              armed ? (
+              <div className="shrink-0 flex flex-col gap-1.5 items-end">
+                {!armed && (
+                  <button onClick={() => abrirEditar(c)} aria-label={`Editar ${c.label}`} className="text-slate-600 text-base bg-slate-100 rounded-lg w-11 h-11">
+                    ✎
+                  </button>
+                )}
+                {armed ? (
                 <button
                   onClick={() => handleDeleteClick(c)}
                   className="shrink-0 text-red-700 text-[11px] font-bold bg-red-100 rounded-lg px-2.5 py-1.5 max-w-[130px] text-right leading-tight"
@@ -1491,7 +1526,8 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
                 >
                   ✕
                 </button>
-              )
+                )}
+              </div>
             )}
           </div>
         );
@@ -1502,14 +1538,15 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
       <div className="flex items-center justify-between">
         <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Sesiones programadas</div>
         {user.canEditAll && (
-          <button onClick={() => setAdding(true)} className="bg-primary text-white text-xs font-bold rounded-lg px-3 py-1.5">+ Añadir</button>
+          <button onClick={() => { cerrarForm(); setAdding(true); }} className="bg-primary text-white text-xs font-bold rounded-lg px-3 min-h-[44px]">+ Añadir</button>
         )}
       </div>
 
       {adding && (
         <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-2">
+          {editId && <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Editar evento</div>}
           <input className="input" placeholder="Nombre (opcional)" value={label} onChange={(e) => setLabel(e.target.value)} />
-          <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as TipoEvento)} aria-label="Tipo de evento">
+          <select className="input" disabled={!!editId} value={tipo} onChange={(e) => setTipo(e.target.value as TipoEvento)} aria-label="Tipo de evento">
             {TIPOS_EVENTO.map((t) => (
               <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
             ))}
@@ -1529,15 +1566,15 @@ function CapacitacionesTab({ user, capacitaciones }: { user: SessionUser; capaci
               caso real que motivó agregar horaFin: dos sesiones un mismo
               sábado, y sin hora final no hay forma de saber en el Home si
               la de la mañana ya terminó o si "está en curso" toda la tarde. */}
-          {fecha && !horaFin && capacitaciones.filter((c) => c.fecha === fecha).length > 0 && (
+          {fecha && !horaFin && capacitaciones.filter((c) => c.fecha === fecha && c.id !== editId).length > 0 && (
             <div className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-2">
               ⚠️ Ya hay otra capacitación este mismo día — pon la hora final para que el Home no las confunda.
             </div>
           )}
           <input className="input" placeholder="Lugar" value={lugar} onChange={(e) => setLugar(e.target.value)} />
           <div className="flex gap-2">
-            <button onClick={submit} className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm">Confirmar</button>
-            <button onClick={() => setAdding(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold rounded-xl py-2.5 text-sm">Cancelar</button>
+            <button onClick={submit} className="flex-1 bg-primary text-white font-bold rounded-xl py-2.5 text-sm">{editId ? 'Guardar' : 'Confirmar'}</button>
+            <button onClick={cerrarForm} className="flex-1 bg-slate-100 text-slate-600 font-bold rounded-xl py-2.5 text-sm">Cancelar</button>
           </div>
         </div>
       )}

@@ -2193,3 +2193,9 @@ test('226. getProximaParaHome — nada de "próxima" sobre un evento que ya pas�
   const dos = [...caps, { id: 'b', label: '5ta', fecha: '2026-11-01', hora: '17:30', lugar: '', oficial: true }] as any[];
   assert.strictEqual(getProximaParaHome(dos, new Date('2026-10-27T12:00:00'))?.cap.id, 'b');
 });
+
+test('227. historial — editar un evento se lee como edición, no como cambio de tipo', () => {
+  const e = describirEntrada(logH('ACTUALIZAR_CAPACITACION', { capacitacionId: 'e1', label: '4ta Capacitación Baile', fecha: '2026-10-31' }, 'juan'), CTX_H);
+  assert.ok(/editó los datos de 4ta Capacitación Baile/.test(e.texto), e.texto);
+  assert.ok(!/cambió el tipo/.test(e.texto));
+});

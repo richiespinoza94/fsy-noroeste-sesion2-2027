@@ -206,7 +206,7 @@ export function describirEntrada(log: AuditLog, ctxOIndice: ContextoHistorial | 
       texto = `creó el evento ${s(d.label) || ''}`.trim();
       break;
     case 'ACTUALIZAR_CAPACITACION':
-      texto = `cambió el tipo de ${evento(d.capacitacionId)} a ${s(d.tipo)}`;
+      texto = d.tipo ? `cambió el tipo de ${evento(d.capacitacionId)} a ${s(d.tipo)}` : `editó los datos de ${s(d.label) || evento(d.capacitacionId)}`;
       break;
     case 'ELIMINAR_CAPACITACION':
       texto = `eliminó ${evento(d.capacitacionId)}`;

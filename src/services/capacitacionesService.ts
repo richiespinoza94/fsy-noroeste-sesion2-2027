@@ -46,6 +46,21 @@ export async function setTipoCapacitacion(id: string, tipo: TipoEvento, adminCor
   await logAction(adminCorreo, 'ACTUALIZAR_CAPACITACION', '', { capacitacionId: id, tipo });
 }
 
+/** Corrige nombre, fecha, horas o lugar de un evento ya creado (antes la única salida era borrarlo y perder su asistencia). */
+export async function editarCapacitacion(
+  id: string,
+  cambios: Pick<Capacitacion, 'label' | 'fecha' | 'hora' | 'horaFin' | 'lugar'>,
+  adminCorreo: string
+) {
+  if (!db) {
+    localStore = localStore.map((c) => (c.id === id ? { ...c, ...cambios } : c));
+    notifyLocal();
+  } else {
+    await updateDoc(doc(db, COL, id), { ...cambios });
+  }
+  await logAction(adminCorreo, 'ACTUALIZAR_CAPACITACION', '', { capacitacionId: id, ...cambios });
+}
+
 export async function deleteCapacitacion(id: string, adminCorreo: string) {
   if (!db) {
     localStore = localStore.filter((c) => c.id !== id);
